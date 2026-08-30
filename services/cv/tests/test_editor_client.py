@@ -55,7 +55,7 @@ async def test_editor_client_round_trips_structured_constraint(
             constraint=Constraint(
                 kind="camera_position",
                 value="between_front_seats",
-                source_span="Podsufitka trzeba spomiędzy forteli zrobić",
+                source_span="Headliner must be taken from between the seats",
                 source_line=10,
             ),
         )

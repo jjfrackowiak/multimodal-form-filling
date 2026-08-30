@@ -71,8 +71,8 @@ async def test_expected_count_is_not_repetition() -> None:
     extractor = ScriptedExtractor(script=[unresolved()])
     manifest = await parse_manifest(RAW, extractor=extractor)
 
-    # "4x fotele" is ONE requirement with expected_count 4, never four requirements.
-    seat_requirements = [r for r in manifest.requirements if r.source_span == "4x fotele"]
+    # "4x seats" is ONE requirement with expected_count 4, never four requirements.
+    seat_requirements = [r for r in manifest.requirements if r.source_span == "4x seats"]
     assert len(seat_requirements) == 1
     assert seat_requirements[0].expected_count == 4
 
@@ -81,8 +81,8 @@ async def test_one_line_two_requirements() -> None:
     extractor = ScriptedExtractor(script=[unresolved()])
     manifest = await parse_manifest(RAW, extractor=extractor)
 
-    windscreen = [r for r in manifest.requirements if r.source_span.startswith("Przednia")]
-    boot = [r for r in manifest.requirements if r.source_span.startswith("zdjęcie bagażnika")]
+    windscreen = [r for r in manifest.requirements if r.source_span.startswith("Windscreen")]
+    boot = [r for r in manifest.requirements if r.source_span.startswith("boot photo")]
     assert {r.id for r in windscreen} == {"R-05", "R-06"}
     assert {r.id for r in boot} == {"R-08", "R-09"}
 

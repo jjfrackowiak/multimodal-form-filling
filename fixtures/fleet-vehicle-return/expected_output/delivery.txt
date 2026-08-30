@@ -1,66 +1,65 @@
-Dzień dobry,
+Hello,
 
-Protokół zwrotu pojazdu został sprawdzony względem 10 wymagań odczytanych z Państwa manifestu.
+Your submission has been checked against 10 requirements read from your manifest.
 
-Wynik: 8 spełnionych, 2 niespełnionych, 0 niezweryfikowanych.
+Result: 8 passed, 2 failed, 0 unverified.
 
-NIESPEŁNIONE
+FAILED
 
-  [R-01] Two engine-bay photographs were required; one was supplied. The manifest lists "Pod maską" twice and the client's own stated total of 16 photos only reconciles if both mentions are counted.
-        Sugestia: Supply a second photograph under the bonnet from a different angle, or confirm that the repeated line in the manifest was unintentional.
+  [R-01] Two engine-bay photographs were required; one was supplied. The manifest lists "Under the bonnet" twice and the client's own stated total of 16 photos only reconciles if both mentions are counted.
+        Suggestion: Supply a second photograph under the bonnet from a different angle, or confirm that the repeated line in the manifest was unintentional.
 
   [R-04] Two headliner photographs were supplied, but only one meets the positional constraint. 1000040420.jpg is taken from between the front seats — both front headrests are in frame with the overhead console visible. IMG_20260830_132755 (5).jpg is taken from beside a seat and frames only the rear section of the headliner.
-        Sugestia: Retake the second headliner photograph with the camera positioned between the two front seats, angled up and rearward, as in 1000040420.jpg.
+        Suggestion: Retake the second headliner photograph with the camera positioned between the two front seats, angled up and rearward, as in 1000040420.jpg.
 
-SPEŁNIONE
+PASSED
 
   R-02, R-03, R-05, R-06, R-07, R-08, R-09, R-10
 
 ──────────────────────────────────────────────────────────────────
 
-ODCZYTANE WYMAGANIA
+PARSED REQUIREMENTS
 
-Komentarze w załączonym dokumencie odwołują się do poniższych numerów.
-Przy każdym wymaganiu podano fragment Państwa manifestu, z którego
-zostało odczytane.
+Comments in the attached document refer to the numbers below.
+Each requirement includes the fragment of your manifest it was read from.
 
   R-01  A photograph of the engine bay, taken with the bonnet open.
-        z manifestu, wiersz 2: "Pod maską"
-        UWAGA: repeated_verbatim_in_manifest
+        from the manifest, line 2: "Under the bonnet"
+        NOTE: repeated_verbatim_in_manifest
 
   R-02  Four photographs of the seats.
-        z manifestu, wiersz 3: "4x fotele"
+        from the manifest, line 3: "4x seats"
 
   R-03  Two photographs of the vehicle taken on the diagonal.
-        z manifestu, wiersz 3: "2 przekatne pojazdu"
+        from the manifest, line 3: "2 vehicle diagonals"
 
   R-04  Two photographs of the headliner. Each must be taken from between the front seats.
-        z manifestu, wiersz 4: "2x podsufitka"
-        warunek: camera_position = between_front_seats
-        z manifestu, wiersz 10: "Podsufitka trzeba spomiędzy forteli zrobić"
+        from the manifest, line 4: "2x headliner"
+        constraint: camera_position = between_front_seats
+        from the manifest, line 10: "Headliner must be taken from between the seats"
 
   R-05  A photograph of the windscreen taken from inside the cabin.
-        z manifestu, wiersz 6: "Przednia szyba że środka i zewnątrz"
+        from the manifest, line 6: "Windscreen from inside and outside"
 
   R-06  A photograph of the windscreen taken from outside the vehicle.
-        z manifestu, wiersz 6: "Przednia szyba że środka i zewnątrz"
+        from the manifest, line 6: "Windscreen from inside and outside"
 
   R-07  A photograph of the tyre tread.
-        z manifestu, wiersz 7: "Bieżnik opony"
+        from the manifest, line 7: "Tyre tread"
 
   R-08  A photograph of the boot.
-        z manifestu, wiersz 8: "zdjęcie bagażnika + wyposażenia pod klapą"
+        from the manifest, line 8: "boot photo + equipment under the lid"
 
   R-09  A photograph of the equipment stowed under the boot lid/floor.
-        z manifestu, wiersz 8: "zdjęcie bagażnika + wyposażenia pod klapą"
+        from the manifest, line 8: "boot photo + equipment under the lid"
 
   R-10  A photograph of the instrument cluster.
-        z manifestu, wiersz 9: "i zegary"
+        from the manifest, line 9: "and the gauges"
 
 ──────────────────────────────────────────────────────────────────
 
-Pełne uzasadnienia znajdują się w komentarzach recenzenta w załączonym
-dokumencie Word (panel Recenzja).
+Full justifications are in the reviewer comments in the attached
+Word document (Review pane).
 
 --
-Form Validation — wiadomość wygenerowana automatycznie
+Form Validation — this message was generated automatically

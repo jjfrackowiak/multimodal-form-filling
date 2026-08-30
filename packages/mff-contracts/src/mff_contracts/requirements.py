@@ -53,7 +53,7 @@ class Requirement(BaseModel):
     source_span: str  # VERBATIM substring of Manifest.raw
     source_line: int  # 1-indexed, for the delivered requirement list
     applies_to: list[str] = Field(default_factory=list)  # form ids; empty = all forms
-    expected_count: int = 1  # "4x fotele" is ONE requirement with count 4
+    expected_count: int = 1  # "4x seats" is ONE requirement with count 4
     constraint: Constraint | None = None
     ambiguity: str | None = None  # recorded, never silently resolved
 

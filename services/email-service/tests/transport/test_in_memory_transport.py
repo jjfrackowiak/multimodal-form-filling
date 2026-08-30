@@ -13,8 +13,8 @@ def _inbound(message_id: str) -> InboundMessage:
     return InboundMessage(
         message_id=message_id,
         sender="klient@example.test",
-        subject="Walidacja",
-        body="treść",
+        subject="Validation",
+        body="body text",
         received_at=datetime(2026, 8, 30, tzinfo=UTC),
     )
 

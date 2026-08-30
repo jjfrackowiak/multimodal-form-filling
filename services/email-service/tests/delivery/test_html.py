@@ -74,9 +74,9 @@ async def test_html_carries_the_same_facts(
     assert "max-width: 620px" in html
     assert "R-01" in html
     assert "R-04" in html
-    assert "Sugestia" in html
+    assert "Suggestion" in html
     assert "form_supplied.docx" in html
-    assert "Pod maską" in html
+    assert "Under the bonnet" in html
     assert 'class="stat"' in html
     assert "word-break" in html
 
@@ -128,17 +128,17 @@ def test_html_groups_mixed_modes() -> None:
         ],
         linked=[],
     )
-    assert "sprawdzone formularze" in html
-    assert "utworzone dokumenty" in html
+    assert "reviewed forms" in html
+    assert "composed documents" in html
 
 
 def test_html_alternative_does_not_break_plain_round_trip() -> None:
-    body = "16 zdjęć,\nPod maską\n4x fotele i 2 przekątne pojazdu\n"
+    body = "16 photos,\nUnder the bonnet\n4x seats and 2 vehicle diagonals\n"
     outbound = OutboundMessage(
         to="klient@example.test",
-        subject="Wynik walidacji",
+        subject="Validation result",
         body=body,
-        html_body="<html><body><p>16 zdjęć</p></body></html>",
+        html_body="<html><body><p>16 photos</p></body></html>",
     )
     wire = build_outbound_email(outbound, mail_from="svc@example.test")
     inbound = parse_inbound_message(message_from_bytes(wire.as_bytes()))

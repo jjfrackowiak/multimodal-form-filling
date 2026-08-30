@@ -181,7 +181,7 @@ def _decode_rfc2047(value: str) -> str:
     Defence in depth: `ImapSmtpTransport` already decodes these before an
     `InboundMessage` exists (see `transport/mime.py`), but nothing stops another
     `MailTransport` implementation, or a test, from handing intake a raw encoded-word
-    string directly — and `protokół.docx` arriving as gibberish fails a content check
+    string directly — and `protocol.docx` arriving as gibberish fails a content check
     on a perfectly valid file.
     """
     if not value or "=?" not in value:

@@ -28,7 +28,7 @@ class Attachment(BaseModel):
     """One attached file, already decoded.
 
     `filename` is the decoded name — MIME may carry it RFC 2047 encoded
-    (`=?UTF-8?B?...?=`), and `protokół.docx` arriving as gibberish would fail an
+    (`=?UTF-8?B?...?=`), and `protocol.docx` arriving as gibberish would fail an
     extension check on a perfectly valid file.
     """
 

@@ -40,8 +40,8 @@ def test_heading_count(derivative_docx_bytes: bytes) -> None:
     nodes = parse_docx(derivative_docx_bytes)
     headings = [n for n in nodes if n.kind == "heading"]
     assert len(headings) == EXPECTED_HEADINGS
-    assert headings[0].text == "1. Pod maską"
-    assert headings[-1].text == "9. Uwagi"
+    assert headings[0].text == "1. Under the bonnet"
+    assert headings[-1].text == "9. Notes"
 
 
 def test_image_node_count(derivative_docx_bytes: bytes) -> None:
@@ -59,17 +59,17 @@ def test_table_cells_get_ids(derivative_docx_bytes: bytes) -> None:
     ids = {c.id for c in cells}
     assert ids == {f"t0.r{r}.c{c}" for r in range(5) for c in range(2)}
     by_id = {c.id: c.text for c in cells}
-    assert by_id["t0.r0.c0"] == "Marka i model"
+    assert by_id["t0.r0.c0"] == "Make and model"
     assert by_id["t0.r0.c1"] == "Nissan Qashqai"
 
 
 def test_captions_follow_their_photograph(derivative_docx_bytes: bytes) -> None:
-    """Section '5. Przednia szyba' is the R-05/R-06 shape: two photo+caption pairs."""
+    """Section '5. Windscreen' is the R-05/R-06 shape: two photo+caption pairs."""
     nodes = parse_docx(derivative_docx_bytes)
     captions = [n.text for n in nodes if n.kind == "caption"]
-    assert "Komora silnika" in captions
-    assert "Szyba przednia od środka" in captions
-    assert "Szyba przednia z zewnątrz" in captions
+    assert "Engine bay" in captions
+    assert "Windscreen from inside" in captions
+    assert "Windscreen from outside" in captions
 
 
 def test_paragraph_and_image_children_reference_the_enclosing_heading(
@@ -77,7 +77,7 @@ def test_paragraph_and_image_children_reference_the_enclosing_heading(
 ) -> None:
     nodes = parse_docx(derivative_docx_bytes)
     by_id = {n.id: n for n in nodes}
-    heading = next(n for n in nodes if n.text == "5. Przednia szyba")
+    heading = next(n for n in nodes if n.text == "5. Windscreen")
     children = [n for n in nodes if n.parent_id == heading.id]
     assert len(children) >= 4  # two images, two captions
     assert all(by_id[c.parent_id].id == heading.id for c in children if c.parent_id)

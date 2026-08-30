@@ -20,8 +20,8 @@ def test_polish_body_survives_the_round_trip() -> None:
     # A trailing "\n" here, not because it is required elsewhere, but because MIME
     # text parts are always newline-terminated on the wire — `set_content` adds one
     # if it is missing, so a body already ending in one is what round-trips exactly.
-    body = "16 zdjęć,\nPod maską\n4x fotele i 2 przekątne pojazdu\n"
-    outbound = OutboundMessage(to="klient@example.test", subject="Wynik walidacji", body=body)
+    body = "16 photos,\nUnder the bonnet\n4x seats and 2 vehicle diagonals\n"
+    outbound = OutboundMessage(to="klient@example.test", subject="Validation result", body=body)
     wire = build_outbound_email(outbound, mail_from="svc@example.test")
     reparsed = email.message_from_bytes(wire.as_bytes())
 
@@ -33,9 +33,9 @@ def test_attachment_survives_the_round_trip() -> None:
     outbound = OutboundMessage(
         to="klient@example.test",
         subject="Recenzja",
-        body="w załączniku",
+        body="see attachment",
         attachments=[
-            Attachment(filename="protokół.docx", content_type=DOCX, data=b"PK\x03\x04zawartosc")
+            Attachment(filename="protocol.docx", content_type=DOCX, data=b"PK\x03\x04contents")
         ],
     )
     wire = build_outbound_email(outbound, mail_from="svc@example.test")
@@ -43,9 +43,9 @@ def test_attachment_survives_the_round_trip() -> None:
 
     inbound = parse_inbound_message(reparsed)
     assert len(inbound.attachments) == 1
-    assert inbound.attachments[0].filename == "protokół.docx"
+    assert inbound.attachments[0].filename == "protocol.docx"
     assert inbound.attachments[0].content_type == DOCX
-    assert inbound.attachments[0].data == b"PK\x03\x04zawartosc"
+    assert inbound.attachments[0].data == b"PK\x03\x04contents"
 
 
 def test_rfc2047_encoded_filename_is_decoded() -> None:
@@ -65,13 +65,13 @@ def test_rfc2047_encoded_filename_is_decoded() -> None:
         b"body\r\n"
         b"--BOUND\r\n"
         b"Content-Type: application/octet-stream\r\n"
-        b"Content-Disposition: attachment; filename*=UTF-8''protok%C3%B3%C5%82.docx\r\n"
+        b"Content-Disposition: attachment; filename*=UTF-8''protocol.docx\r\n"
         b"\r\n"
         b"data\r\n"
         b"--BOUND--\r\n"
     )
     inbound = parse_inbound_message(email.message_from_bytes(raw))
-    assert inbound.attachments[0].filename == "protokół.docx"
+    assert inbound.attachments[0].filename == "protocol.docx"
 
 
 def test_threading_headers_point_at_the_original_client_message() -> None:

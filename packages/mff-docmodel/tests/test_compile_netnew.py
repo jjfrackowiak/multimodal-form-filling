@@ -23,7 +23,7 @@ def _artifact() -> NetNewArtifact:
             ),
             Section(
                 id="s2",
-                title="Uwagi",
+                title="Notes",
                 entries=[Entry(id="e3", order="a0", value="Stan dobry", set_by="R-03")],
             ),
         ]
@@ -38,7 +38,7 @@ def test_compile_netnew_opens_in_word() -> None:
     assert "WN-7020U" in texts
     assert "Dane pojazdu" in texts
     assert "Nissan Qashqai" in texts
-    assert "Uwagi" in texts
+    assert "Notes" in texts
     assert "Stan dobry" in texts
 
 
@@ -73,7 +73,7 @@ def test_entry_images_are_noted_without_needing_bytes() -> None:
         sections=[
             Section(
                 id="s1",
-                title="Zdjęcia",
+                title="Photos",
                 entries=[
                     Entry(id="e1", order="a0", value="Podsufitka", images=[image], set_by="R-04")
                 ],

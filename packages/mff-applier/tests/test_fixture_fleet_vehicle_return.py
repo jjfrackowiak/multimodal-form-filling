@@ -173,7 +173,7 @@ _R02_PHOTOS = [
 
 
 def test_r02s_four_seat_photographs_are_built_by_four_appends() -> None:
-    section = Section(id="seats", title="Fotele", entries=[])
+    section = Section(id="seats", title="Seats", entries=[])
     artifact = NetNewArtifact(job_id="j-1", form_id="WN-7020U", draft=FormDraft(sections=[section]))
 
     ops = [

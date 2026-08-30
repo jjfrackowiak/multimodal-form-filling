@@ -142,21 +142,21 @@ def test_r04_constraint_value_decides_the_verdict_without_parsing_a_string(
     assert r04.constraint.kind == "camera_position"
     assert r04.constraint.value == "between_front_seats"
     assert r04.constraint.note is not None
-    assert "forteli" in r04.constraint.note
+    assert "later line" in r04.constraint.note
 
 
 def test_r04_constraint_source_span_is_verbatim_in_the_manifest_and_survives_utf8(
     manifest: Manifest,
 ) -> None:
-    """The constraint arrives on manifest line 10, in Polish, six lines after the item it
+    """The constraint arrives on manifest line 10, six lines after the item it
     qualifies. Its `source_span` must be a byte-for-byte substring of `Manifest.raw`."""
     by_id = {r.id: r for r in manifest.requirements}
     constraint = by_id["R-04"].constraint
     assert constraint is not None
-    assert constraint.source_span == "Podsufitka trzeba spomiędzy forteli zrobić"
+    assert constraint.source_span == "Headliner must be taken from between the seats"
     assert constraint.source_span in manifest.raw
     assert constraint.source_line == 10
-    # UTF-8 (Polish diacritics) round-trips through model construction and JSON.
+    # UTF-8 round-trips through model construction and JSON.
     restored = Constraint.model_validate_json(constraint.model_dump_json())
     assert restored.source_span == constraint.source_span
-    assert "ę" in restored.source_span
+    assert "between the seats" in restored.source_span

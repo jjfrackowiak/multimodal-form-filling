@@ -62,7 +62,7 @@ def make_job_record(
 def make_request_record(request_id: str = "req-1") -> RequestRecord:
     return RequestRecord(
         request_id=request_id,
-        manifest_raw="16 zdjęć,\nPod maską\n",
+        manifest_raw="16 photos,\nUnder the bonnet\n",
         requirements=[],
         job_ids=["job-1"],
         reply_to="client@example.test",

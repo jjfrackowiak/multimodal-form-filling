@@ -47,6 +47,7 @@ def _tls_context() -> ssl.SSLContext:
     except ImportError:
         return ssl.create_default_context()
 
+
 IMAP_HOST = os.environ.get("IMAP_HOST", "localhost")
 IMAP_PORT = int(os.environ.get("IMAP_PORT", "3143"))
 SMTP_HOST = os.environ.get("SMTP_HOST", "localhost")
@@ -83,11 +84,9 @@ def send(marker: str) -> None:
     # filter matches on, so the verifier exercises the same route real requests
     # take rather than a shortcut past it.
     msg["To"] = os.environ.get("MAIL_TO", USER)
-    msg["Subject"] = f"Walidacja formularza [{marker}]"
+    msg["Subject"] = f"Form validation [{marker}]"
     msg["Message-ID"] = f"<{marker}@example.test>"
-    msg.set_content(
-        "16 zdjęć,\nPod maską\n4x fotele i 2 przekatne pojazdu\n"
-    )
+    msg.set_content("16 photos,\nUnder the bonnet\n4x seats and 2 vehicle diagonals\n")
     # An attachment, because every real request carries one and a mailbox that
     # handles text but mangles attachments would pass a simpler check.
     msg.add_attachment(
@@ -168,7 +167,7 @@ def main() -> int:
         if part.get_content_type() == "text/plain":
             payload = part.get_payload(decode=True) or b""
             body += payload.decode(part.get_content_charset() or "utf-8", "replace")
-    body_ok = "Pod maską" in body
+    body_ok = "Under the bonnet" in body
 
     print(f"  received  subject: {msg.get('Subject')}")
     print(f"            message-id: {msg.get('Message-ID')}")

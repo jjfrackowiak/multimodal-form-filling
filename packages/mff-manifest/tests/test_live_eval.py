@@ -65,7 +65,7 @@ class SpanRecallPrecision(Evaluator[str, Manifest]):
     out: whether R-04's constraint value survived.
 
     A span named more times by one side than the other only credits the smaller count —
-    that is what makes "4x fotele" coming back as four separate requirements a precision
+    that is what makes "4x seats" coming back as four separate requirements a precision
     hit rather than a free pass, without ever comparing generated text to golden text.
     """
 
@@ -79,7 +79,7 @@ class SpanRecallPrecision(Evaluator[str, Manifest]):
         recall = matched / len(GOLDEN_REQUIREMENTS)
         precision = matched / len(extracted) if extracted else 0.0
         r04_correct = any(
-            r.source_span == "2x podsufitka"
+            r.source_span == "2x headliner"
             and r.constraint is not None
             and r.constraint.value == "between_front_seats"
             for r in extracted

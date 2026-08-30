@@ -1,7 +1,7 @@
 # Golden parse of manifest.txt — the ground truth for the L1 eval
 # (manifest -> Requirement[], recall >= 0.95, precision 1.0).
 #
-# Every source_span below is a VERBATIM substring of manifest.txt, typos included.
+# Every source_span below is a VERBATIM substring of manifest.txt.
 # The L1 eval asserts that as an invariant, not a score: a span that is not
 # verbatim-present means the parser invented provenance.
 
@@ -9,41 +9,41 @@ expected_total_photos: 16   # stated by the client on line 1
 
 requirements:
   - id: R-01
-    ordinal: 11          # manifest_raw.index(source_span) — the ordering key
+    ordinal: 12          # manifest_raw.index(source_span) — the ordering key
     source_line: 2
     text: "A photograph of the engine bay, taken with the bonnet open."
-    source_span: "Pod maską"
+    source_span: "Under the bonnet"
     scope: exterior_mechanical
     expected_count: 2
-    # DELIBERATE AMBIGUITY — see README. "Pod maską" appears on both line 2 and
+    # DELIBERATE AMBIGUITY — see README. "Under the bonnet" appears on both line 2 and
     # line 5 of the manifest. Read as one repeated item, the list totals 15;
     # read as two distinct photos, it totals 16, which is what the client
     # themselves stated. We resolve to 2 on the client's own count.
     ambiguity: repeated_verbatim_in_manifest
 
   - id: R-02
-    ordinal: 22          # manifest_raw.index(source_span) — the ordering key
+    ordinal: 30          # manifest_raw.index(source_span) — the ordering key
     source_line: 3
     text: "Four photographs of the seats."
-    source_span: "4x fotele"
+    source_span: "4x seats"
     scope: interior
     expected_count: 4
 
   - id: R-03
-    ordinal: 34          # manifest_raw.index(source_span) — the ordering key
+    ordinal: 43          # manifest_raw.index(source_span) — the ordering key
     source_line: 3
     text: "Two photographs of the vehicle taken on the diagonal."
-    source_span: "2 przekatne pojazdu"
+    source_span: "2 vehicle diagonals"
     scope: exterior_body
     expected_count: 2
 
   - id: R-04
-    ordinal: 56          # manifest_raw.index(source_span) — the ordering key
+    ordinal: 65          # manifest_raw.index(source_span) — the ordering key
     source_line: 4
     text: >
       Two photographs of the headliner. Each must be taken from between
       the front seats.
-    source_span: "2x podsufitka"
+    source_span: "2x headliner"
     scope: interior
     expected_count: 2
     constraint:
@@ -52,56 +52,56 @@ requirements:
       # The constraint arrives on manifest line 10, far away from the item it
       # qualifies on line 4. A parser that only splits on lines will attach it
       # to the wrong requirement, or drop it. That is the point of this case.
-      constraint_source_span: "Podsufitka trzeba spomiędzy forteli zrobić"
+      constraint_source_span: "Headliner must be taken from between the seats"
       constraint_source_line: 10
-      note: "'forteli' is a typo for 'foteli' (seats) in the client's original."
+      note: "The constraint arrives on a later line than the item it qualifies."
 
   - id: R-05
-    ordinal: 84          # manifest_raw.index(source_span) — the ordering key
+    ordinal: 99          # manifest_raw.index(source_span) — the ordering key
     source_line: 6
     text: "A photograph of the windscreen taken from inside the cabin."
-    source_span: "Przednia szyba że środka i zewnątrz"
+    source_span: "Windscreen from inside and outside"
     scope: glass
     expected_count: 1
-    note: "'że' is a typo for 'ze'. One span yields two requirements (R-05, R-06)."
+    note: "One span yields two requirements (R-05, R-06)."
 
   - id: R-06
-    ordinal: 84          # manifest_raw.index(source_span) — the ordering key
+    ordinal: 99          # manifest_raw.index(source_span) — the ordering key
     source_line: 6
     text: "A photograph of the windscreen taken from outside the vehicle."
-    source_span: "Przednia szyba że środka i zewnątrz"
+    source_span: "Windscreen from inside and outside"
     scope: glass
     expected_count: 1
 
   - id: R-07
-    ordinal: 120          # manifest_raw.index(source_span) — the ordering key
+    ordinal: 134          # manifest_raw.index(source_span) — the ordering key
     source_line: 7
     text: "A photograph of the tyre tread."
-    source_span: "Bieżnik opony"
+    source_span: "Tyre tread"
     scope: tyres
     expected_count: 1
 
   - id: R-08
-    ordinal: 135          # manifest_raw.index(source_span) — the ordering key
+    ordinal: 146          # manifest_raw.index(source_span) — the ordering key
     source_line: 8
     text: "A photograph of the boot."
-    source_span: "zdjęcie bagażnika + wyposażenia pod klapą"
+    source_span: "boot photo + equipment under the lid"
     scope: boot
     expected_count: 1
 
   - id: R-09
-    ordinal: 135          # manifest_raw.index(source_span) — the ordering key
+    ordinal: 146          # manifest_raw.index(source_span) — the ordering key
     source_line: 8
     text: "A photograph of the equipment stowed under the boot lid/floor."
-    source_span: "zdjęcie bagażnika + wyposażenia pod klapą"
+    source_span: "boot photo + equipment under the lid"
     scope: boot
     expected_count: 1
 
   - id: R-10
-    ordinal: 178          # manifest_raw.index(source_span) — the ordering key
+    ordinal: 184          # manifest_raw.index(source_span) — the ordering key
     source_line: 9
     text: "A photograph of the instrument cluster."
-    source_span: "i zegary"
+    source_span: "and the gauges"
     scope: interior
     expected_count: 1
 

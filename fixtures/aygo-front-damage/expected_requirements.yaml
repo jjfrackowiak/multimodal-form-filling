@@ -9,51 +9,51 @@ requirements:
     text: >
       Front elevation of the vehicle, showing the extent of frontal impact
       damage.
-    source_span: "zdjecie z przodu auto klient rozjebal w pizdu"
+    source_span: "front photo client smashed the car to hell"
     expected_count: 1
 
   - id: R-02
     text: >
       Left side of the vehicle, showing whether impact damage continues
       along that flank.
-    source_span: "lewy bok auta - tez widac jak rozjebal"
+    source_span: "left side of the car - you can see how they wrecked it too"
     expected_count: 1
 
   - id: R-03
     text: Rear elevation of the vehicle.
-    source_span: "tyl auta"
+    source_span: "rear of the car"
     expected_count: 1
 
   - id: R-04
     text: >
       Right side of the vehicle, to record that this flank was spared
       relative to the left/front.
-    source_span: "prawy bok oszczedzil"
+    source_span: "right side they spared"
     expected_count: 1
 
   - id: R-05
     text: >
       Photograph of the damaged front bumper that includes a readable
       registration plate.
-    source_span: "rozjebal zderzak jak chuj - zdjecie z tablica"
+    source_span: "smashed the bumper to hell - photo with the plate"
     expected_count: 1
     constraint:
       kind: plate_legible
       value: registration_plate_visible
-      constraint_source_span: "zdjecie z tablica"
+      constraint_source_span: "photo with the plate"
 
   - id: R-06
     text: Close-up of the damaged front bumper / impact area.
-    source_span: "zderzak pizduuu zblizenie"
+    source_span: "bumper close-up damn"
     expected_count: 1
 
   - id: R-07
     text: >
       Photograph of the front bumper from above, showing that the bumper
       is shifted / misaligned as a whole.
-    source_span: "zderzak rozjebany z gory - przesuniety zderzak caly"
+    source_span: "bumper wrecked from above - whole bumper shifted"
     expected_count: 1
     constraint:
       kind: camera_position
       value: from_above
-      constraint_source_span: "zderzak rozjebany z gory"
+      constraint_source_span: "bumper wrecked from above"

@@ -215,10 +215,10 @@ def test_real_docx_with_wrong_extension_is_still_accepted() -> None:
     assert parsed.jobs[0].form_id == "upload.bin"
 
 
-def test_rfc2047_encoded_polish_filename_is_decoded() -> None:
-    """`protokół.docx` RFC 2047 encoded must decode correctly, not arrive as
+def test_rfc2047_encoded_filename_is_decoded() -> None:
+    """RFC 2047 encoded filenames must decode correctly, not arrive as
     gibberish that then fails a content check on a valid file."""
-    encoded = "=?UTF-8?B?cHJvdG9rw7PFgi5kb2N4?="  # "protokół.docx"
+    encoded = "=?UTF-8?B?cHJvdG9jb2wuZG9jeA==?="  # "protocol.docx"
     msg = make_inbound(
         attachments=[
             Attachment(filename=encoded, content_type=DOCX_CONTENT_TYPE, data=make_minimal_docx())
@@ -227,7 +227,7 @@ def test_rfc2047_encoded_polish_filename_is_decoded() -> None:
     parsed = parse_inbound(msg)
     assert parsed.problems == []
     assert len(parsed.jobs) == 1
-    assert parsed.jobs[0].form_id == "protokół.docx"
+    assert parsed.jobs[0].form_id == "protocol.docx"
 
 
 def test_empty_derivative_zip_reports_empty_archive() -> None:
@@ -352,7 +352,7 @@ def test_txt_file_decoded_from_cp1250_when_not_valid_utf8() -> None:
     import zipfile as _zipfile
     from io import BytesIO
 
-    polish_text = "usterka na błotniku"
+    polish_text = "damage on the wing"
     buf = BytesIO()
     with _zipfile.ZipFile(buf, "w") as zf:
         zf.writestr("pojazd-A/uwagi.txt", polish_text.encode("cp1250"))

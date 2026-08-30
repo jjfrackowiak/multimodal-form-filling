@@ -38,9 +38,9 @@ def _raw_message(message_id: str = "<m@example.test>") -> bytes:
     msg = email.message.EmailMessage()
     msg["From"] = "klient@example.test"
     msg["To"] = "svc@example.test"
-    msg["Subject"] = "Walidacja"
+    msg["Subject"] = "Validation"
     msg["Message-ID"] = message_id
-    msg.set_content("treść")
+    msg.set_content("body text")
     return msg.as_bytes()
 
 

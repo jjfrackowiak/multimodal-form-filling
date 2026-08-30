@@ -6,7 +6,7 @@ from mff_contracts import BlobRef, Entry, FormDraft, Node, Section
 
 
 def test_node_is_a_read_only_view_with_a_stable_id() -> None:
-    node = Node(id="n-1", kind="heading", text="1. Pod maską", parent_id=None)
+    node = Node(id="n-1", kind="heading", text="1. Under the bonnet", parent_id=None)
     assert node.image_sha256 is None
 
 

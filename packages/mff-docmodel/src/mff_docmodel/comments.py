@@ -125,9 +125,9 @@ def _fallback_run_pair(document: DocxDocument) -> _RunPair | None:
 
 def _render_text(comment: ReviewComment) -> str:
     label = _VERDICT_LABELS.get(comment.verdict, comment.verdict.upper())
-    lines = [f"[{comment.requirement_id}] {label}", "", f"Uzasadnienie: {comment.justification}"]
+    lines = [f"[{comment.requirement_id}] {label}", "", f"Justification: {comment.justification}"]
     if comment.suggestion:
-        lines += ["", f"Sugestia: {comment.suggestion}"]
+        lines += ["", f"Suggestion: {comment.suggestion}"]
     return "\n".join(lines)
 
 

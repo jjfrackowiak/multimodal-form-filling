@@ -18,15 +18,15 @@ __all__ = ["render_confirmation_html", "render_delivery_html", "render_rejection
 
 _OK_VERDICTS = frozenset({"pass", "realised", "not_applicable"})
 _ATTENTION_VERDICTS = frozenset({"fail", "shortfall"})
-_VERDICT_LABELS_PL = {
-    "pass": "spełnionych",
-    "fail": "niespełnionych",
-    "unverified": "niezweryfikowanych",
+_VERDICT_LABELS = {
+    "pass": "passed",
+    "fail": "failed",
+    "unverified": "unverified",
 }
-_MODE_HEADING_PL = {
-    "derivative": "sprawdzone formularze (derivative)",
-    "net_new": "utworzone dokumenty (net-new)",
-    "dokument": "dokumenty",
+_MODE_HEADING = {
+    "derivative": "reviewed forms (derivative)",
+    "net_new": "composed documents (net-new)",
+    "document": "documents",
 }
 
 # Warm paper + stone. Reads on a phone in daylight; not a dark-mode experiment.
@@ -56,7 +56,7 @@ def _wrap(*, title: str, preheader: str, inner: str) -> str:
     """Shell: viewport, 100% outer table, 600px inner card, stacked padding on mobile."""
     return f"""\
 <!DOCTYPE html>
-<html lang="pl">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -129,7 +129,7 @@ def _footer() -> str:
 <tr>
   <td class="px" style="padding:16px 24px 24px;border-top:1px solid {_LINE};">
     <p style="margin:0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;font-size:12px;line-height:1.5;color:{_MUTED};">
-      Form Validation — wiadomość wygenerowana automatycznie
+      Form Validation — this message was generated automatically
     </p>
   </td>
 </tr>
@@ -168,11 +168,11 @@ def _summary_row(result: RequestResult) -> str:
     n_fail = sum(result.summary.get(k, 0) for k in ("fail", "shortfall"))
     n_unverified = len(result.unverified)
     cells = [
-        _stat_cell(n_pass, _VERDICT_LABELS_PL.get("pass", "spełnionych"), _PASS, last=False),
-        _stat_cell(n_fail, _VERDICT_LABELS_PL.get("fail", "niespełnionych"), _FAIL, last=False),
+        _stat_cell(n_pass, _VERDICT_LABELS.get("pass", "passed"), _PASS, last=False),
+        _stat_cell(n_fail, _VERDICT_LABELS.get("fail", "failed"), _FAIL, last=False),
         _stat_cell(
             n_unverified,
-            _VERDICT_LABELS_PL.get("unverified", "niezweryfikowanych"),
+            _VERDICT_LABELS.get("unverified", "unverified"),
             _WARN,
             last=True,
         ),
@@ -191,7 +191,7 @@ def _fail_card(comment: ReviewComment) -> str:
     if comment.suggestion:
         suggestion = f"""\
 <p style="margin:10px 0 0;padding:10px 12px;background:{_FAIL_BG};border-radius:8px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;font-size:14px;line-height:1.5;color:{_INK};">
-  <strong style="color:{_FAIL};">Sugestia.</strong> {_br(comment.suggestion)}
+  <strong style="color:{_FAIL};">Suggestion.</strong> {_br(comment.suggestion)}
 </p>
 """
     return f"""\
@@ -236,10 +236,10 @@ def _unverified_block(result: RequestResult, requirements_by_id: Mapping[str, Re
             f"<strong>[{_esc(req_id)}]</strong>{text}</p>"
         )
     return (
-        _h2("Niezweryfikowane")
+        _h2("Unverified")
         + _p(
-            "System podjął trzy próby i nie zdołał ocenić poniższych wymagań. "
-            "Prosimy traktować je jako nierozstrzygnięte, nie jako spełnione.",
+            "The system tried three times and could not assess the requirements below. "
+            "Treat them as unresolved, not as passed.",
             muted=True,
         )
         + "".join(rows)
@@ -255,8 +255,8 @@ def _failed_forms_block(result: RequestResult) -> str:
         for form_id in result.failed_forms
     )
     return (
-        _h2("Nieukończone formularze")
-        + _p("Poniższe formularze nie zostały ukończone i nie są dołączone.", muted=True)
+        _h2("Incomplete forms")
+        + _p("The forms below were not completed and are not attached.", muted=True)
         + items
     )
 
@@ -274,11 +274,11 @@ def _docs_block(
     def _mode_heading(mode_label: str) -> str:
         if not multi_mode:
             return ""
-        return _p(_esc(_MODE_HEADING_PL.get(mode_label, mode_label)), muted=True)
+        return _p(_esc(_MODE_HEADING.get(mode_label, mode_label)), muted=True)
 
     parts: list[str] = []
     if attached:
-        parts.append(_h2("Załączone dokumenty"))
+        parts.append(_h2("Attached documents"))
         seen: list[str] = []
         for _filename, mode, _size in attached:
             if mode not in seen:
@@ -296,8 +296,8 @@ def _docs_block(
                     f'<span style="color:{_MUTED};">({kb:.0f} KB)</span></p>'
                 )
     if linked:
-        parts.append(_h2("Dokumenty pod linkiem"))
-        parts.append(_p("Przekraczają limit załącznika — link ważny 7 dni.", muted=True))
+        parts.append(_h2("Documents via link"))
+        parts.append(_p("Over the attachment limit — link valid for 7 days.", muted=True))
         seen_l: list[str] = []
         for _name, mode, _url in linked:
             if mode not in seen_l:
@@ -320,22 +320,22 @@ def _requirement_card(requirement: Requirement) -> str:
     extra.append(
         f'<p style="margin:6px 0 0;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;'
         f'font-size:13px;line-height:1.45;color:{_MUTED};word-break:break-word;">'
-        f"wiersz {requirement.source_line}: „{_esc(requirement.source_span)}”</p>"
+        f'line {requirement.source_line}: "{_esc(requirement.source_span)}"</p>'
     )
     constraint = requirement.constraint
     if constraint is not None:
         extra.append(
             f'<p style="margin:6px 0 0;font-family:-apple-system,BlinkMacSystemFont,'
             f"'Segoe UI',Roboto,sans-serif;font-size:13px;color:{_INK};\">"
-            f"warunek: {_esc(constraint.kind)} = {_esc(str(constraint.value))}<br>"
-            f'<span style="color:{_MUTED};">wiersz {constraint.source_line}: '
-            f"„{_esc(constraint.source_span)}”</span></p>"
+            f"constraint: {_esc(constraint.kind)} = {_esc(str(constraint.value))}<br>"
+            f'<span style="color:{_MUTED};">line {constraint.source_line}: '
+            f'"{_esc(constraint.source_span)}"</span></p>'
         )
     if requirement.ambiguity:
         extra.append(
             f'<p style="margin:8px 0 0;padding:8px 10px;background:{_WARN_BG};border-radius:6px;'
             f"font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;"
-            f'font-size:13px;color:{_WARN};">UWAGA: {_esc(requirement.ambiguity)}</p>'
+            f'font-size:13px;color:{_WARN};">NOTE: {_esc(requirement.ambiguity)}</p>'
         )
     return f"""\
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 10px;border:1px solid {_LINE};border-radius:8px;">
@@ -361,33 +361,33 @@ def render_delivery_html(
     requirements_by_id = {r.id: r for r in result.requirements}
     attention = [c for c in comments if c.verdict in _ATTENTION_VERDICTS]
     ok = [c for c in comments if c.verdict in _OK_VERDICTS]
-    status_badge = {"done": "zakończone", "partial": "częściowo", "failed": "nieudane"}.get(
+    status_badge = {"done": "complete", "partial": "partial", "failed": "failed"}.get(
         result.status, result.status
     )
     badge_bg = {"done": _PASS, "partial": _WARN, "failed": _FAIL}.get(result.status, _MUTED)
 
     body_bits = [
         _p(
-            f"Państwa zgłoszenie zostało sprawdzone względem "
-            f"<strong>{len(result.requirements)}</strong> wymagań odczytanych z manifestu."
+            f"Your submission has been checked against "
+            f"<strong>{len(result.requirements)}</strong> requirements read from your manifest."
         ),
         _summary_row(result),
     ]
     if attention:
-        body_bits.append(_h2("Niespełnione"))
+        body_bits.append(_h2("Failed"))
         for comment in sorted(attention, key=lambda c: c.requirement_id):
             body_bits.append(_fail_card(comment))
     if ok:
-        body_bits.append(_h2("Spełnione"))
+        body_bits.append(_h2("Passed"))
         body_bits.append(_pass_chips(ok))
     body_bits.append(_unverified_block(result, requirements_by_id))
     body_bits.append(_failed_forms_block(result))
     body_bits.append(_docs_block(attached, linked))
-    body_bits.append(_h2("Odczytane wymagania"))
+    body_bits.append(_h2("Parsed requirements"))
     body_bits.append(
         _p(
-            "Komentarze w załączonym dokumencie odwołują się do tych numerów. "
-            "Przy każdym podano fragment Państwa manifestu.",
+            "Comments in the attached document refer to these numbers. "
+            "Each includes the fragment of your manifest it was read from.",
             muted=True,
         )
     )
@@ -395,8 +395,8 @@ def render_delivery_html(
         body_bits.append(_requirement_card(requirement))
     body_bits.append(
         _p(
-            "Pełne uzasadnienia znajdują się w komentarzach recenzenta w załączonym "
-            "dokumencie Word (panel Recenzja).",
+            "Full justifications are in the reviewer comments in the attached "
+            "Word document (Review pane).",
             muted=True,
         )
     )
@@ -404,7 +404,7 @@ def render_delivery_html(
     inner = (
         _header(
             kicker="Form Validation",
-            heading=f"Wyniki weryfikacji · {result.request_id}",
+            heading=f"Verification results · {result.request_id}",
             badge=status_badge,
             badge_bg=badge_bg,
         )
@@ -413,9 +413,9 @@ def render_delivery_html(
     )
 
     n_fail = sum(result.summary.get(k, 0) for k in ("fail", "shortfall"))
-    preheader = f"{status_badge}: {len(result.requirements)} wymagań, {n_fail} do poprawy."
+    preheader = f"{status_badge}: {len(result.requirements)} requirements, {n_fail} to fix."
     return _wrap(
-        title=f"Wyniki weryfikacji — {result.request_id}", preheader=preheader, inner=inner
+        title=f"Verification results — {result.request_id}", preheader=preheader, inner=inner
     )
 
 

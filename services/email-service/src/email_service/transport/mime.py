@@ -20,7 +20,7 @@ __all__ = ["build_outbound_email", "parse_inbound_message"]
 def _decode_words(value: str | None) -> str:
     """Undo RFC 2047 encoded-words (`=?UTF-8?B?...?=`).
 
-    Without this, `protokół.docx` — or a Polish subject line — arrives as gibberish.
+    Without this, `protocol.docx` — or a Polish subject line — arrives as gibberish.
     `Message.get_filename()` and header accessors hand back the raw encoded-word form;
     nothing decodes it for you.
     """

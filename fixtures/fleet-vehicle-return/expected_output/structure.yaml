@@ -16,26 +16,26 @@
 common:
 
   document:
-    title: "Protokół zwrotu pojazdu"
+    title: "Vehicle return report"
     required_headings:
-      - "1. Pod maską"
-      - "2. Fotele"
-      - "3. Przekątne pojazdu"
-      - "4. Podsufitka"
-      - "5. Przednia szyba"
-      - "6. Bieżnik opony"
-      - "7. Bagażnik i wyposażenie"
-      - "8. Zegary"
-      - "9. Uwagi"
+      - "1. Under the bonnet"
+      - "2. Seats"
+      - "3. Vehicle diagonals"
+      - "4. Headliner"
+      - "5. Windscreen"
+      - "6. Tyre tread"
+      - "7. Boot and equipment"
+      - "8. Gauges"
+      - "9. Notes"
     headings_in_order: true
     vehicle_table:
       present: true
-      required_labels: ["Marka i model", "Numer rejestracyjny", "Przebieg", "Data zwrotu"]
+      required_labels: ["Make and model", "Registration number", "Mileage", "Return date"]
       required_values:
-        Marka i model: "Nissan Qashqai"
-        Numer rejestracyjny: "WN 7020U"
-        Przebieg: "59 650 km"
-        Data zwrotu: "30.08.2026"
+        Make and model: "Nissan Qashqai"
+        Registration number: "WN 7020U"
+        Mileage: "59 650 km"
+        Return date: "30.08.2026"
     min_distinct_images: 15
     signature_block_present: true
 
@@ -48,7 +48,7 @@ common:
     # breach, not a low score. (Plan: "Invariants are not scores".)
     invariants:
       every_comment_names_its_requirement: true    # "[R-nn]" present in text
-      every_comment_has_justification: true        # non-empty "Uzasadnienie:"
+      every_comment_has_justification: true        # non-empty "Justification:"
       failing_comment_has_suggestion: true         # req 10
       passing_comment_has_no_suggestion: true      # a pass needs no remedy
       every_comment_names_its_requirement: true    # "[R-nn]" in the header IS the reference
@@ -96,16 +96,16 @@ common:
   # Ordering is computed, never chosen: the character offset of each requirement's
   # source_span in the raw manifest. No model output anywhere in the path.
   expected_ordinals:
-    R-01: 11
-    R-02: 22
-    R-03: 34
-    R-04: 56
-    R-05: 84      # shares an offset with R-06 — the (offset, text) tiebreak separates them
-    R-06: 84
-    R-07: 120
-    R-08: 135     # shares an offset with R-09
-    R-09: 135
-    R-10: 178
+    R-01: 12
+    R-02: 30
+    R-03: 43
+    R-04: 65
+    R-05: 99      # shares an offset with R-06 — the (offset, text) tiebreak separates them
+    R-06: 99
+    R-07: 134
+    R-08: 146     # shares an offset with R-09
+    R-09: 146
+    R-10: 184
 
   constraint_checks:
     - requirement_id: R-04
