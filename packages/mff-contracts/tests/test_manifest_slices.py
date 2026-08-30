@@ -15,7 +15,7 @@ from pathlib import Path
 import pytest
 import yaml
 
-from mff_contracts import Manifest, Requirement
+from mff_contracts import Constraint, Manifest, Requirement
 
 _MAX_SLICE_SIZE = 6
 
@@ -31,11 +31,31 @@ def _find_fixture_root() -> Path:
 FIXTURE = _find_fixture_root()
 
 
+def _build_constraint(entry: dict[str, object]) -> Constraint | None:
+    """Build a real `Constraint` from the fixture's structured block.
+
+    The fixture describes a constraint as five fields (`kind`, `value`,
+    `constraint_source_span`, `constraint_source_line`, `note`). Flattening this to
+    `constraint["kind"]` — as an earlier version of this test did — discards `value`,
+    which is the part that actually decides R-04's verdict. Build the real model instead.
+    """
+    raw = entry.get("constraint")
+    if raw is None:
+        return None
+    assert isinstance(raw, dict)
+    return Constraint(
+        kind=raw["kind"],
+        value=raw["value"],
+        source_span=raw["constraint_source_span"],
+        source_line=raw["constraint_source_line"],
+        note=raw.get("note"),
+    )
+
+
 def _load_requirements() -> list[Requirement]:
     data = yaml.safe_load((FIXTURE / "expected_requirements.yaml").read_text(encoding="utf-8"))
     requirements = []
     for entry in data["requirements"]:
-        constraint = entry.get("constraint")
         requirements.append(
             Requirement(
                 id=entry["id"],
@@ -44,7 +64,7 @@ def _load_requirements() -> list[Requirement]:
                 source_span=entry["source_span"],
                 source_line=entry["source_line"],
                 expected_count=entry.get("expected_count", 1),
-                constraint=constraint["kind"] if isinstance(constraint, dict) else constraint,
+                constraint=_build_constraint(entry),
                 ambiguity=entry.get("ambiguity"),
             )
         )
@@ -107,3 +127,36 @@ def test_slicing_is_deterministic(manifest: Manifest) -> None:
     first = [p.requirement_ids for p in manifest.slices()]
     second = [p.requirement_ids for p in manifest.slices()]
     assert first == second
+
+
+def test_r04_constraint_value_decides_the_verdict_without_parsing_a_string(
+    manifest: Manifest,
+) -> None:
+    """The regression this change exists to prevent: R-04's constraint, built exactly as
+    `expected_requirements.yaml` describes it, must expose `value` as a real attribute —
+    not something a consumer has to parse back out of a flattened string."""
+    by_id = {r.id: r for r in manifest.requirements}
+    r04 = by_id["R-04"]
+    assert r04.constraint is not None
+    assert isinstance(r04.constraint, Constraint)
+    assert r04.constraint.kind == "camera_position"
+    assert r04.constraint.value == "between_front_seats"
+    assert r04.constraint.note is not None
+    assert "forteli" in r04.constraint.note
+
+
+def test_r04_constraint_source_span_is_verbatim_in_the_manifest_and_survives_utf8(
+    manifest: Manifest,
+) -> None:
+    """The constraint arrives on manifest line 10, in Polish, six lines after the item it
+    qualifies. Its `source_span` must be a byte-for-byte substring of `Manifest.raw`."""
+    by_id = {r.id: r for r in manifest.requirements}
+    constraint = by_id["R-04"].constraint
+    assert constraint is not None
+    assert constraint.source_span == "Podsufitka trzeba spomiędzy forteli zrobić"
+    assert constraint.source_span in manifest.raw
+    assert constraint.source_line == 10
+    # UTF-8 (Polish diacritics) round-trips through model construction and JSON.
+    restored = Constraint.model_validate_json(constraint.model_dump_json())
+    assert restored.source_span == constraint.source_span
+    assert "ę" in restored.source_span
