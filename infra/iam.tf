@@ -70,12 +70,12 @@ resource "google_project_iam_member" "compute_log_writer" {
 
 resource "google_storage_bucket_iam_member" "compute_build_objects" {
   bucket = google_storage_bucket.build.name
-  role   = "roles/storage.objectAdmin"
+  role   = "roles/storage.admin"
   member = "serviceAccount:${local.compute_sa}"
 }
 
 resource "google_storage_bucket_iam_member" "cloudbuild_build_objects" {
   bucket = google_storage_bucket.build.name
-  role   = "roles/storage.objectAdmin"
+  role   = "roles/storage.admin"
   member = "serviceAccount:${local.cloudbuild_sa}"
 }
