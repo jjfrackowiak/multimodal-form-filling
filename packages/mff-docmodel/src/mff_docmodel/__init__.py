@@ -1,9 +1,20 @@
-"""mff-docmodel — empty skeleton (B0).
+"""mff-docmodel — every conversion between Word documents and our types.
 
-Owned by a later branch. No logic lives here yet: this package exists so that branch adds
-files rather than a package.
+Both directions (`.docx` → types, types → `.docx`), both modes (derivative, net-new). No
+AI, no network, no mutation of a client's document — see `compile_derivative` for the
+promise that makes derivative mode honest, and `attach_comments` for the one place Word
+comments are actually written.
 """
 
 from __future__ import annotations
 
-__all__: list[str] = []
+from .comments import attach_comments
+from .compile import compile_derivative, compile_netnew
+from .parse import parse_docx
+
+__all__ = [
+    "attach_comments",
+    "compile_derivative",
+    "compile_netnew",
+    "parse_docx",
+]

@@ -1,9 +1,9 @@
 [project]
 name = "mff-docmodel"
 version = "0.1.0"
-description = "Empty skeleton (B0). Owned by a later branch: the document model — deriving nodes from a client's .docx and compiling a net-new draft into one."
+description = "The document model (B1): deriving nodes from a client's .docx and compiling a net-new draft into one, in both directions, for both modes."
 requires-python = ">=3.11"
-dependencies = ["mff-contracts"]
+dependencies = ["mff-contracts", "python-docx>=1.2", "pillow>=10.0"]
 
 [build-system]
 requires = ["hatchling"]
