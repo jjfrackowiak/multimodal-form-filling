@@ -28,304 +28,146 @@ Not in scope for v1: image tooling (req 13) ships as a **stubbed interface only*
 
 ## Architecture
 
-### Email layer (`email-service`)
+### Request, Job, Slice
 
-```mermaid
-flowchart TD
-    IMAP["inbound IMAP"] --> ES["email-service"]
-    ES --> IV{"intake validation<br/>req 6"}
-    IV -->|invalid| BAD["SMTP reply:<br/>exactly what is missing<br/>req 8"]
-    IV -->|valid| JOB["POST /jobs<br/>manifest_raw + forms"]
-    JOB --> ED["editor-service parses the manifest<br/>req 5"]
-    ED --> ACC["202 Accepted<br/>returns Requirement[]"]
-    ACC --> ACK["SMTP reply: handed over<br/>+ that exact requirement list<br/>req 7"]
-    ACC --> RUN["job continues async"]
-    RUN -.-> CB["editor calls back on completion"]
-    CB --> DEL["SMTP reply: reviewed documents<br/>+ pass/fail summary + unverified<br/>req 10"]
+```
+Request                     one client email
+  └── Job  (one per form)   ← PARALLEL: forms are independent
+        └── Slice           ← SEQUENTIAL: requirements within a form interact
 ```
 
-### The email service has two roles, not one
+Concurrency sits exactly where it is safe. Requirement interdependence — a summary citing
+sections above it, a total depending on entries elsewhere — is **within a form**. Nothing
+crosses forms. So forms run concurrently while slices stay ordered.
 
-This is easy to under-plan, and the first draft of this document did exactly that —
-it stopped at the confirmation and never delivered anything back.
-
-**Role 1 — intake, synchronous.** Receive, validate, hand off, confirm. Everything above.
-
-**Role 2 — delivery, asynchronous.** The job finishes minutes later in another service.
-Something has to put the reviewed Word documents in front of the client, and req 10
-says that output *is* the product. Without this leg the system does nothing useful.
-
-The two roles have almost nothing in common: different triggers (an inbound message vs.
-a completed job), different failure modes, different idempotency keys. They share only
-the transport. That is why delivery is its own branch (**B13**) rather than more surface
-area on intake.
-
-**How delivery is triggered.** The editor calls back to the email service on completion,
-and the email service *also* sweeps for jobs that have been in flight too long. Callback
-alone loses jobs whenever the email service is restarting; polling alone adds latency to
-every job. The sweep costs little because `JobRecord` already exists for D2, and it makes
-a dropped callback recoverable instead of fatal.
-
-**What the delivery email must carry**, beyond the attachments:
-
-- a pass/fail summary, so the client knows the outcome without opening the documents
-- **any requirement marked `unverified`**, called out explicitly. This is where req 17
-  becomes visible to a human: the system gave up after three attempts and the client
-  must be told which checks were never completed rather than left to infer it.
-- on outright failure, a message saying so — which is most of concern **D2** answered
-  almost for free, once this leg exists at all.
-
-**Threading.** The delivery reply sets `In-Reply-To` / `References` against the
-**original client message**, not against the confirmation, so request → confirmation →
-results reads as one conversation.
-
-**Attachment size is a real constraint, not a detail.** The fleet fixture's single
-reviewed document is 2.8 MB with 17 embedded photos. A request carrying several forms
-clears typical limits quickly — Gmail refuses at 25 MB and many corporate servers at 10.
-Delivery therefore attaches below a configured threshold and otherwise sends a signed
-link to the object in the bucket. The documents already live in GCS as `BlobRef`s, so the
-link costs nothing extra.
-
-**Idempotency.** A callback that fires twice, or a callback plus the sweep catching the
-same job, must not send the client two copies. Keyed on `job_id`, with delivery recorded
-on the job record before the send is acknowledged.
-
-**The manifest is parsed exactly once, by the editor, and the list travels back.**
-That ordering is forced by req 7: the confirmation reply has to contain the parsed
-requirements, so the email service cannot send it until the parse exists.
-
-The tempting alternative — the email service parses for the reply, the editor parses
-again for the run — is a **silent correctness bug**. The parser has a model in it
-(see below), so it is not deterministic: two parses of the same manifest can yield
-different requirement sets. The client would then be shown one list while the document
-is graded against another, destroying the exact thing req 7 exists to provide. Parse
-once, return it, store it, never re-derive.
-
-Keeping the parse in the editor also keeps **all model credentials in one service**.
-The email layer never talks to Gemini.
-
-### Orchestration layer
-
-The `email-service` is not only a mail gateway — it is the **orchestrator**. It owns the
-job, plans the slices, and drives a **background runner** that works through them one at
-a time, each seeing the document as the previous slice left it.
+### Email layer
 
 ```mermaid
 flowchart TD
-    ACC["202 Accepted<br/>requirements returned for the confirmation reply"] --> BG["background runner starts"]
-    BG --> FORM["for each form — sequential"]
-    FORM --> SEED["SEED ARTIFACT<br/>parse docx, or generate scaffold"]
-    SEED --> SLICE["for each slice — SEQUENTIAL, IN ORDER"]
-    SLICE --> RUN["editor instance runs the slice<br/>reads the CURRENT artifact"]
+    IMAP["inbound IMAP"] --> ES["email-service — orchestrator"]
+    ES --> IV{"intake validation<br/>req 6"}
+    IV -->|invalid| BAD["SMTP reply: exactly what is missing<br/>req 8"]
+    IV -->|valid| PARSE["editor parses the manifest — req 5"]
+    PARSE --> ACC["202 Accepted<br/>Requirement[]"]
+    ACC --> ACK["SMTP reply: handed over<br/>+ that exact list — req 7"]
+    ACC --> FAN["one Job per form — PARALLEL"]
+    FAN --> J1["Job · form A"]
+    FAN --> J2["Job · form B"]
+    J1 --> BAR["barrier: every job settled"]
+    J2 --> BAR
+    BAR --> DEL["one delivery email:<br/>documents + requirement list — req 10"]
+```
+
+**The manifest is parsed exactly once**, by the editor, and the list travels back in the
+202. Req 7 forces this ordering — the confirmation must contain the parsed requirements,
+so it cannot be sent before they exist. Parsing in both services would be a silent
+correctness bug: the parser has a model in it, so two parses can differ and the client
+would be shown one list while their document was graded against another.
+
+**Delivery is a barrier.** One email goes out when every job in the request has settled.
+`status="partial"` is a real outcome — two of three forms reviewed is worth sending, with
+the third named as failed, rather than withholding everything because one job died.
+
+### Inside a job
+
+```mermaid
+flowchart TD
+    S["SEED ARTIFACT<br/>parse docx, or scaffold"] --> SL["for each slice — SEQUENTIAL, by ordinal"]
+    SL --> RUN["editor runs the slice<br/>mutates a LIVE artifact in-session"]
     RUN --> V{"validate per requirement<br/>req 16"}
     V -->|"fail, attempt &lt; 3"| RUN
-    V -->|"fail, attempt = 3"| U["mark unverified<br/>req 17"]
-    V -->|ok| AP["APPLY + COMMIT<br/>atomic write to shared state"]
-    U --> AP
-    AP --> MORES{"more slices?"}
-    MORES -->|yes| SLICE
-    MORES -->|no| RND["RENDER_DOCX + comments"]
-    RND --> MOREF{"more forms?"}
-    MOREF -->|yes| FORM
-    MOREF -->|no| DEL["delivery reply — req 10"]
+    V -->|"fail, attempt = 3"| U["mark unverified — req 17"]
+    V -->|ok| C["COMMIT<br/>ops + cursor, one transaction"]
+    U --> C
+    C --> M{"more slices?"}
+    M -->|yes| SL
+    M -->|no| CK["completeness check<br/>every requirement has a comment"]
+    CK --> CP["COMPILE → .docx + RenderMap"]
+    CP --> DONE["JobRecord.document"]
 ```
 
-### Why sequential, not parallel
+Slices run in sequence so that **slice N reads the artifact as slices 1…N−1 committed
+it**. Under a parallel design every instance would see the same seed and none could see
+another's work, making a whole class of requirement unrepresentable rather than merely
+slow.
 
-An earlier draft fanned slices out in parallel, each working from a frozen seed snapshot.
-It was faster and it was wrong, for a reason that only shows up once requirements start
-interacting.
+**Slice order is computed, not chosen.** It is the ascending `ordinal` of each slice's
+earliest requirement, where `ordinal` is the character offset of that requirement's
+`source_span` in the raw manifest. No model output sits anywhere in the ordering path, and
+the justification is honest: the client wrote their requirements in an order, and that
+order is theirs.
 
-**Requirements are not independent.** A later requirement may need to reference content
-an earlier one produced — a summary that cites the sections above it, a total that
-depends on entries added elsewhere, a cross-reference to a clause another requirement
-introduced. Under fan-out every instance sees the *same* seed and none can see any
-other's work, so that class of requirement is not merely hard, it is **unrepresentable**.
+### The two modes are two agents
 
-Sequential execution makes it ordinary: **slice N reads the artifact as slices 1…N−1
-committed it.** Nothing special is required to support interdependence; it falls out of
-the ordering.
+They are not doing the same kind of work, and forcing them through one editing model is
+what produced the contract's worst bugs.
 
-Three further simplifications come with it, and they are not small:
+**Derivative — comments only, never touches the body.** Req 10 asks for *"a suggestion of
+what to change"*. A suggestion, not a change: a client sending a form for validation wants
+to be told it is wrong, not handed a silently corrected copy. The agent emits
+`ReviewComment[]` and has **no mutation tool at all**, so it cannot drift into helpfully
+fixing the form — a structural guarantee rather than a prompt instruction.
 
-- **No cross-slice conflict resolution.** Two slices can still touch the same line, but
-  the second one *sees* the first's edit. That is an informed decision rather than a
-  blind collision, so there is no merge to arbitrate.
-- **Ordering is execution order.** The parallel design needed proposals sorted by slice id
-  to keep output deterministic despite arbitrary completion order. Sequential execution
-  has one order and it is the real one.
-- **D3 detection gets sharper.** Instead of "two proposals arrived for one line", the
-  signal becomes "slice N overwrote a line that slice M wrote for a different
-  requirement" — which is much closer to what a contradictory pair of requirements
-  actually looks like.
+Almost every addressing problem dissolves once the body is immutable: ids cannot shift
+because nothing is inserted, no later slice can invalidate an earlier comment, and there
+are no writes for locked regions to guard. **Regions survive with a new meaning** — anchor
+scopes, telling us which part of the document a requirement governs and therefore where
+its comment attaches.
 
-**Slice order therefore carries meaning.** Under fan-out it was a determinism device;
-now it is a semantic decision, and the planner owns it. Document order is the sensible
-default — requirements that govern later sections run later — with anything explicitly
-dependent ordered after what it depends on.
+**Net-new — field-scoped edits on a draft, compiled once.** There is no client document,
+so nothing to edit surgically. The agent populates a `FormDraft` held in session state via
+three operations — `set`, `append`, `delete`. **Append is load-bearing:** R-02 needs four
+seat entries and that count comes from the requirement, so the slice must create slots the
+scaffold could not have sized without parsing requirements itself.
 
-**The cost is wall-clock.** A form is now the sum of its slices rather than the slowest,
-so end-to-end runs longer. That is the correct trade: a fast system that cannot express
-a requirement is not faster, it is unfinished. The runner is a background task precisely
-so this latency never reaches the client — they have their confirmation reply within
-seconds and the documents when they are ready.
+Both modes share manifest parsing, slice planning and ordering, the runner, per-requirement
+validation, monotonic retry, the `unverified` terminal, and delivery. Only the agent and
+its toolset differ.
 
-### The editor stays a worker
+### Where compile and validation live
 
-`editor-service` still owns no job state and exposes essentially one operation:
-
-```
-POST /slices:run   SliceRequest → SliceReport
-```
-
-The only change is that `SliceRequest.artifact` now carries the *current* artifact rather
-than a fixed per-job seed. Stateless, and testable with no job lifecycle around it.
-
-**Tools are scoped per run.** A slice runner is handed a toolset bounded to its own
-requirements and the regions they govern; a proposal targeting a line outside that scope
-is rejected deterministically, never by asking the prompt nicely.
-
-### A note on the name
-
-A service doing mail I/O *and* orchestration is doing two jobs and the name mentions one.
-Internally it splits `orchestrator/`, `runner/` and `mail/`, so the day the runner wants
-to be its own deployable — which is the natural next step if jobs get long — the seam is
-already there.
-
-### Forms are processed one at a time
-
-Req 2 allows a request to carry several forms. **They are handled in a sequential loop,
-one form at a time.** Parallelism exists only *within* a form, across its requirement
-slices.
-
-That is a deliberate limit on ambition, and it makes the contract coherent rather than
-contradictory. An earlier draft had `JobRequest.forms` as a list while `Artifact` carried
-a single `doc_id` and `ReviewComment` had no form dimension at all — a shape that simply
-cannot express req 10's "one comment per requirement per form". Freezing that into
-`mff-contracts` would have had every Layer-1 branch build single-document and discover
-the problem at B9.
-
-The loop resolves it without adding a dimension anywhere:
-
-- **One `Artifact` per form.** `doc_id` identifies the form, and comments live inside
-  their own artifact, so the form scope is structural rather than a field that has to be
-  set correctly everywhere.
-- **`Requirement.applies_to` is the filter.** It already exists: form ids, empty meaning
-  all. Each pass selects the requirements that apply to the form in hand.
-- **Everything downstream stays singular.** The applier, the docmodel, the slice runner
-  and the fixture all keep the shape they already have.
-
-The cost is wall-clock: a three-form job takes roughly three times a one-form job, since
-every form is a full sequential pass. That is the right trade for now: the runner works
-in the background, so wall-clock is not the client's problem, and form-level concurrency
-can be added later without changing any of these types.
-
-### Why the writes are serialised
-
-Every editor instance receives a **read-only snapshot** of the artifact plus its own
-slice, and returns a `SliceReport` of *proposed* edits and comments. No instance writes
-to the document, or to the store.
-
-That removes the hard problem rather than solving it. The alternative — N agents
-mutating one shared artifact under optimistic concurrency — means version conflicts
-under exactly the load the parallelism was introduced to handle, and a retry storm as
-each loser re-runs a model call that already cost money.
-
-Two properties follow that are worth more than the contention they avoid:
-
-- **The output is deterministic in application order.** Proposals are applied in **slice
-  order, never completion order**. Whichever instance finishes first, the resulting
-  document is byte-identical. Apply on arrival instead and the document quietly changes
-  between runs on the same input, which would make the golden fixture meaningless.
-- **Conflicts become visible.** The applier holds *every* proposal before it writes
-  anything, so two slices targeting the same `line_id` is a detectable event rather than
-  a silent last-write-wins.
-
-That second one is a real gain against concern **D3**. Contradictory requirements were
-previously invisible by construction — each agent saw only its own slice and nothing
-compared them. Fan-in gives us the one moment where all proposals coexist, which is the
-only place a cross-slice contradiction *can* be caught. It does not solve D3 (two
-requirements can conflict in meaning while touching different lines) but it converts the
-line-level case from undetectable to detectable.
-
-### Where validation sits
-
-Req 12 is satisfied literally, not reinterpreted: **inside a run the agent has a live
-Python `Artifact` object and mutates it freely at any point**, including between tool
-calls. Nothing is gated during reasoning. The agent can experiment, revise its own work,
-and change its mind — that is what the requirement asks for and it is what makes the
-agent useful.
-
-The gate is at the **exit**, not the write:
+> The editor service is the only thing that calls a model. Everything deterministic lives
+> on the other side of that line.
 
 ```
-in-session   Artifact object   ← agent mutates freely, no validation  (req 12)
-     │
-     ▼ run ends
-extract      diff → Edit[] + ReviewComment[]  =  SliceReport
-     │
-     ▼
-validate     per requirement — answered, justified, citations verbatim  (req 16)
-     │        accepted answers frozen; failures retried with history
-     ▼
-queue        surviving proposals, ordered by slice id
-     │
-     ▼
-apply        one atomic write to shared state
+editor-service      PRODUCES     comments, draft ops        — has the model
+orchestrator        VALIDATES    per slice, then per job    — has no model
+orchestrator        COMPILES     → .docx with comments      — deterministic
+orchestrator        DELIVERS     one email per request      — mail adapter
 ```
 
-So validation happens **before the write to shared memory, never before the write to the
-in-session object.** That ordering is what lets both properties hold at once: the agent
-is unconstrained where it needs to be, and the shared document only ever receives
-content that has passed every invariant.
+Compile involves no AI, so putting it behind an HTTP call would ship a multi-megabyte
+artifact across a service boundary for nothing. The editor is also slice-scoped and
+stateless by design; compile needs the whole artifact. Keeping it out also keeps
+`python-docx` out of the editor entirely — the orchestrator parses the source into `Node`s
+and hands them over as data.
 
-It also means an agent that thrashes — writes, reverts, rewrites — costs nothing but its
-own tokens. Only the net result of the run reaches the queue.
+Validation is orchestrator-side for a sharper reason: **an agent must not judge its own
+output.** Three checks at three moments — per slice (req 16), after the last slice
+(completeness: every requirement carries at least one comment), and during compile (every
+comment anchors to something that still exists). The middle one is inherently cross-slice;
+no single run knows what the others answered.
 
-### The editor becomes a worker
-
-`editor-service` no longer owns a state machine or a loop. It exposes essentially one
-operation:
+### The run lifecycle
 
 ```
-POST /slices:run   SliceRequest → SliceReport
+ 1  slice starts   artifact snapshot loaded — last committed state
+ 2  in-session     agent mutates a LIVE object freely, no gate.
+                   Each mutation tool also appends a DraftOp to a log.
+ 3  run ends       SliceReport = the op log + the comments produced
+ 4  validate       per requirement: answered, justified, anchor resolves
+ 5a all pass       ops applied + cursor advanced, as ONE transaction
+ 5b any fail       NOTHING persisted. Session object discarded. Retry reloads the
+                   SAME snapshot, carries history, and `pending` narrows.
 ```
 
-Stateless, horizontally scalable, and testable without any job lifecycle around it.
-The lifecycle — retries, the three-attempt cap, the unverified terminal, apply, render,
-deliver — belongs to the orchestrator, which is also where `JobRecord` already lives.
+Req 12 is satisfied literally — the agent mutates a live Python object at any point,
+including between tool calls, and an agent that writes, reverts and rewrites costs only
+its own tokens. **Ops are the tool-call log, not a computed diff**, so there is no
+before/after diffing step to get wrong. And because nothing is written until validation
+passes, a failed attempt leaves no trace — which is what makes "identical snapshot across
+attempts" true rather than aspirational.
 
-**Tools are scoped per instance.** A slice runner is handed a toolset bounded to its own
-requirements and the regions they govern. A proposal targeting a line outside that scope
-is rejected by the applier deterministically — slice isolation is enforced by the tool
-layer and the applier, never by asking the prompt nicely.
-
-**One slice runs at a time**, so there is no concurrency to bound and no rate limit to
-trip. `UsageLimits` still caps each individual run — see D5 for the job-level ceiling that
-is still missing.
-
-### A note on the name
-
-A service that does mail I/O *and* orchestration is doing two jobs, and the name only
-mentions one. Internally it splits `orchestrator/` from `mail/`, with the mail transport
-as an adapter and orchestration as the core — so the day it wants to be its own service,
-or grow a second front door, the seam is already there.
-
-### Do the two modes still differ?
-
-Mostly no, and the orchestration change makes that clearer. They diverge at **SEED
-ARTIFACT** and nowhere else: derivative parses the client's `.docx`, net-new generates a
-scaffold. Slice planning, the sequential runner, validation, retry, apply, render and
-delivery are all shared.
-
-Both modes still have regions; they differ only in who decides them. Derivative has an
-agent classify the client's existing content. Net-new has the generator declare them as
-it emits — structure locked, slots editable.
-
-The runners stay separate for one reason, and it is not structural: **authority**. A
-derivative run may not write; a net-new run must. A client sending a form for validation
-wants to be told it is wrong, not handed a silently corrected version. Locked regions are
-the enforcement; separate runners keep the enforcement meaningful.
 
 ## How the manifest becomes requirements
 
@@ -418,52 +260,60 @@ before a single comment has been written against it.
 
 Which is also why the parse must happen **once**. See the email layer above.
 
-## Citations must quote, not point
+## How requirements are referenced
 
-A reference like `manifest.txt → R-04` tells the client nothing. They did not write
-`R-04`; they wrote `2x podsufitka`. A justification is only auditable if it carries the
-words that actually drove the decision, so `ReviewComment.citations` holds verbatim
-quotes with their line numbers, and the fixture asserts three things about them:
+Comments cite requirement **numbers** — `R-04` — not verbatim slices of the manifest.
 
-- **every quote is a literal substring of the manifest.** A citation the client cannot
-  find in their own words is worse than no citation — it looks like evidence and isn't.
-- **the cited line number is where that quote actually appears.**
-- **the required spans are all present**, not just one of them.
+An earlier draft required every comment to quote the client's own words, on the argument
+that `manifest.txt → R-04` tells the client nothing. That holds only if R-04 is never
+explained. **The parsed requirement list now ships with the delivery**, carrying each
+requirement's text and the manifest spans it came from, so the provenance is stated once
+rather than repeated in every comment.
 
-That last point is the substantive one. Two requirements in the fixture need **two
-citations each**:
+`Requirement.source_span` therefore keeps its verbatim invariant regardless — it is what
+the delivered list shows, and slice ordering is computed from its offset. Only the
+comment-level citation simplifies.
 
-| Req | Must cite | Why both |
-|---|---|---|
-| R-01 | `16 zdjęć` + `Pod maską` | The repeated line is why two are expected; the client's own stated total of 16 is why that reading wins |
-| R-04 | `2x podsufitka` + `Podsufitka trzeba spomiędzy forteli zrobić` | Cite only the first and the client cannot see why two supplied photos failed |
+Putting the list in the delivery as well as the confirmation is not redundant: the
+confirmation may be days old, deleted, or read by somebody else, and the documents are
+useless without the numbering they reference.
 
-Cite one span where two were needed and the comment becomes unanswerable. The evaluator
-enforces this — dropping R-04's constraint citation, paraphrasing it instead of quoting,
-or citing it against the wrong line number all fail the fixture.
 
-## In net-new, everything arrives as an edit
+## Net-new builds a draft, then compiles it
 
-Req 14 says edits are line-targeted and there is no full regeneration. That constrains
-net-new more than it first appears: the scaffold generator does **not** get to emit
-finished content.
+Req 14 forbids full regeneration, which constrains net-new more than it first appears —
+but not in the way an earlier draft assumed. There is no client document to regenerate,
+so the constraint is about **provenance, not surgery**.
 
-The generator emits **structure only** — headings, field labels, empty content slots —
-and declares its own regions as it goes: structure locked, slots editable. Every piece
-of actual content then arrives through the same `Edit(line_id, new_text, requirement_id)`
-path that derivative uses. Nothing is written directly into the document.
+The scaffold emits structure only: sections, titles, empty slots. Every piece of content
+then arrives through a `DraftOp` carrying the requirement that produced it. Three
+operations, because replace alone cannot build a document:
 
-Three things fall out of that, and they are the reason to insist on it:
+| Op | Why it is needed |
+|---|---|
+| `set` | Revise something already written |
+| `append` | R-02 needs **four** seat entries; the count comes from the requirement |
+| `delete` | Withdraw content a later requirement supersedes |
 
-- **Provenance is total.** `Artifact.edits` becomes the complete account of how the
-  document came to exist, with every line traceable to the requirement that caused it.
-  Req 10 asks net-new comments to show how each requirement was realised — this is what
-  makes that answerable rather than asserted.
-- **One apply path.** `APPLY_EDITS` is identical in both modes, so locked-region
-  enforcement is exercised by both and cannot rot in the mode that "doesn't need it".
-- **The invariant is checkable:** in net-new output, every character outside the
-  generated scaffold must be attributable to an `Edit` carrying a `requirement_id`.
-  Content that appears with no edit behind it is a bug, however good it reads.
+**`append` is what makes the scaffold/slice split coherent.** The scaffold lays out
+sections; the slice decides how many entries each needs. Without it the generator would
+have to parse requirements to size the document — doing the slice's job and defeating the
+split.
+
+Entry ids are minted on append and never derived from position, so deletions and
+reordering renumber nothing. At the end **one deterministic compile step** renders
+`FormDraft` → `.docx`, producing a `RenderMap` so comments can be attached to real runs.
+
+Three properties follow, and they are the reason to insist on the op log:
+
+- **Provenance is total.** Every entry carries `set_by`, so the document is a complete
+  account of which requirement produced which content — which is what makes req 10's
+  "how each requirement was realised" answerable rather than asserted.
+- **Ops are the tool-call log, not a diff.** Each mutation tool records its own op as it
+  runs, in causal order, with no before/after comparison to get wrong.
+- **Nothing persists until validation passes.** A failed attempt leaves no trace, so the
+  retry genuinely restarts from the same committed state.
+
 
 ## Service structure
 
@@ -912,88 +762,304 @@ docker/
 
 ## The contract to freeze first (`mff-contracts`)
 
-Everything else is written against these. **No branch may edit this package** — a change request goes back through the layer-0 owner.
+Everything is written against these. **No branch may edit this package** — a change request
+goes back through the layer-0 owner. It depends on **nothing but pydantic**: no
+`pydantic-ai`, no service clients, enforced by import-linter.
+
+### Manifest and requirements — reqs 4, 5, 11
 
 ```python
 class Requirement(BaseModel):
-    id: str                    # "R-03"
-    text: str                  # one normalised, individually checkable statement (req 5)
-    source_span: str           # verbatim manifest text it was derived from
-    scope: str                 # slice key — which agent run owns it (req 11)
-    applies_to: list[str]      # form ids; empty = all forms
+    id: str                 # "R-03", assigned AFTER canonical sort so ids read in order
+    ordinal: int            # manifest_raw.index(source_span) — the ordering key
+    text: str               # one normalised, individually checkable statement
+    source_span: str        # VERBATIM substring of manifest_raw
+    source_line: int        # 1-indexed, for the delivered requirement list
+    scope: str              # slice key
+    applies_to: list[str]   # form ids; empty = all forms
+    expected_count: int = 1 # "4x fotele" is ONE requirement with count 4
+    constraint: str | None  # e.g. "camera position: between_front_seats"
+    ambiguity: str | None   # recorded, never silently resolved
+```
 
-class Manifest(BaseModel):
-    raw: str
-    requirements: list[Requirement]
-    def slices(self) -> dict[str, list[Requirement]]: ...
+Invariants, asserted not scored: every `source_span` appears verbatim in `manifest_raw`,
+and ids are assigned after sorting by `(ordinal, text)` — `text` breaks the tie when two
+requirements share a span, as R-05/R-06 and R-08/R-09 both do.
 
-class Line(BaseModel):         # the addressable unit edits target (req 14)
-    id: str                    # stable: "p12", "t3.r2.c1.p0"
+### Blobs and images — req 13
+
+```python
+class BlobRef(BaseModel):
+    uri: str                # gs://<bucket>/jobs/<job_id>/<kind>/<sha256>
+    content_type: str
+    size_bytes: int
+    sha256: str             # content-addressed: dedupe and retry-safety
+
+class ImageAnalysis(BaseModel):   # LIVES HERE, not in mff-vision
+    file: str
+    depicts: str            # "headliner", "seat_front", … or "unknown"
+    shot_from: str | None   # "between_front_seats" — a SEPARATE question
+    note: str | None
+    confidence: float
+
+class JobImage(BaseModel):
+    blob: BlobRef
+    original_filename: str
+    source: Literal["attachment", "embedded"]   # loose file, or pulled from a .docx
+    analysis: ImageAnalysis | None              # cached at ingest, keyed by sha256
+```
+
+`ImageAnalysis` belongs here rather than in `mff-vision`: it is a wire type shared by the
+vision service and the editor, and owning it there would make the frozen package depend on
+a service client. `depicts` and `shot_from` stay separate — "what is this" and "taken from
+where" are different questions, and merging them loses R-04.
+
+Content-addressing collapses duplicates at ingest: the fixture's 17 files become 15 blobs
+before any agent sees them.
+
+### Document models — one per mode — reqs 12, 14, 15
+
+```python
+class Node(BaseModel):              # DERIVATIVE: read-only view of the client's document
+    id: str                         # stable because the document never changes
+    kind: Literal["heading", "paragraph", "table_cell", "image", "caption"]
     text: str
+    parent_id: str | None
+    image_sha256: str | None        # links an embedded image to its JobImage
 
-class Region(BaseModel):
-    id: str
-    line_ids: list[str]
-    locked: bool
-    rationale: str             # why the first run classified it this way
+class Entry(BaseModel):             # NET-NEW
+    id: str                         # minted on append; never positional
+    order: str                      # fractional index — insertion renumbers nothing
+    value: str | None
+    images: list[BlobRef]
+    set_by: str                     # requirement id that produced it
 
-class Edit(BaseModel):
-    line_id: str; new_text: str; requirement_id: str
+class Section(BaseModel):
+    id: str; title: str; entries: list[Entry]
 
-class Citation(BaseModel):         # the client's own words, not a pointer
+class FormDraft(BaseModel):
+    schema_version: int = 1
+    sections: list[Section]
+
+class DraftOp(BaseModel):           # replace alone cannot build a document
+    kind: Literal["set", "append", "delete"]
     requirement_id: str
-    quote: str                     # VERBATIM substring of manifest_raw
-    line: int                      # 1-indexed line it appears on
-    start: int; end: int           # char offsets; manifest_raw[start:end] == quote
+    section_id: str | None          # append
+    entry_id: str | None            # set, delete
+    value: str | None
+    images: list[BlobRef] = []
+```
+
+### Review — reqs 10, 16, 17
+
+```python
+class Anchor(BaseModel):
+    kind: Literal["node", "entry", "document"]
+    target_id: str | None           # None only when kind == "document"
 
 class ReviewComment(BaseModel):
-    line_id: str
-    requirement_id: str
-    verdict: Literal["pass", "fail", "realised", "unverified"]
-    justification: str                 # req 16: every answer justified
-    suggestion: str | None             # required when verdict == "fail" (req 10)
-    citations: list[Citation]          # req 16 — plural, and quoted; see below
+    requirement_id: str             # referenced by NUMBER; the text ships with delivery
+    anchor: Anchor
+    verdict: Literal["pass", "fail",            # derivative
+                     "realised", "shortfall",   # net-new
+                     "not_applicable",          # genuinely does not apply
+                     "unverified"]              # req 17 terminal
+    justification: str              # req 16: never empty
+    suggestion: str | None          # required iff verdict == "fail"
+```
 
-class Artifact(BaseModel):     # ONE PER FORM — req 12, outlives any single run
-    doc_id: str                # identifies the form; comments inside are its own
-    lines: list[Line]
-    regions: list[Region]
-    edits: list[Edit]
+`Anchor` gives `unverified` somewhere to live: a requirement that exhausted its retries may
+never have identified a target — often that is *why* it failed — and an unanchored comment
+cannot exist in OOXML.
+
+`not_applicable` exists because a requirement about a trailer, on a vehicle without one, is
+not `pass` (implies checked and met), not `fail` (implies a defect), and not `unverified`
+(implies we gave up). It counts as answered for the completeness check.
+
+Comments cite requirement **numbers**, not verbatim quotes. The provenance did not
+disappear — the parsed requirement list ships with the delivery, carrying each
+requirement's text and `source_span`. Stated once rather than repeated in every comment.
+
+### Artifacts — one per job — req 12
+
+```python
+class DerivativeArtifact(BaseModel):
+    schema_version: int = 1
+    form_id: str
+    source: BlobRef                 # immutable
+    nodes: list[Node]
     comments: list[ReviewComment]
 
-class Mode(StrEnum): DERIVATIVE = "derivative"; NET_NEW = "net_new"
-class JobRequest(BaseModel):   # email-service → editor-service
-    job_id: str; mode: Mode; manifest_raw: str
-    forms: list[FormPayload]; client_inputs: dict[str, Any]
-class SliceRequest(BaseModel):   # orchestrator → one editor instance
-    job_id: str; slice_id: str; mode: Mode
-    requirements: list[Requirement]   # this slice only
-    pending: list[str]                # requirement ids still to answer — NARROWS on retry
-    artifact: Artifact                # READ-ONLY, and CURRENT — includes prior slices
-    editable_line_ids: list[str]      # the scope bound; anything else is rejected
-    history: list[ModelMessage]       # prior attempts, bounded; empty on attempt 1
-    validator_error: str | None       # why the last attempt failed
+class NetNewArtifact(BaseModel):
+    schema_version: int = 1
+    form_id: str
+    draft: FormDraft
+    comments: list[ReviewComment]
 
-class SliceReport(BaseModel):    # editor instance → orchestrator
-    slice_id: str; attempt: int
-    edits: list[Edit]                 # PROPOSED; the orchestrator applies them
-    comments: list[ReviewComment]     # only for ids in `pending`
-    unanswered: list[str]             # ids this run could not decide
-    history: list[ModelMessage]       # returned so the next attempt continues
-
-class JobAccepted(BaseModel):  # 202 response — what the confirmation reply quotes
-    job_id: str
-    requirements: list[Requirement]   # parsed once, here; req 7 sends exactly this
-class JobResult(BaseModel):   # editor-service → email-service, on completion
-    job_id: str; status: Literal["done", "failed"]
-    documents: list[DocumentPayload]      # BlobRefs; attached or linked by size
-    unverified: list[str]                 # req 17 — named explicitly in the reply
-    summary: dict[str, int]               # {"pass": 8, "fail": 2, "unverified": 0}
-    failure_detail: str | None = None     # populated when status == "failed"
-
-class IntakeProblem(BaseModel): code: str; detail: str     # req 8: what to add/change
-class IntakeVerdict(BaseModel): valid: bool; problems: list[IntakeProblem]
+Artifact = DerivativeArtifact | NetNewArtifact
 ```
+
+`schema_version` matters because these persist: Firestore documents outlive deploys, and
+an in-flight job loaded after a shape change must fail loudly rather than parse partially.
+
+### Slices — reqs 11, 16, 17
+
+```python
+class SlicePlan(BaseModel):
+    slice_id: str
+    ordinal: int                    # min(r.ordinal) — execution order, computed
+    requirement_ids: list[str]      # 2-6 per slice; oversized scopes split, undersized merge
+
+class SliceRequest(BaseModel):
+    job_id: str; slice_id: str; mode: Mode
+    requirements: list[Requirement]
+    pending: list[str]              # narrows on retry — settled answers are not reopened
+    artifact: Artifact              # CURRENT: includes prior slices' committed work
+    scope_ids: list[str]            # node ids (derivative) or section ids (net-new)
+    history: list[dict[str, Any]]   # OPAQUE — keeps pydantic-ai out of this package
+    validator_error: str | None
+
+class SliceReport(BaseModel):
+    slice_id: str; attempt: int
+    comments: list[ReviewComment]   # only for ids in `pending`
+    ops: list[DraftOp]              # net-new only; empty for derivative
+    unanswered: list[str]
+    history: list[dict[str, Any]]
+```
+
+The **2–6 requirements per slice** bound is deliberate. Without it, a parser emitting a
+unique `scope` per requirement produces ten slices of one and one emitting a single scope
+produces one slice of ten — both contract-valid, wildly different in cost. Slicing should
+be a design decision, not an accident of prompt phrasing.
+
+### Compile — the typed output
+
+```python
+class RunSpan(BaseModel):           # how an anchor id becomes actual runs
+    paragraph_index: int
+    run_start: int
+    run_end: int                    # inclusive
+
+class RenderMap(BaseModel):
+    anchor_to_span: dict[str, RunSpan]     # Node.id or Entry.id -> where it landed
+
+class CompiledForm(BaseModel):
+    form_id: str
+    document: BlobRef
+    render_map: RenderMap
+    comments_attached: int
+    unanchored: list[str]           # requirement ids that fell back to a document anchor
+```
+
+`python-docx` needs *runs*; we hold ids. `RenderMap` is the bridge, built during compile
+when the renderer knows exactly where each node or entry landed. The fixture's hard case —
+R-05/R-06 and R-08/R-09 each putting two comments on one heading — is simply two ids
+mapping to the same span. `unanchored` makes the document-level fallback visible: if
+requirements land there routinely, region scoping is not working.
+
+### Job lifecycle — reqs 1, 2, 3, 6, 7, 8, 10
+
+```python
+class Mode(StrEnum):
+    DERIVATIVE = "derivative"; NET_NEW = "net_new"
+
+class IntakeProblem(BaseModel):
+    code: str; detail: str                      # req 8: exactly what to add or change
+
+class IntakeVerdict(BaseModel):
+    valid: bool; problems: list[IntakeProblem]
+
+class RequestRecord(BaseModel):                 # the email — owns delivery
+    request_id: str; mode: Mode
+    manifest_raw: str
+    requirements: list[Requirement]             # parsed ONCE for the whole request
+    job_ids: list[str]                          # one per form
+    reply_to: str; original_message_id: str     # delivery threads on the ORIGINAL message
+    status: Literal["running", "delivered", "failed"]
+
+class JobRequest(BaseModel):                    # orchestrator → runner. ONE form.
+    job_id: str; request_id: str; mode: Mode
+    form: BlobRef | None                        # None for net-new: nothing supplied
+    form_id: str
+    requirements: list[Requirement]             # already filtered by applies_to
+    images: list[JobImage]                      # already scoped to this form
+
+class RequestAccepted(BaseModel):               # the 202 — req 7 quotes exactly this
+    request_id: str
+    requirements: list[Requirement]
+
+class JobCursor(BaseModel):                     # W1: written WITH the artifact, atomically
+    slice_index: int
+
+class JobRecord(BaseModel):                     # small, pollable — answers D2
+    job_id: str; request_id: str; form_id: str
+    status: Literal["running", "done", "failed"]
+    cursor: JobCursor
+    document: BlobRef | None
+    summary: dict[str, int]
+    unverified: list[str]
+    failure_detail: str | None
+
+class RequestResult(BaseModel):                 # → delivery, once ALL jobs settle
+    request_id: str
+    status: Literal["done", "partial", "failed"]
+    documents: list[BlobRef]                    # one per successful job
+    requirements: list[Requirement]             # ships WITH the result
+    summary: dict[str, int]
+    unverified: list[str]                       # req 17, named explicitly to a human
+    failed_forms: list[str]
+```
+
+`JobCursor` travels inside the artifact write: committing a slice's result and advancing
+the cursor must be one transaction, or a crash between them replays a slice (duplicate
+comments) or skips one (silently missing requirements).
+
+Requirements and images arrive at a job **already scoped**, so `applies_to` and image→form
+assignment are resolved once by the orchestrator rather than by every runner.
+
+### Repositories — the seam that keeps GCP out of CI
+
+```python
+class ArtifactRepository(Protocol):
+    async def save(self, artifact: Artifact, cursor: JobCursor,
+                   *, expected_version: int) -> int: ...
+    async def load(self, job_id: str) -> tuple[Artifact, JobCursor, int]: ...
+
+class JobRepository(Protocol):
+    async def put(self, record: JobRecord) -> None: ...
+    async def get(self, job_id: str) -> JobRecord | None: ...
+    async def for_request(self, request_id: str) -> list[JobRecord]: ...   # the barrier
+
+class RequestRepository(Protocol):
+    async def put(self, record: RequestRecord) -> None: ...
+    async def get(self, request_id: str) -> RequestRecord | None: ...
+
+class BlobStore(Protocol):
+    async def put(self, data: bytes, *, content_type: str, kind: str) -> BlobRef: ...
+    async def get(self, ref: BlobRef) -> bytes: ...
+    async def signed_url(self, ref: BlobRef, *, ttl_seconds: int) -> str: ...
+```
+
+`signed_url` is what delivery falls back to when attachments exceed the 25 MB mail ceiling
+— the fixture's single reviewed document is already 2.8 MB.
+
+### Requirement coverage
+
+| Req | Where it lives |
+|---|---|
+| 1, 2, 3 | `RequestRecord` → one `JobRequest` per form |
+| 4, 5 | `Manifest`, `Requirement`, verbatim `source_span` |
+| 6, 8 | `IntakeVerdict`, `IntakeProblem` |
+| 7 | `RequestAccepted.requirements` — parsed once, quoted in the confirmation |
+| 9 | `Mode`, and one artifact type per mode |
+| 10 | `ReviewComment`, `RequestResult.documents` |
+| 11 | `SlicePlan`, `SliceRequest` — scoped runs, `ordinal` computed |
+| 12 | `DerivativeArtifact` / `NetNewArtifact` — outlive any run |
+| 13 | `JobImage`, `BlobRef`, `ImageAnalysis` |
+| 14, 15 | Derivative mutates nothing; net-new uses `DraftOp` then compiles once |
+| 16 | Per-requirement validation: answered, justified, anchor resolves |
+| 17 | `verdict="unverified"`, `RequestResult.unverified`, `pending` narrowing |
+
 
 ## Parallel branch tasks
 
@@ -1007,8 +1073,8 @@ Directory ownership is **disjoint per branch** — that is what keeps 7 concurre
 
 | ID | Branch | Owns | Deliverable |
 |----|--------|------|-------------|
-| **B14** | `feat/applier` | `packages/mff-applier/**` | Applies one validated `SliceReport` to the artifact and commits: reject any edit outside its slice's `editable_line_ids`, enforce locked regions, and **flag when a slice overwrites a line another requirement wrote** (the D3 signal). Pure functions over `(Artifact, SliceReport) → Artifact`. No I/O, no model, fully deterministic — the easiest thing here to test exhaustively and the most worth testing, since every mode's correctness funnels through it. |
-| **B1** | `feat/docmodel` | `packages/mff-docmodel/**` | `.docx → Artifact` (stable line ids incl. table cells), `apply_edits()` surgical line replace with **locked-region enforcement** (raises on a locked target), `attach_comments()` via `python-docx` `add_comment`, `Artifact → .docx`. No AI. Round-trip tests on fixture docs. |
+| **B14** | `feat/applier` | `packages/mff-applier/**` | Applies one validated `SliceReport`: reject ops outside the slice's `scope_ids`, apply `DraftOp`s to the draft, and **flag when an op overwrites content another requirement produced** (the D3 signal). Pure functions over `(Artifact, SliceReport) → Artifact`. No I/O, no model, fully deterministic — the easiest thing here to test exhaustively and the most worth it, since every mode's correctness funnels through it. |
+| **B1** | `feat/docmodel` | `packages/mff-docmodel/**` | `.docx → list[Node]` (stable ids incl. table cells), **compile** `FormDraft → .docx` and `DerivativeArtifact → .docx` both producing a `RenderMap`, `attach_comments()` via `python-docx` `add_comment` using that map. No AI, no mutation of a client document. Round-trip tests, plus the byte-identical-body assertion for derivative. |
 | **B2** | `feat/manifest` | `packages/mff-manifest/**` | Free text → `Requirement[]` (req 5): deterministic pre-split + one small Gemini extraction agent, stable ids, `source_span` provenance, `slices()` grouping strategy. Tested with `FunctionModel` — no live API in CI. |
 | **B3** | `feat/intake` | `services/email-service/src/**/{intake,replies}.py` | Req 6/7/8: MIME parse, attachment extraction, mode inference (derivative needs supplied forms — req 3), `IntakeVerdict` rules, and both reply templates — the valid one **quotes the `Requirement[]` returned in the 202** (req 7 *Recommended*) — it must never parse the manifest itself. |
 | **B4** | `feat/mail-transport` | `services/email-service/src/**/transport/**` | `MailTransport` Protocol + IMAP poller (IDLE/poll, seen-state, idempotency by Message-ID) + SMTP sender with threaded replies (`In-Reply-To`/`References`), **plus an in-memory fake** every other branch tests against. |
