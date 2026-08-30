@@ -1,9 +1,9 @@
 [project]
 name = "mff-applier"
 version = "0.1.0"
-description = "Empty skeleton (B0). Owned by a later branch: applying DraftOps and compiling a FormDraft or annotated Node tree into a real .docx (RenderMap, CompiledForm)."
+description = "Pure DraftOp/SliceReport applier (req 14, req 15): (Artifact, SliceReport) -> Artifact."
 requires-python = ">=3.11"
-dependencies = ["mff-contracts"]
+dependencies = ["mff-contracts", "pydantic>=2.7"]
 
 [build-system]
 requires = ["hatchling"]
