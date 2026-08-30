@@ -601,10 +601,26 @@ Be clear-eyed about the limit: an App Password grants the *whole* mailbox. Folde
 scoping constrains what we read, not what we could read. Acceptable for a demo against
 your own account; not something to carry into production against anyone else's.
 
-**2. A paid mailbox that does not ask for a phone.** Purelymail (~$10/year, IMAP with
-IDLE), Migadu, Mailbox.org, or a Fastmail trial. Cleanest separation — a real service
-account, no entanglement with anyone's personal mail, and app-password support. Worth it
-the moment this outlives the hackathon.
+**2. A mailbox provider that does not gate on a phone.** This is the route to take when
+reusing a personal account is not acceptable — which is the normal case, and the right
+instinct.
+
+| Provider | Cost | Domain | Notes |
+|---|---|---|---|
+| **Purelymail** | ~$10/yr, free trial credits | **provides one** | IMAP with `IDLE`, minimal and developer-shaped. Best first try. |
+| Mailbox.org | ~€1/mo | provides one | Privacy-focused, accepts anonymous payment |
+| Fastmail | 30-day trial | provides one | App passwords, very solid IMAP |
+| Migadu | ~$19/yr | **bring your own** | Only if a domain already exists |
+
+Purelymail is the one to try first: the trial costs nothing, it hands you an address so
+no domain is required, and `IDLE` support means the poller gets mail immediately instead
+of on a poll interval.
+
+Signup flows change and can trigger extra verification on risk signals, so treat "no
+phone" as likely rather than guaranteed. The cheap way to find out is to sign up and
+immediately run `scripts/verify_mailbox.py` — it authenticates over both protocols and
+tells you within seconds whether that provider works, before any service code depends on
+it.
 
 **3. Stay on GreenMail.** Everything except real delivery already works without any
 account at all, so this only blocks the final hop.
