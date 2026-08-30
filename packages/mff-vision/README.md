@@ -1,4 +1,4 @@
-# ffx-vision
+# mff-vision
 
 The seam between the AI editor and image understanding (req 13).
 
@@ -55,5 +55,5 @@ where it was taken from. Collapsing them loses R-04.
 
 ## Configuration
 
-`FFX_VISION_INVENTORY` overrides the inventory location. Otherwise the package
+`MFF_VISION_INVENTORY` overrides the inventory location. Otherwise the package
 walks up from its own file looking for `fixtures/fleet-vehicle-return/`.

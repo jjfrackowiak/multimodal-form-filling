@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends
-from ffx_vision import ImageAnalysis, ImageRef
+from mff_vision import ImageAnalysis, ImageRef
 from pydantic import BaseModel
 
 from vision_stub.api.deps import get_analysis_service

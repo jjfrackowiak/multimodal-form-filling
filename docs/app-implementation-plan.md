@@ -371,7 +371,7 @@ Four rules, the first two enforced by import-linter rather than review:
    containing a domain `if` is in the wrong file.
 3. **Dependencies arrive through `Depends`**, never module-level singletons — that is
    how a test injects the in-memory repository and the fake transport.
-4. **`ffx-contracts` models are the wire contract between services; `api/schemas.py` is
+4. **`mff-contracts` models are the wire contract between services; `api/schemas.py` is
    for HTTP concerns only.** Do not leak one into the other, or the frozen package stops
    being frozen in practice.
 
@@ -386,7 +386,7 @@ POST /v1/describe:batch  list[ImageRef]         → list[ImageAnalysis]
 POST /v1/crop            ImageRef + BoundingBox → ImageRef
 ```
 
-`packages/ffx-vision` holds the `VisionTool` Protocol, an `HttpVisionTool` client, and
+`packages/mff-vision` holds the `VisionTool` Protocol, an `HttpVisionTool` client, and
 `InventoryVisionTool` — a stand-in answering from the fixture's labelled inventory.
 `services/vision-stub` serves the same routes so the wiring is real rather than
 imagined. The editor depends on the Protocol only, so the real service is a
@@ -413,7 +413,7 @@ questions; merging them loses R-04 entirely.
 
 ### Two things to settle with the owner
 
-The shapes in `ffx_vision.models` were written from what the *editor* needs, not from
+The shapes in `mff_vision.models` were written from what the *editor* needs, not from
 what a CV pipeline naturally emits. They are a proposal, not a decision:
 
 1. **The payload shapes**, before anything is built against them on the other side.
@@ -436,7 +436,7 @@ so we can talk to Gemini. Use the slim package with only the extras we actually 
 # services/editor-service — the only service that talks to a model
 dependencies = [
   "pydantic-ai-slim[google,evals]",   # GoogleModel/GoogleProvider + pydantic-evals
-  "ffx-contracts", "ffx-docmodel", "ffx-vision",
+  "mff-contracts", "mff-docmodel", "mff-vision",
 ]
 ```
 
@@ -611,7 +611,7 @@ Req 12 says the artifact lives "outside any single agent run". In-process that's
 **Yes — a Firestore-backed store with async `save`/`load`. But it goes behind an interface, not into the flows.**
 
 ```python
-# ffx-contracts — frozen alongside the models
+# mff-contracts — frozen alongside the models
 class ArtifactRepository(Protocol):
     async def save(self, artifact: Artifact, *, expected_version: int) -> int: ...
     async def load(self, job_id: str) -> tuple[Artifact, int]: ...
@@ -656,9 +656,9 @@ This is also the seam the deferred image module (**B11**) picks up: it reads `Bl
 ```
 pyproject.toml
 packages/
-  ffx-contracts/
-  ffx-docmodel/
-  ffx-manifest/
+  mff-contracts/
+  mff-docmodel/
+  mff-manifest/
 services/
   email-service/
   editor-service/
@@ -669,15 +669,15 @@ docker/
 | Path | Purpose |
 |---|---|
 | `pyproject.toml` | uv workspace, ruff + pytest + mypy |
-| `packages/ffx-contracts` | **FROZEN** shared models — the seam that makes parallelism safe |
-| `packages/ffx-docmodel` | docx ⇄ line-addressable `Artifact`, regions, comment writer |
-| `packages/ffx-manifest` | free-text manifest → discrete `Requirement[]` |
+| `packages/mff-contracts` | **FROZEN** shared models — the seam that makes parallelism safe |
+| `packages/mff-docmodel` | docx ⇄ line-addressable `Artifact`, regions, comment writer |
+| `packages/mff-manifest` | free-text manifest → discrete `Requirement[]` |
 | `services/email-service` | Orchestrator + mail adapter: IMAP poller, SMTP sender |
 | `services/editor-service` | FastAPI worker: `POST /slices:run`, Pydantic AI agents (Gemini) |
 | `fixtures/fleet-vehicle-return` | the illustrative example, as golden test data |
 | `docker/` | one Dockerfile per service + compose for local dev |
 
-## The contract to freeze first (`ffx-contracts`)
+## The contract to freeze first (`mff-contracts`)
 
 Everything else is written against these. **No branch may edit this package** — a change request goes back through the layer-0 owner.
 
@@ -764,22 +764,22 @@ Directory ownership is **disjoint per branch** — that is what keeps 7 concurre
 
 ### Layer 0 — blocking, one PR, must merge before anything else
 
-**B0 · scaffold + contracts** — `pyproject.toml`, `packages/ffx-contracts/**`, `Makefile`, CI workflow (ruff + mypy + pytest), empty package/service skeletons so later branches only add files. Ships the frozen models above with full unit tests on the validators (`suggestion` required when `verdict=="fail"`, etc.).
+**B0 · scaffold + contracts** — `pyproject.toml`, `packages/mff-contracts/**`, `Makefile`, CI workflow (ruff + mypy + pytest), empty package/service skeletons so later branches only add files. Ships the frozen models above with full unit tests on the validators (`suggestion` required when `verdict=="fail"`, etc.).
 
 ### Layer 1 — 10 PRs in parallel, all branch from B0
 
 | ID | Branch | Owns | Deliverable |
 |----|--------|------|-------------|
-| **B14** | `feat/applier` | `packages/ffx-applier/**` | The serial applier: order proposals by **slice id, not arrival**; detect two slices targeting one `line_id`; reject any edit outside its slice's `editable_line_ids`; enforce locked regions. Pure functions over `SliceReport[]` → `Artifact`. No I/O, no model, fully deterministic — the easiest thing in the repo to test exhaustively, and the one most worth testing. |
-| **B1** | `feat/docmodel` | `packages/ffx-docmodel/**` | `.docx → Artifact` (stable line ids incl. table cells), `apply_edits()` surgical line replace with **locked-region enforcement** (raises on a locked target), `attach_comments()` via `python-docx` `add_comment`, `Artifact → .docx`. No AI. Round-trip tests on fixture docs. |
-| **B2** | `feat/manifest` | `packages/ffx-manifest/**` | Free text → `Requirement[]` (req 5): deterministic pre-split + one small Gemini extraction agent, stable ids, `source_span` provenance, `slices()` grouping strategy. Tested with `FunctionModel` — no live API in CI. |
+| **B14** | `feat/applier` | `packages/mff-applier/**` | The serial applier: order proposals by **slice id, not arrival**; detect two slices targeting one `line_id`; reject any edit outside its slice's `editable_line_ids`; enforce locked regions. Pure functions over `SliceReport[]` → `Artifact`. No I/O, no model, fully deterministic — the easiest thing in the repo to test exhaustively, and the one most worth testing. |
+| **B1** | `feat/docmodel` | `packages/mff-docmodel/**` | `.docx → Artifact` (stable line ids incl. table cells), `apply_edits()` surgical line replace with **locked-region enforcement** (raises on a locked target), `attach_comments()` via `python-docx` `add_comment`, `Artifact → .docx`. No AI. Round-trip tests on fixture docs. |
+| **B2** | `feat/manifest` | `packages/mff-manifest/**` | Free text → `Requirement[]` (req 5): deterministic pre-split + one small Gemini extraction agent, stable ids, `source_span` provenance, `slices()` grouping strategy. Tested with `FunctionModel` — no live API in CI. |
 | **B3** | `feat/intake` | `services/email-service/src/**/{intake,replies}.py` | Req 6/7/8: MIME parse, attachment extraction, mode inference (derivative needs supplied forms — req 3), `IntakeVerdict` rules, and both reply templates — the valid one **quotes the `Requirement[]` returned in the 202** (req 7 *Recommended*) — it must never parse the manifest itself. |
 | **B4** | `feat/mail-transport` | `services/email-service/src/**/transport/**` | `MailTransport` Protocol + IMAP poller (IDLE/poll, seen-state, idempotency by Message-ID) + SMTP sender with threaded replies (`In-Reply-To`/`References`), **plus an in-memory fake** every other branch tests against. |
 | **B5** | `feat/orchestrator` | `services/email-service/src/**/orchestrator/**` | Slice planning, **bounded-concurrency fan-out**, fan-in, the `SliceReport` validator (req 16), 3-attempt cap with the error fed back, then `unverified` (req 17). Owns the job lifecycle. Dispatches through a `SliceRunner` Protocol, so it is tested end-to-end with a fake runner and no editor service running at all. |
 | **B8** | `feat/llm-config` | `services/editor-service/src/**/llm/**`, `settings.py` | `GoogleModel` + `GoogleProvider` wiring, pinned model id in settings, `HttpRetryOptions`, per-slice `UsageLimits`, shared `RunUsage` accounting, structured logging. One `build_agent()` factory both flows call. |
 | **B10** | `feat/docker` | `docker/**`, `compose.yaml` | Multi-stage Dockerfile per service (non-root, uv-installed deps, healthcheck), compose bringing up both services + `mailpit` for a local mailbox. No GCP, no Terraform. |
 
-| **B12** | `feat/state-store` | `packages/ffx-store/**` | `ArtifactRepository` + `JobRepository`: the in-memory adapter every other branch tests against, and the Firestore + GCS adapter for GCP. Versioned writes, per-slice checkpointing, no credentials needed for the in-memory path. |
+| **B12** | `feat/state-store` | `packages/mff-store/**` | `ArtifactRepository` + `JobRepository`: the in-memory adapter every other branch tests against, and the Firestore + GCS adapter for GCP. Versioned writes, per-slice checkpointing, no credentials needed for the in-memory path. |
 
 | **B13** | `feat/delivery` | `services/email-service/src/**/delivery.py` | **Role 2.** The completion callback endpoint, the stale-job sweep, the results email (summary + unverified called out + failure detail), attach-or-link by size threshold, threading against the original message, and idempotency on `job_id`. Built against the frozen `JobResult` and the in-memory transport, so it needs neither the editor nor a mailbox to develop. |
 
@@ -789,7 +789,7 @@ Directory ownership is **disjoint per branch** — that is what keeps 7 concurre
 |----|--------|------|-------------|
 | **B6** | `feat/flow-derivative` | `services/editor-service/src/**/flows/derivative.py`, `agents/derivative/**` | The `CLASSIFY_REGIONS` first run (locked vs editable + rationale, per the locked decision) and the per-slice validation agent: reads the artifact, emits **one comment per requirement per form** with pass/fail + justification + suggestion (req 10). Refuses edits into locked regions. |
 | **B7** | `feat/flow-netnew` | `services/editor-service/src/**/flows/netnew.py`, `agents/netnew/**` | **The scaffold generator** (`Requirement[]` + client inputs → a document skeleton, declaring its own locked/editable regions as it emits) plus the authoring runner. Comments show **how each requirement was realised**, with justification + source reference (req 10). |
-| **B11** | *(landed)* | `packages/ffx-vision/**`, `services/vision-stub/**` | **Done.** The `VisionTool` Protocol, an HTTP client, a deterministic stand-in answering from the fixture inventory, and a placeholder FastAPI service behind the same routes the real one will serve. 13 tests including a client↔service round trip. Editor branches can call image understanding today. |
+| **B11** | *(landed)* | `packages/mff-vision/**`, `services/vision-stub/**` | **Done.** The `VisionTool` Protocol, an HTTP client, a deterministic stand-in answering from the fixture inventory, and a placeholder FastAPI service behind the same routes the real one will serve. 13 tests including a client↔service round trip. Editor branches can call image understanding today. |
 
 ### Layer 3 — after Layer 2
 
@@ -853,7 +853,7 @@ Note the asymmetry in **L2**: a region wrongly marked *editable* means we overwr
 ### What a branch's eval dir looks like
 
 ```
-packages/ffx-manifest/evals/
+packages/mff-manifest/evals/
   cases.yaml          the dataset — inputs + expected, reviewable in a PR diff
   structure.yaml      the structural spec this stage's output must satisfy
   evaluators.py       custom Evaluator subclasses; assert the spec, never judge
@@ -871,8 +871,8 @@ Seven agents writing in parallel is exactly how a codebase turns to mud. The def
 
 - **ruff** lint + format, one shared config, zero per-package overrides.
 - **mypy `--strict`** across the workspace. A `# type: ignore` needs a specific error code and a comment saying why.
-- **import-linter** contracts pinning the dependency direction: `services → packages → ffx-contracts`, never sideways, never upward. This is the single most valuable gate here — it's what stops B6 from reaching into B4's internals at 2am.
-- **`ffx-contracts` has no third-party dependency but `pydantic`.** It's the seam; it stays boring.
+- **import-linter** contracts pinning the dependency direction: `services → packages → mff-contracts`, never sideways, never upward. This is the single most valuable gate here — it's what stops B6 from reaching into B4's internals at 2am.
+- **`mff-contracts` has no third-party dependency but `pydantic`.** It's the seam; it stays boring.
 - **Per-package coverage ≥ 85%**, measured per package, not globally — a global number lets one well-tested package hide four untested ones.
 - **No model call outside `llm/` and `agents/`.** Enforced by import-linter.
 
@@ -889,7 +889,7 @@ Seven agents writing in parallel is exactly how a codebase turns to mud. The def
 Each Sonnet agent gets a brief containing, verbatim:
 
 1. **Requirement ids from the PDF it must satisfy** (e.g. B1 → reqs 14, 15; B5 → reqs 11, 12, 16, 17).
-2. **The exact directories it owns** and the instruction that touching anything else — especially `ffx-contracts` — is out of bounds; raise it in the PR description instead.
+2. **The exact directories it owns** and the instruction that touching anything else — especially `mff-contracts` — is out of bounds; raise it in the PR description instead.
 3. **The frozen contract signatures** it consumes and produces.
 4. **Test requirements**: unit tests in its own package; no live Gemini calls in CI (`TestModel`/`FunctionModel` only); `make check` green.
 5. **Eval requirements**: the `evals/` dir for its stage, the invariant assertions at 1.0, and the **recorded baseline** (score, p95 latency, tokens, model id, date) pasted into the PR description. A branch that cannot state its numbers is not done.
@@ -898,7 +898,7 @@ Each Sonnet agent gets a brief containing, verbatim:
 ## Verification
 
 - `make check` — ruff, mypy, pytest across the workspace; no network.
-- `packages/ffx-docmodel`: round-trip a fixture docx, assert line ids stable, assert a locked-region edit raises, open the output in Word and confirm comments land in the review pane.
+- `packages/mff-docmodel`: round-trip a fixture docx, assert line ids stable, assert a locked-region edit raises, open the output in Word and confirm comments land in the review pane.
 - `services/editor-service`: `TestModel`-driven machine tests — force a validator failure three times and assert the requirement comes back `unverified` rather than raising.
 - `services/editor-service`: one **live** Gemini smoke test behind an env flag, run manually, not in CI.
 - End-to-end (B9): `docker compose up`, drop the fleet-vehicle-return email into mailpit, assert (a) confirmation reply contains the parsed requirement list, (b) the returned .docx has one comment per requirement, (c) net-new mode produces a document from client inputs alone.

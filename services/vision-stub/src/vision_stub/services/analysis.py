@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from ffx_vision import BoundingBox, ImageAnalysis, ImageRef, InventoryVisionTool
+from mff_vision import BoundingBox, ImageAnalysis, ImageRef, InventoryVisionTool
 
 __all__ = ["AnalysisService"]
 

@@ -602,7 +602,7 @@ Podsufitka trzeba spomiędzy forteli zrobić</pre>
         <span class="tag">The load-bearing rule</span>
         <p><code>services/</code> must not import <code>fastapi</code> — enforced by import-linter, not review. That is what lets the state machine be driven from a test, the eval harness or a CLI with no HTTP anywhere, and it is why the entire Tier-A suite runs without starting a server.</p>
       </div>
-      <p>Three more: <strong>routers hold no business logic</strong> (a router containing a domain <code>if</code> is in the wrong file); <strong>dependencies arrive through <code>Depends</code></strong>, never module-level singletons, so tests can inject the in-memory repository and the fake transport; and <strong><code>ffx-contracts</code> is the wire contract while <code>api/schemas.py</code> is HTTP-only</strong> — leak one into the other and the frozen package stops being frozen in practice.</p>
+      <p>Three more: <strong>routers hold no business logic</strong> (a router containing a domain <code>if</code> is in the wrong file); <strong>dependencies arrive through <code>Depends</code></strong>, never module-level singletons, so tests can inject the in-memory repository and the fake transport; and <strong><code>mff-contracts</code> is the wire contract while <code>api/schemas.py</code> is HTTP-only</strong> — leak one into the other and the frozen package stops being frozen in practice.</p>
     </section>
 
     <section id="state">
@@ -610,7 +610,7 @@ Podsufitka trzeba spomiędzy forteli zrobić</pre>
       <div class="h2-rule"></div>
       <p>Req 12 says the artifact lives "outside any single agent run". In-process that is a Python object — but across an HTTP boundary, a retry, a crash, or a second replica, an in-process object is simply gone. It needs a store, and that store is also what finally gives <strong>D2</strong> — job status after confirmation — something to report.</p>
       <p><strong>So yes: a Firestore-backed store with async save and load. But it goes behind an interface, not into the flows.</strong></p>
-      <pre class="code"><span class="c"># ffx-contracts — frozen alongside the models</span>
+      <pre class="code"><span class="c"># mff-contracts — frozen alongside the models</span>
 <span class="k">class</span> ArtifactRepository(Protocol):
     <span class="k">async def</span> save(self, artifact: Artifact, *, expected_version: int) -&gt; int: ...
     <span class="k">async def</span> load(self, job_id: str) -&gt; tuple[Artifact, int]: ...
@@ -652,7 +652,7 @@ Podsufitka trzeba spomiędzy forteli zrobić</pre>
     <section id="contract">
       <h2>The frozen contract</h2>
       <div class="h2-rule"></div>
-      <p>Everything else is written against <code>ffx-contracts</code>. <strong>No branch may edit it</strong> — a change request goes back through the layer-0 owner. This single rule is what makes seven simultaneous PRs safe.</p>
+      <p>Everything else is written against <code>mff-contracts</code>. <strong>No branch may edit it</strong> — a change request goes back through the layer-0 owner. This single rule is what makes seven simultaneous PRs safe.</p>
       <pre class="code"><span class="k">class</span> Requirement(BaseModel):
     id: str                 <span class="c"># "R-03"</span>
     text: str               <span class="c"># one checkable statement (req 5)</span>
@@ -708,9 +708,9 @@ Podsufitka trzeba spomiędzy forteli zrobić</pre>
         <table>
           <thead><tr><th>Path</th><th>Purpose</th></tr></thead>
           <tbody>
-            <tr><td><code>packages/ffx-contracts</code></td><td><strong>Frozen</strong> shared models; no dependency but pydantic</td></tr>
-            <tr><td><code>packages/ffx-docmodel</code></td><td>docx ⇄ line-addressable <code>Artifact</code>, regions, comment writer</td></tr>
-            <tr><td><code>packages/ffx-manifest</code></td><td>free text → discrete <code>Requirement[]</code></td></tr>
+            <tr><td><code>packages/mff-contracts</code></td><td><strong>Frozen</strong> shared models; no dependency but pydantic</td></tr>
+            <tr><td><code>packages/mff-docmodel</code></td><td>docx ⇄ line-addressable <code>Artifact</code>, regions, comment writer</td></tr>
+            <tr><td><code>packages/mff-manifest</code></td><td>free text → discrete <code>Requirement[]</code></td></tr>
             <tr><td><code>services/email-service</code></td><td>FastAPI + IMAP poller + SMTP sender</td></tr>
             <tr><td><code>services/editor-service</code></td><td>FastAPI + state machine + agents</td></tr>
             <tr><td><code>fixtures/fleet-vehicle-return</code></td><td>the illustrative example, as golden data</td></tr>
@@ -747,17 +747,17 @@ Podsufitka trzeba spomiędzy forteli zrobić</pre>
         <div class="cards">
           <div class="card">
             <div class="card-top"><span class="card-id">B14</span><span class="card-br">feat/applier</span></div>
-            <div class="owns">packages/ffx-applier</div>
+            <div class="owns">packages/mff-applier</div>
             <p>The serial applier: order by <strong>slice id, not arrival</strong>; detect two slices targeting one line; reject edits outside scope; enforce locked regions. Pure functions, no I/O, no model — the easiest thing here to test exhaustively and the most worth it.</p>
           </div>
           <div class="card">
             <div class="card-top"><span class="card-id">B1</span><span class="card-br">feat/docmodel</span></div>
-            <div class="owns">packages/ffx-docmodel</div>
+            <div class="owns">packages/mff-docmodel</div>
             <p>docx → <code>Artifact</code> with stable line ids including table cells; surgical <code>apply_edits</code> that <strong>refuses a locked target</strong>; comment attachment; render back. No AI.</p>
           </div>
           <div class="card">
             <div class="card-top"><span class="card-id">B2</span><span class="card-br">feat/manifest</span></div>
-            <div class="owns">packages/ffx-manifest</div>
+            <div class="owns">packages/mff-manifest</div>
             <p>Free text → <code>Requirement[]</code> (req 5). Deterministic pre-split plus a small extraction agent, stable ids, <code>source_span</code> provenance, slice grouping.</p>
           </div>
           <div class="card">
@@ -782,7 +782,7 @@ Podsufitka trzeba spomiędzy forteli zrobić</pre>
           </div>
           <div class="card">
             <div class="card-top"><span class="card-id">B12</span><span class="card-br">feat/state-store</span></div>
-            <div class="owns">packages/ffx-store</div>
+            <div class="owns">packages/mff-store</div>
             <p><code>ArtifactRepository</code> and <code>JobRepository</code>: the in-memory adapter every other branch tests against, and the Firestore + GCS adapter for GCP. Versioned writes, per-slice checkpointing, no credentials on the in-memory path.</p>
           </div>
           <div class="card">
@@ -885,7 +885,7 @@ Podsufitka trzeba spomiędzy forteli zrobić</pre>
       <p>Note the asymmetry in <strong>L2</strong>: a region wrongly marked <em>editable</em> means we overwrite the client's own content — far worse than one wrongly marked <em>locked</em>, where we merely decline to help. The eval weights those two errors differently on purpose.</p>
 
       <h3>What a branch's eval directory looks like</h3>
-      <pre class="code">packages/ffx-manifest/evals/
+      <pre class="code">packages/mff-manifest/evals/
   cases.yaml       <span class="c"># the dataset — reviewable in a PR diff</span>
   structure.yaml   <span class="c"># the spec this stage's output must satisfy</span>
   evaluators.py    <span class="c"># assert the spec, never judge</span>
@@ -926,7 +926,7 @@ Podsufitka trzeba spomiędzy forteli zrobić</pre>
       <p>Each Sonnet agent receives, verbatim:</p>
       <ul>
         <li>The <strong>requirement ids from the PDF</strong> it must satisfy — B1 owns reqs 14 and 15; B5 owns 11, 12, 16, 17.</li>
-        <li>The <strong>exact directories it owns</strong>, and that touching anything else — <code>ffx-contracts</code> above all — is out of bounds. Raise it in the PR description instead.</li>
+        <li>The <strong>exact directories it owns</strong>, and that touching anything else — <code>mff-contracts</code> above all — is out of bounds. Raise it in the PR description instead.</li>
         <li>The <strong>frozen contract signatures</strong> it consumes and produces.</li>
         <li><strong>Test requirements</strong>: unit tests in its own package, no live model calls in CI, <code>make check</code> green.</li>
         <li><strong>Eval requirements</strong>: the <code>evals/</code> directory for its stage, invariants asserted at 1.0, and the recorded baseline pasted into the PR description. <em>A branch that cannot state its numbers is not done.</em></li>

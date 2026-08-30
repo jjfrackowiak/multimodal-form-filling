@@ -31,7 +31,7 @@ in the editor changes — it depends on the `VisionTool` Protocol, not on this.
 
 Two things to agree with the owner before that happens:
 
-1. **The payload shapes**, which are defined in `ffx_vision.models`. They were
+1. **The payload shapes**, which are defined in `mff_vision.models`. They were
    written from the editor's needs, not from what a CV pipeline naturally emits,
    so they are a proposal rather than a decision.
 2. **Whether `shot_from` is a closed vocabulary.** The fixture uses

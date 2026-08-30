@@ -8,17 +8,17 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
-COPY packages/ffx-vision /app/packages/ffx-vision
+COPY packages/mff-vision /app/packages/mff-vision
 COPY services/vision-stub /app/services/vision-stub
 
-RUN pip install --no-cache-dir ./packages/ffx-vision ./services/vision-stub \
+RUN pip install --no-cache-dir ./packages/mff-vision ./services/vision-stub \
  && useradd --create-home --uid 10001 app
 
 # The mock answers from the fixture, so the fixture has to be in the image.
 # The real service will not need this line — it is the clearest single marker
 # of what makes this a placeholder.
 COPY fixtures/fleet-vehicle-return/inventory.yaml /app/fixtures/fleet-vehicle-return/inventory.yaml
-ENV FFX_VISION_INVENTORY=/app/fixtures/fleet-vehicle-return/inventory.yaml
+ENV MFF_VISION_INVENTORY=/app/fixtures/fleet-vehicle-return/inventory.yaml
 
 USER app
 EXPOSE 8000

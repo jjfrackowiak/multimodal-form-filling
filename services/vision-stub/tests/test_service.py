@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import httpx
 import pytest
-from ffx_vision import BoundingBox, HttpVisionTool, ImageRef, VisionUnavailable
+from mff_vision import BoundingBox, HttpVisionTool, ImageRef, VisionUnavailable
 
 from vision_stub.main import create_app
 

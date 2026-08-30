@@ -27,7 +27,7 @@ from .models import UNKNOWN, BoundingBox, ImageAnalysis, ImageRef
 
 __all__ = ["InventoryVisionTool", "default_inventory"]
 
-ENV_VAR = "FFX_VISION_INVENTORY"
+ENV_VAR = "MFF_VISION_INVENTORY"
 _RELATIVE = Path("fixtures") / "fleet-vehicle-return" / "inventory.yaml"
 
 

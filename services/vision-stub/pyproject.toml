@@ -3,7 +3,7 @@ name = "vision-stub"
 version = "0.1.0"
 description = "Placeholder vision service. Answers from the golden inventory; processes no images."
 requires-python = ">=3.11"
-dependencies = ["fastapi>=0.115", "uvicorn>=0.30", "ffx-vision"]
+dependencies = ["fastapi>=0.115", "uvicorn>=0.30", "mff-vision"]
 
 [build-system]
 requires = ["hatchling"]

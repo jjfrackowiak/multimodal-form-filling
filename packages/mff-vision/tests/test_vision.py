@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from ffx_vision import UNKNOWN, BoundingBox, ImageAnalysis, ImageRef, InventoryVisionTool
+from mff_vision import UNKNOWN, BoundingBox, ImageAnalysis, ImageRef, InventoryVisionTool
 
 CORRECT_HEADLINER = "1000040420.jpg"
 WRONG_HEADLINER = "IMG_20260830_132755 (5).jpg"
@@ -16,7 +16,7 @@ def tool() -> InventoryVisionTool:
 
 
 async def test_satisfies_the_protocol(tool: InventoryVisionTool) -> None:
-    from ffx_vision import VisionTool
+    from mff_vision import VisionTool
 
     assert isinstance(tool, VisionTool)
 
