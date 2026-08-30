@@ -1,8 +1,15 @@
-# All Things Agentic
+# Multimodal Form Filling
 
-Hackathon workspace. First track: **Email Form Validation App**.
+Email-driven form validation / composition. Spec: [`multimodal-form-filling/email-form-validation-requirements.pdf`](multimodal-form-filling/email-form-validation-requirements.pdf) (30 August 2026).
 
-Source spec: [`multimodal-form-filling/email-form-validation-requirements.pdf`](multimodal-form-filling/email-form-validation-requirements.pdf) (drafted 30 August 2026).
+## Ownership
+
+| Area | Owner | Spec |
+|------|--------|------|
+| Email service (intake, confirmation / rejection replies, handoff) | Janek | Part 1 |
+| AI editor (scoped agent runs, document state, line edits, Pydantic retry) | Janek | Part 2 |
+| Image / CV tools (processing, understanding, cropping) | Michal | req. 13 |
+| GCP deployment | Michal | — |
 
 ## What it is
 
