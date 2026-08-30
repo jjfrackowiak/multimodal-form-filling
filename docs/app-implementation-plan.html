@@ -536,85 +536,46 @@ different in cost. A fixed maximum makes that impossible by construction instead
 requiring a rule to police it.</p>
 <p>The fleet fixture's ten requirements therefore give exactly two slices: R-01…R-06 and
 R-07…R-10.</p>
-<h3 id="two-validators-two-levels">Two validators, two levels</h3>
-<p>The system validates twice, at different levels, for different reasons. Collapsing them
-into one is the most likely implementation error here, and it fails in both directions:
-one validator cheap enough to run in-process cannot see whether a requirement was
-answered, and one that can costs a whole model run to reject a missing field.</p>
-<table>
-<thead>
-<tr>
-<th></th>
-<th><strong>Level 1 — inside the run</strong></th>
-<th><strong>Level 2 — orchestrator</strong></th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>Mechanism</td>
-<td><code>@agent.output_validator</code> raising <code>ModelRetry</code></td>
-<td>per-requirement check on the <code>SliceReport</code></td>
-</tr>
-<tr>
-<td>Owned by</td>
-<td><code>editor-service</code></td>
-<td><code>email-service</code></td>
-</tr>
-<tr>
-<td>Sees</td>
-<td>one output object</td>
-<td>the whole report against the requirement set</td>
-</tr>
-<tr>
-<td>Catches</td>
-<td>malformed shape: missing field, wrong type, <code>suggestion</code> absent on a <code>fail</code></td>
-<td>requirement unanswered, empty justification, anchor that does not resolve, a comment for an id not in <code>pending</code></td>
-</tr>
-<tr>
-<td>Costs</td>
-<td>cheap — same run, context already loaded</td>
-<td>expensive — <strong>a whole new agent run</strong></td>
-</tr>
-<tr>
-<td>Retries</td>
-<td>pydantic-ai's own, within the run</td>
-<td>our outer loop, capped at 3 attempts</td>
-</tr>
-<tr>
-<td>On exhaustion</td>
-<td>raises <code>UnexpectedModelBehavior</code></td>
-<td>marks the requirement <code>unverified</code> — req 17's durable terminal</td>
-</tr>
-<tr>
-<td>Touches shared state</td>
-<td><strong>never</strong></td>
-<td><strong>this is the gate</strong></td>
-</tr>
-</tbody>
-</table>
-<p>Neither can do the other's job. Level 1 only ever sees a single output object, so it cannot
-know whether R-07 was answered — it has no requirement set to compare against. Level 2
-should not be spent on <em>"you forgot a field"</em>, which the model can fix immediately with the
-error in front of it and without re-reading the artifact.</p>
-<p><strong>What is persisted, and when.</strong> The agent mutates a <strong>session-scoped</strong> artifact through
-its tools, freely and at any point, with no gate — req 12 taken literally. Level 1 may
-bounce its output shape without that artifact ever being written anywhere. Only when
-level 2 passes does anything reach the <strong>shared</strong> artifact:</p>
-<pre><code>session artifact    ← tools mutate freely; level 1 may bounce the output shape
-      │
-      ▼ run ends
- SliceReport        ← level 2 validates, per requirement
-      │
-      ├─ all pass → COMMIT: ops + cursor to shared state, ONE transaction
-      └─ any fail → NOTHING persisted. Session object discarded.
-                    Retry reloads the SAME committed snapshot, carries history,
-                    and `pending` narrows to what is still unresolved.
+<h3 id="where-validation-happens">Where validation happens</h3>
+<p>Two checks, at two levels, asking genuinely different questions. Neither duplicates the
+other's rules.</p>
+<p><strong>Completeness — inside the run, in the editor service.</strong> Every requirement in the slice
+answered, every answer justified, every reference resolving. This runs <strong>while the comments
+are still Python objects</strong>, which is the whole reason it belongs here: completeness is a
+dict lookup on a <code>list[ReviewComment]</code> and archaeology once the same information is OOXML
+comment parts.</p>
+<p>It is deterministic Python — a pydantic validator, not the model grading itself. On
+failure it raises <code>ModelRetry</code>, and the agent tries again with its own previous output and
+the error in front of it. After three attempts the stragglers are marked <code>unverified</code>
+(req 17) and the run returns normally.</p>
+<p><strong>Renderability — at the top layer, in the orchestrator, during compile.</strong> Can this
+artifact actually become a Word document? Does every comment anchor map to a real run?
+That is a different question entirely, and it can only be answered where the rendering
+happens.</p>
+<h3 id="the-retry-loop-lives-inside-the-run">The retry loop lives inside the run</h3>
+<p>That placement is what makes the slice contract small. The editor owns the whole loop and
+returns a report that is <strong>always well-formed</strong> — complete, or complete-with-<code>unverified</code>:</p>
+<pre><code>orchestrator ──SliceRequest──▶ editor
+                                 ├ run agent
+                                 ├ validate the comments   (Python objects)
+                                 ├ retry in-process, history never serialised
+                                 └ 3 attempts up → mark unverified
+             ◀──SliceReport, always valid──
+             persist, next slice
 </code></pre>
-<p><strong>On "shared".</strong> Because slices run sequentially, the shared artifact is never
-<em>concurrently</em> accessed — it is passed <strong>between</strong> slices in sequence, slice N+1 reading
-what slice N committed. There is no locking and no contention inside a job.
-<code>expected_version</code> on <code>save</code> exists to catch a <strong>duplicate runner</strong> — the same job picked
-up twice after a crash — not to arbitrate normal operation.</p>
+<p>The alternative — the orchestrator driving retries — means three HTTP round trips per
+stubborn slice, <strong>the artifact re-sent with every one</strong> (nodes or draft, the largest
+payload in the system), and retry state on the wire. Three fields exist only to carry it:
+<code>pending</code> to narrow the ask, <code>history</code> to preserve context, <code>validator_error</code> to explain
+the failure.</p>
+<p><code>history</code> is the telling one. It had to be <code>list[dict[str, Any]]</code> purely to keep
+<code>pydantic-ai</code> out of the frozen package. Move the loop in-run and that problem does not
+need solving: <code>ModelRetry</code> handles it natively, inside the one service that already
+depends on pydantic-ai.</p>
+<p>The orchestrator keeps sequencing, persistence, and the end-of-job checks — completeness
+across all slices, then compile. What it loses is visibility into intermediate attempts,
+so <code>SliceReport.attempts_used</code> carries that back for telemetry: a prompt that routinely
+needs three tries should be visible without reading logs.</p>
 <h3 id="the-two-modes-are-two-agents">The two modes are two agents</h3>
 <p>They are not doing the same kind of work, and forcing them through one editing model is
 what produced the contract's worst bugs.</p>
@@ -663,8 +624,9 @@ no single run knows what the others answered.</p>
  3  run ends       SliceReport = the op log + the comments produced
  4  validate       per requirement: answered, justified, anchor resolves
  5a all pass       ops applied + cursor advanced, as ONE transaction
- 5b any fail       NOTHING persisted. Session object discarded. Retry reloads the
-                   SAME snapshot, carries history, and `pending` narrows.
+ 5b any fail       Nothing persisted, nothing leaves the run. The agent retries
+                   in-process against the SAME session object, carrying its own
+                   previous output and the validator error.
 </code></pre>
 <p>Req 12 is satisfied literally — the agent mutates a live Python object at any point,
 including between tool calls, and an agent that writes, reverts and rewrites costs only
@@ -1108,62 +1070,33 @@ optional.</p>
 <p>A dedicated provider (Fastmail, Zoho, Migadu) avoids both quirks and is worth it if this
 outlives the hackathon.</p>
 <h2 id="retry-keeps-state-and-never-revisits-a-settled-answer">Retry keeps state, and never revisits a settled answer</h2>
-<p>The three-attempt cap (req 17) had a flaw worth naming plainly: re-running a whole slice
-because one of its five requirements failed validation re-asks the model about the four
-that succeeded. The model is not deterministic, so <strong>an answer that passed on attempt 1
-could come back different on attempt 2</strong> — retry that can make the output worse.</p>
-<p>That is not merely a quality problem. <code>structure.yaml</code> asserts the verdict set matches
-the golden set <em>exactly</em>. A retry path that can move verdicts makes E1 flaky by
-construction, and the whole deterministic-scorer design rests on it not being.</p>
-<p>Two rules together fix it. Neither is sufficient alone.</p>
-<h3 id="1-the-retry-is-a-continuation-not-a-restart">1. The retry is a continuation, not a restart</h3>
-<p>The failed attempt's <code>message_history</code> is passed back in, with the validator's error as
-the new turn. This is Pydantic AI's documented pattern — the agent sees its own previous
-output and what was wrong with it, rather than starting cold and re-deriving everything
-from scratch.</p>
-<p>This is the quality half: an agent that can see its last answer overwhelmingly keeps the
-parts that were fine and fixes the part that was not.</p>
-<h3 id="2-a-settled-answer-is-never-up-for-revision">2. A settled answer is never up for revision</h3>
-<p>Validation runs <strong>per requirement</strong>, not per slice. Every requirement whose answer passes
-is <em>accepted and frozen</em>. The next attempt's <code>pending</code> list contains only the ids still
-outstanding, and any comment the agent returns for an already-accepted id is discarded.</p>
-<p>This is the correctness half, and it is what makes the guarantee structural:</p>
+<p>Re-running a slice because one of its requirements failed validation re-asks the model
+about the ones that succeeded. The model is not deterministic, so <strong>an answer that passed
+on attempt 1 can come back different on attempt 2</strong> — retry that makes the output worse,
+and which would make E1 flaky by construction since the fixture asserts an exact verdict
+set.</p>
+<p>All of this happens <strong>inside the editor's run</strong>, so none of it appears in the slice
+contract. Two rules together fix it:</p>
+<p><strong>1. The retry is a continuation.</strong> The agent's own <code>message_history</code> carries forward with
+the validator's error as the new turn — pydantic-ai's documented pattern, and native here
+because the loop never leaves the process. The agent sees its previous output and what was
+wrong with it rather than starting cold.</p>
+<p><strong>2. A settled answer is never revisited.</strong> Validation runs per requirement. Anything that
+passes is accepted and frozen; the next attempt is asked only about what is still
+outstanding, and an answer returned for an already-settled requirement is discarded.</p>
 <blockquote>
-<p>a requirement's verdict is decided once and cannot change, no matter how many
-attempts the slice needs</p>
+<p>A requirement's verdict is decided once and cannot change, however many attempts the
+slice needs.</p>
 </blockquote>
-<p>Retry becomes monotonic by construction rather than by hoping the model is consistent.
-The verdict set is stable, so the fixture's exact-match assertion is sound.</p>
-<p>Three useful consequences fall out:</p>
-<ul>
-<li><strong>Each attempt is cheaper than the last.</strong> The ask narrows to what is unresolved, so
-  attempt 3 is typically one requirement rather than five.</li>
-<li><strong><code>unverified</code> becomes precise.</strong> After three attempts only the still-pending ids are
-  marked unverified. The four that succeeded on attempt 1 are returned as normal answers
-  — where the old design risked marking a whole slice unverified because one requirement
-  in it was stubborn.</li>
-<li><strong>The retry is auditable.</strong> <code>attempt</code> on each comment records how many tries its
-  requirement took, which is exactly the signal for finding prompts that need work.</li>
-</ul>
-<h3 id="bounding-the-history">Bounding the history</h3>
-<p>Slice history grows, and the artifact snapshot is large. The budget is enforced rather
-than hoped for:</p>
-<ul>
-<li><strong>Every attempt of a given slice sees the identical artifact snapshot.</strong> An invariant,
-  not an optimisation: if the artifact could shift between attempts, a retry would produce
-  different edits for reasons unrelated to the validator error, reopening the
-  non-determinism the two rules above just closed. The snapshot is taken once when the
-  slice starts and held for all three attempts.</li>
-</ul>
-<p>Note the scope carefully. The artifact <strong>does</strong> advance <em>between</em> slices — that is the
-  entire point of running them in order. It is frozen only <em>within</em> one slice's retries.
-- It therefore travels <strong>by reference, never re-serialised into the transcript.</strong>
-  Replaying an unchanged document through the history is pure waste.
-- History is capped at the system prompt plus the last two exchanges. Older tool
-  exchanges are dropped first; the system prompt and the most recent validator error are
-  never dropped, because those are the two things the next attempt actually needs.
-- Because <code>pending</code> narrows each attempt, history usually shrinks on its own before the
-  cap does anything.</p>
+<p>Structural rather than hoped for, so the fixture's exact-match assertion is sound. Two
+consequences: each attempt is cheaper as the ask narrows, and <strong><code>unverified</code> becomes
+precise</strong> — only the stubborn requirement is marked, rather than a whole slice being
+condemned because one of six would not settle.</p>
+<p><strong>Every attempt sees the identical artifact snapshot.</strong> An invariant, not an optimisation:
+a shifting artifact would produce different edits for reasons unrelated to the validator
+error. Note the scope — the artifact <em>does</em> advance between slices, which is the entire
+point of running them in order. It is frozen only within one slice's retries, which is
+trivially true now that those retries never leave the run.</p>
 <h2 id="state-persistence">State &amp; persistence</h2>
 <p>Req 12 says the artifact lives "outside any single agent run". In-process that's a Python object — but across an HTTP boundary, a retry, a crash, or a second replica, an in-process object is gone. It needs a store, and that store is also what finally gives <strong>D2</strong> (job status after confirmation) something to report.</p>
 <p><strong>Yes — a Firestore-backed store with async <code>save</code>/<code>load</code>. But it goes behind an interface, not into the flows.</strong></p>
@@ -1385,18 +1318,15 @@ an in-flight job loaded after a shape change must fail loudly rather than parse 
 class SliceRequest(BaseModel):
     job_id: str; slice_id: str; mode: Mode
     requirements: list[Requirement]
-    pending: list[str]              # narrows on retry — settled answers are not reopened
     artifact: Artifact              # CURRENT: includes prior slices' committed work
     scope_ids: list[str]            # node ids (derivative) or section ids (net-new)
-    history: list[dict[str, Any]]   # OPAQUE — keeps pydantic-ai out of this package
-    validator_error: str | None
 
 class SliceReport(BaseModel):
-    slice_id: str; attempt: int
-    comments: list[ReviewComment]   # only for ids in `pending`
+    slice_id: str
+    comments: list[ReviewComment]   # one per requirement in the slice — always complete
     ops: list[DraftOp]              # net-new only; empty for derivative
-    unanswered: list[str]
-    history: list[dict[str, Any]]
+    unverified: list[str]           # exhausted their three attempts (req 17)
+    attempts_used: int              # telemetry: a slice routinely needing 3 is a signal
 </code></pre>
 <p><code>Manifest.slices()</code> is plain chunking: sort by <code>ordinal</code>, take six at a time. There is no
 minimum — the last chunk is whatever remains, including a chunk of one. <code>Requirement</code> has
@@ -1554,7 +1484,7 @@ class BlobStore(Protocol):
 </tr>
 <tr>
 <td>17</td>
-<td><code>verdict="unverified"</code>, <code>RequestResult.unverified</code>, <code>pending</code> narrowing</td>
+<td><code>verdict="unverified"</code>, <code>SliceReport.unverified</code>, <code>RequestResult.unverified</code></td>
 </tr>
 </tbody>
 </table>
@@ -1607,7 +1537,7 @@ class BlobStore(Protocol):
 <td><strong>B5</strong></td>
 <td><code>feat/orchestrator</code></td>
 <td><code>services/email-service/src/**/{orchestrator,runner}/**</code></td>
-<td>Slice planning <strong>including order, which is now semantic</strong>, the background runner walking forms and slices sequentially, <strong>per-requirement</strong> validation (req 16), accepted answers frozen, 3-attempt cap with history and error fed back, then <code>unverified</code> for whatever is still pending (req 17). Owns the job lifecycle. Dispatches through a <code>SliceRunner</code> Protocol, so it is tested end-to-end with a fake runner and no editor service running at all.</td>
+<td>Slice planning (plain chunking, six at a time), the background runner walking forms and slices sequentially, persistence with the cursor written atomically, the end-of-job completeness check across all slices, and the delivery barrier. <strong>Retry and per-requirement validation are NOT here</strong> — the editor owns those and returns an always-valid report. Dispatches through a <code>SliceRunner</code> Protocol, so it tests end-to-end with a fake runner and no editor service running.</td>
 </tr>
 <tr>
 <td><strong>B8</strong></td>
@@ -1660,7 +1590,7 @@ class BlobStore(Protocol):
 <p><strong>B9 · fleet-vehicle-return example + e2e</strong> — <code>fixtures/fleet-vehicle-return/**</code> (manifest free-text, a supplied Word form for derivative, client inputs for net-new, golden expected comments) and an end-to-end test that drives a real email through the fake transport into both modes. This is the demo.</p>
 <h2 id="evals-latency-budgets">Evals &amp; latency budgets</h2>
 <p><strong>Every branch ships an eval suite. A PR without one does not merge.</strong> "It works" is not a claim any subagent gets to make on its own recognisance — each stage must produce a number.</p>
-<p>We use <strong><code>pydantic-evals</code></strong> (ships with Pydantic AI, same ecosystem): <code>Case</code> / <code>Dataset</code> / <code>Evaluator</code>, the built-in <code>IsInstance</code> and <code>Contains</code>, and — directly answering the latency requirement — <strong><code>MaxDuration(seconds=...)</code></strong> as a first-class assertion. <strong><code>LLMJudge</code> is available in that library and is banned here</strong>; a branch importing it fails review. <code>EvaluatorContext</code> exposes <code>ctx.duration</code>, <code>ctx.metrics</code> and <code>ctx.span_tree</code>, so correctness, latency and token cost come out of one run.</p>
+<p>We use <strong><code>pydantic-evals</code></strong> (ships with Pydantic AI, same ecosystem): <code>Case</code> / <code>Dataset</code> / <code>Evaluator</code>, the built-in <code>IsInstance</code> and <code>Contains</code>, and — directly answering the latency requirement — <strong><code>MaxDuration(seconds=...)</code></strong> as a first-class assertion. <strong><code>LLMJudge</code> is available in that library and is banned here</strong>; a branch importing it fails lint, not review. <code>EvaluatorContext</code> exposes <code>ctx.duration</code>, <code>ctx.metrics</code> and <code>ctx.span_tree</code>, so correctness, latency and token cost come out of one run.</p>
 <h3 id="two-tiers">Two tiers</h3>
 <p><strong>Tier A — deterministic components</strong> (no model anywhere): docmodel, intake rules, transport, contracts, the store. Golden assertions plus a wall-clock budget. Runs in CI on every push.</p>
 <p><strong>Tier B — pipeline evals</strong>: the system under test calls a live model, so it costs money and runs nightly or on demand rather than on every push. CI substitutes <code>TestModel</code>.</p>
@@ -1814,10 +1744,15 @@ class BlobStore(Protocol):
 <li><strong><code>mff-contracts</code> has no third-party dependency but <code>pydantic</code>.</strong> It's the seam; it stays boring.</li>
 <li><strong>Per-package coverage ≥ 85%</strong>, measured per package, not globally — a global number lets one well-tested package hide four untested ones.</li>
 <li><strong>No model call outside <code>llm/</code> and <code>agents/</code>.</strong> Enforced by import-linter.</li>
-<li><strong><code>pydantic_evals.evaluators.LLMJudge</code> is forbidden</strong>, enforced as an import-linter rule
-  rather than left to review. Every evaluator here is structural — the pipeline is
-  non-deterministic and whether its output is complete is not.</li>
+<li><strong><code>pydantic_evals.evaluators.LLMJudge</code> is forbidden</strong> — enforced by ruff's
+  <code>flake8-tidy-imports.banned-api</code>, <strong>not</strong> import-linter. Import-linter can only forbid a
+  <em>module</em>, so expressing this there bans the whole of <code>pydantic_evals</code>, taking <code>Case</code>,
+  <code>Dataset</code> and <code>Evaluator</code> with it — the things every eval suite needs. Ruff can target
+  the symbol:</li>
 </ul>
+<p><code>toml
+  [tool.ruff.lint.flake8-tidy-imports.banned-api]
+  "pydantic_evals.evaluators.LLMJudge".msg = "Evaluators here are structural. See the evals section."</code></p>
 <p><strong>Conventions (in the PR template, checked by review):</strong></p>
 <ul>
 <li>Prompts live in versioned files under <code>agents/&lt;name&gt;/prompts/</code>, never inline f-strings. They're the highest-churn, highest-impact artefact in the repo and they need a diff history.</li>
