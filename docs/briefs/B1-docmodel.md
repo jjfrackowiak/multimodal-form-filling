@@ -104,7 +104,7 @@ claim rather than a guarantee.
 4. Two comments anchored to one span, exercising the R-05/R-06 shape.
 5. A `document`-anchored comment lands somewhere and is reported in `unanchored`.
 6. Embedded images survive the round trip and their `image_sha256` matches the file in
-   `fixtures/fleet-vehicle-return/images/`.
+   `fixtures/fleet-vehicle-return/input/netnew/WN-7020U/`.
 7. Table cells get ids — the fixture's vehicle table has five rows.
 
 ## Out of scope

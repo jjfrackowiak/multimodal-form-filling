@@ -8,23 +8,45 @@ manifest, used as golden data for the L1, L2, L3 and E1 evals.
 ## Files
 
 ```
-manifest.txt                        shared input — the client's text, verbatim
-images/                             shared source material — 17 files as delivered
-inventory.yaml                      human labels; stands in for vision until B11
+manifest.txt                        THE EMAIL BODY — the client's text, verbatim
+inventory.yaml                      human labels; stands in for vision until the real service
 expected_requirements.yaml          L1 ground truth — the golden manifest parse
 
 input/
-  derivative/form_supplied.docx     the report as the client submitted it
-  netnew/client_inputs.yaml         the same submission, with no document
+  derivative/form_supplied.docx     one DERIVATIVE job — photos embedded in the .docx
+  netnew/WN-7020U/                  one NET-NEW job — the folder IS the set of inputs
+    dane-pojazdu.txt                  }  ClientInputs.texts
+    uwagi.txt                         }
+    *.jpg                             17 files, 15 distinct — JobRequest.images
 
 expected_output/
   report_reviewed.docx              the golden OUTPUT — 10 real Word comments
-  delivery.txt                      the results email — where provenance now lives
+  delivery.txt                      the results email — where provenance lives
   review.yaml                       the review layer, as data
-  structure.yaml                    THE EVAL TARGET — structural completeness spec
+  structure.yaml                    THE EVAL TARGET
 
 check_output.py                     the reference evaluator — deterministic, offline
 ```
+
+## The two modes, as a client actually sends them
+
+The **manifest is the email body**, never an attachment. Attachments are work items:
+
+| | Derivative | Net-new |
+|---|---|---|
+| Arrives as | a `.docx`, in a `derivative.zip` | a **folder**, in a `net-new.zip` |
+| Photos | embedded in the document | loose in the folder |
+| Text | in the document | `.txt` files in the folder |
+| `form_id` | the filename | **the folder name** — the client's own label |
+
+`WN-7020U` is the registration, because that is what a person would name the folder.
+
+**Containment is how a client says what belongs to what.** An image in `WN-7020U/` belongs
+to the `WN-7020U` job — no naming convention, no metadata file.
+
+An earlier version of this fixture had `client_inputs.yaml`, a single structured file with
+`vehicle:` and `notes:` keys. It was invented before the real shape was known and described
+something no client would send. Replaced.
 
 ## One output, two inputs
 

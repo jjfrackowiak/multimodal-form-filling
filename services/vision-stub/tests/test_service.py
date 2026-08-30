@@ -41,7 +41,10 @@ async def test_whole_submission_in_one_call(vision: HttpVisionTool) -> None:
     """One round trip per job, not per image — 17 calls would blow the latency budget."""
     from pathlib import Path
 
-    images = sorted(Path("fixtures/fleet-vehicle-return/images").iterdir())
+    # One net-new input folder: images alongside the client's .txt files, which is how
+    # a real submission arrives. Only the images go to the vision service.
+    folder = Path("fixtures/fleet-vehicle-return/input/netnew/WN-7020U")
+    images = sorted(p for p in folder.iterdir() if p.suffix.lower() == ".jpg")
     out = await vision.build_inventory([ImageRef(uri=p.name) for p in images], REQS)
     assert len(out) == len(images) == 17
     assert sum(1 for a in out if a.is_known) == 17

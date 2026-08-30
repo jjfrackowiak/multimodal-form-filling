@@ -129,11 +129,11 @@ client-written Polish manifest. Most briefs assert against it.
 
 ```
 manifest.txt                        10 lines, real, misspelled — do not normalise it
-images/                             17 files, but only 15 distinct (2 byte-identical pairs)
+input/netnew/WN-7020U/              one net-new job: 17 images (15 distinct) + 2 .txt files
 inventory.yaml                      human labels: what each photo shows
 expected_requirements.yaml          the golden parse — 10 requirements, R-01…R-10
 input/derivative/form_supplied.docx the submitted report, 2.8 MB, 17 embedded photos
-input/netnew/client_inputs.yaml     same submission, no document
+                                    the same submission, sent the net-new way
 expected_output/report_reviewed.docx  golden output, 10 real Word comments
 expected_output/delivery.txt          the results email
 expected_output/structure.yaml        THE EVAL TARGET
