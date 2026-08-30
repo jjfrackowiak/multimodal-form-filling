@@ -65,6 +65,9 @@ terraform import google_firestore_database.default "projects/linen-badge-507111-
 
 `editor_image` / `email_image` default empty so an apply that only sets `cv_image`
 does not create those services. Deploy workflows pass through the other images from
-terraform state so a CV-only apply cannot destroy editor/email.
+terraform state so a CV-only apply cannot destroy editor/email. Laptop apply must
+pass `-var=email_image=…` (or set it in gitignored `terraform.tfvars`) whenever
+`imap_host` is set — omitting it sets `count = 0` and **destroys** the live
+email Cloud Run.
 
 Local compose runs CV in place of vision-stub. The editor calls `CV_URL` at slice time.

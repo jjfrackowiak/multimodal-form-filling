@@ -75,6 +75,7 @@ class _FakeImap4:
         self._raw_message = raw_message
         self._on_select = on_select
         self.selected: str | None = None
+        self.search_criteria: tuple[str, ...] = ()
         _FakeImap4.instances.append(self)
 
     def login(self, user: str, password: str) -> tuple[str, list[bytes]]:
@@ -87,6 +88,7 @@ class _FakeImap4:
         return "OK", [b"1"]
 
     def search(self, charset: str | None, *criteria: str) -> tuple[str, list[bytes]]:
+        self.search_criteria = criteria
         return "OK", [b"1"]
 
     def fetch(self, num: str, parts: str) -> tuple[str, list[tuple[bytes, bytes] | None]]:
@@ -175,6 +177,17 @@ def test_fetch_unseen_raises_once_retries_are_exhausted(monkeypatch: pytest.Monk
         asyncio.run(transport.fetch_unseen())
 
     assert factory.attempts == 3  # the initial attempt plus both retries, each a fresh connection
+
+
+def test_fetch_unseen_searches_unseen_not_all(monkeypatch: pytest.MonkeyPatch) -> None:
+    _FakeImap4.instances.clear()
+    factory = _ImapFactory(raw_message=_raw_message())
+    monkeypatch.setattr(imaplib, "IMAP4", factory)
+    transport = ImapSmtpTransport(_config())
+
+    asyncio.run(transport.fetch_unseen())
+
+    assert _FakeImap4.instances[-1].search_criteria == ("UNSEEN",)
 
 
 def test_fetch_unseen_selects_the_configured_folder_never_hardcoded(
