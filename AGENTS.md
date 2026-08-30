@@ -1,5 +1,7 @@
 # Agent notes
 
+Repo language is **English** (docs, comments, commits, chat).
+
 Two owners. Do not cross the line unless asked.
 
 ## Michal (`michaluppal`)

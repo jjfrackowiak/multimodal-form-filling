@@ -1,24 +1,24 @@
 # Firestore vs bucket
 
-Dokument w kolekcji `jobs/{jobId}`:
+Document in collection `jobs/{jobId}`:
 
 ```
 id            string
 status        uploaded | queued | running | done | failed
 createdAt     ISO timestamp
 updatedAt     ISO timestamp
-file.bucket   nazwa bucketa
-file.path     obiekt w buckecie, np. uploads/{jobId}/raport.pdf
-file.gsUri    gs://bucket/path   ← to jest „odniesienie do pliku”
+file.bucket   bucket name
+file.path     object in the bucket, e.g. uploads/{jobId}/report.pdf
+file.gsUri    gs://bucket/path   ← this is the file reference
 file.originalName
 file.contentType
 file.sizeBytes
-result        obiekt albo null
-error         string albo null
+result        object or null
+error         string or null
 ```
 
-Zasada: **plik w Cloud Storage, metadane i status w Firestore.**
-Nigdy nie wrzucaj PDF/obrazu jako pola dokumentu.
+Rule: **file in Cloud Storage, metadata and status in Firestore.**
+Never store a PDF/image as a document field.
 
-Indeks: query workera `status == queued` wymaga composite/single-field index
-(emulator tworzy sam; na produkcji Firestore podpowie link przy pierwszym query).
+Index: the worker query `status == queued` needs a composite/single-field index
+(the emulator creates it; in production Firestore will suggest a link on the first query).

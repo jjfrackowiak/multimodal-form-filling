@@ -1,39 +1,39 @@
-# Mock: Cloud Run (2 kontenery) + Firestore + bucket
+# Mock: Cloud Run (2 containers) + Firestore + bucket
 
-Lokalny szkielet tego, o czym była mowa w czacie:
+Local skeleton for the GCP lane:
 
-- **kontener `api`** — HTTP, upload pliku, zapis dokumentu w Firestore
-- **kontener `worker`** — szuka jobów `queued`, czyta ścieżkę pliku z Firestore, „przetwarza” plik z bucketa
-- **Firestore** — trzyma rekordy i **wskaźniki** `gs://...`, nie zawartość plików
-- **bucket** — trzyma bajty
+- **`api` container** — HTTP, file upload, writes a document to Firestore
+- **`worker` container** — polls `queued` jobs, reads the file path from Firestore, “processes” the file from the bucket
+- **Firestore** — holds records and **pointers** `gs://...`, not file bytes
+- **bucket** — holds bytes
 
-Na GCP: API → Cloud Run **service**, worker → Cloud Run **worker pool** (albo service z `min-instances=1`), baza → **Firestore**, pliki → **Cloud Storage**.
+On GCP: API → Cloud Run **service**, worker → Cloud Run **worker pool** (or a service with `min-instances=1`), database → **Firestore**, files → **Cloud Storage**.
 
-## 1. Uruchom lokalnie
+## 1. Run locally
 
-Potrzebujesz Dockera.
+You need Docker.
 
 ```bash
 cd mock-firestore-app
 docker compose up --build
 ```
 
-Czekaj aż emulator Firestore wstanie (log: `Dev App Server is now running`). Compose czeka na healthcheck — bez tego worker potrafi zawiesić pierwsze query i job zostaje na `queued`.
+Wait until the Firestore emulator is up (log: `Dev App Server is now running`). Compose waits on a healthcheck — without that the worker can hang on its first query and the job stays `queued`.
 
-## 2. Przepływ
+## 2. Flow
 
 ```bash
-# wrzuć plik → dostaniesz job id
+# upload a file → you get a job id
 curl -F "file=@README.md" http://localhost:8081/files
 
-# uruchom proces (status: queued)
+# start processing (status: queued)
 curl -X POST http://localhost:8081/jobs/JOB_ID/start
 
-# poczekaj 2–3 s, worker podniesie status
+# wait 2–3 s, worker updates status
 curl http://localhost:8081/jobs/JOB_ID
 ```
 
-Oczekiwany dokument:
+Expected document:
 
 ```json
 {
@@ -50,25 +50,25 @@ Oczekiwany dokument:
 }
 ```
 
-## 3. Co jest w którym pliku
+## 3. What lives where
 
-| Plik | Rola |
+| File | Role |
 |---|---|
-| `api/` | obraz HTTP |
-| `worker/` | obraz pętli |
-| `docker-compose.yml` | 4 serwisy: firestore emulator, fake GCS, api, worker |
-| `gcp/SCHEMA.md` | jak wygląda dokument i co przenieść na prawdziwy projekt |
+| `api/` | HTTP image |
+| `worker/` | polling-loop image |
+| `docker-compose.yml` | 4 services: Firestore emulator, fake GCS, api, worker |
+| `gcp/SCHEMA.md` | document shape and what to carry to the real project |
 
-## 4. Co z tym zrobić na prawdziwym GCP
+## 4. Real GCP
 
-Projekt z screena: `all-things-agentic-google` / `linen-badge-507111-r6`.
+Project: `all-things-agentic-google` / `linen-badge-507111-r6`.
 
-1. W konsoli: **Firestore** → utwórz bazę (Native mode, region np. `europe-central2`).
-2. **Cloud Storage** → bucket np. `linen-badge-files`.
-3. Zbuduj i wypchnij oba obrazy do Artifact Registry.
-4. Wdróż `api` jako Cloud Run service, `worker` jako drugi service (min instances 1) albo worker pool.
+1. Console: **Firestore** → create a database (Native mode, region e.g. `europe-central2`).
+2. **Cloud Storage** → bucket e.g. `linen-badge-files`.
+3. Build and push both images to Artifact Registry.
+4. Deploy `api` as a Cloud Run service, `worker` as a second service (min instances 1) or a worker pool.
 5. Env: `GCP_PROJECT`, `FIRESTORE_COLLECTION=jobs`, `BUCKET=...`
-6. IAM: Cloud Run SA dostaje `roles/datastore.user` + `roles/storage.objectAdmin`.
-7. Znajomego dodajesz w **IAM & Admin** (nie przez ten czat — Grok nie jest zalogowany do Twojego GCP).
+6. IAM: Cloud Run SA gets `roles/datastore.user` + `roles/storage.objectAdmin`.
+7. Add Janek in **IAM & Admin** (not via this chat — Grok is not logged into your GCP).
 
-Szczegóły poleceń: `gcp/DEPLOY.md`.
+Command details: `gcp/DEPLOY.md`.

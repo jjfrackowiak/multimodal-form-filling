@@ -1,9 +1,9 @@
-# Deploy na prawdziwy projekt (nie emulator)
+# Deploy to a real project (not the emulator)
 
-Projekt ze screena: `linen-badge-507111-r6` (`all-things-agentic-google`).
+Project: `linen-badge-507111-r6` (`all-things-agentic-google`).
 
-Grok **nie jest** zalogowany do Twojego GCP. Te komendy odpalasz u siebie
-po `gcloud auth login` i `gcloud config set project linen-badge-507111-r6`.
+Grok is **not** logged into your GCP. Run these locally after
+`gcloud auth login` and `gcloud config set project linen-badge-507111-r6`.
 
 ```bash
 PROJECT=linen-badge-507111-r6
@@ -17,7 +17,7 @@ gcloud services enable run.googleapis.com firestore.googleapis.com \
 gcloud artifacts repositories create $REPO --repository-format=docker --location=$REGION || true
 gcloud storage buckets create gs://$BUCKET --location=$REGION || true
 
-# Firestore Native — raz, z konsoli albo:
+# Firestore Native — once, from the console or:
 # gcloud firestore databases create --location=$REGION
 
 API_IMG=$REGION-docker.pkg.dev/$PROJECT/$REPO/api:v1
@@ -41,10 +41,10 @@ gcloud run deploy mock-worker \
   --set-env-vars GCP_PROJECT=$PROJECT,BUCKET=$BUCKET,COLLECTION=jobs
 ```
 
-Potem IAM na default compute SA (albo osobne SA):
+Then IAM on the default compute SA (or a dedicated SA):
 
 - `roles/datastore.user`
 - `roles/storage.objectAdmin`
 
-Znajomy: IAM → Grant access → `user:email@...` → `roles/editor` (hackathon)
-albo ciaśniejsze role Cloud Run / Firestore / Storage.
+Teammate: IAM → Grant access → `user:email@...` → `roles/editor` (hackathon)
+or tighter Cloud Run / Firestore / Storage roles.
