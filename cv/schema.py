@@ -1,65 +1,66 @@
-"""Pydantic contracts for CV. Look-fors come from expected_requirements."""
+"""Contracts. Checklist comes from expected_requirements.yaml, not a car enum."""
 
 from __future__ import annotations
 
 from pydantic import BaseModel, Field
 
 
-class ManifestRequirement(BaseModel):
-    id: str = Field(description="Stable id, e.g. R-01")
-    text: str = Field(description="One checkable requirement in English.")
-    source_span: str = Field(
-        description="Verbatim substring of the client manifest, typos included."
-    )
+class Requirement(BaseModel):
+    id: str
+    text: str
+    source_span: str = ""
     expected_count: int = Field(default=1, ge=1)
-    constraint: str | None = Field(
-        default=None,
-        description="Extra constraint if stated, e.g. camera between front seats.",
-    )
+    constraint: str | None = None
 
 
-class ParsedManifest(BaseModel):
+class ParsedChecklist(BaseModel):
     expected_total_photos: int | None = None
-    requirements: list[ManifestRequirement]
+    requirements: list[Requirement]
 
 
 class Finding(BaseModel):
-    """Anything visible that a comment might cite. Not a fixed vehicle-field list."""
+    what: str = Field(description="What was seen: lamp, reading, plate, damage, leak, …")
+    value: str = Field(description="State or reading: on, 59650 km, WI 022LC, shifted, …")
+    evidence: str = Field(default="", description="Short visual support if useful.")
 
-    what: str = Field(
-        description=(
-            "Kind of observation, in the photo's own terms: odometer, check-engine lamp, "
-            "oil pressure lamp, coolant, registration plate, bumper misalignment, scratch, …"
-        )
+
+class RequirementHit(BaseModel):
+    id: str = Field(description="Checklist id this photo supports.")
+    constraint_ok: bool | None = Field(
+        default=None,
+        description="If this id has a constraint: true/false from the frame; else null.",
     )
-    value: str = Field(
-        description="State or reading: on/off, 59650 km, illuminated, shifted left, plate text, …"
-    )
-    evidence: str = Field(default="", description="Optional short visual support.")
+    constraint_evidence: str | None = None
 
 
 class ImageLabel(BaseModel):
-    requirement_ids: list[str] = Field(
+    hits: list[RequirementHit] = Field(
         default_factory=list,
-        description="Requirement ids from the checklist this photo actually supports.",
+        description="Checklist items this photo actually supports. One entry per id.",
     )
-    constraint_ok: bool | None = Field(
-        default=None,
-        description=(
-            "If a tagged requirement has a constraint: true if this photo satisfies it, "
-            "false if the subject is right but the constraint is not. null if none applies."
-        ),
-    )
-    constraint_evidence: str | None = Field(
-        default=None,
-        description="Why constraint_ok is true or false, from what is in the frame.",
-    )
-    note: str = Field(default="", description="Short caption of the picture.")
+    note: str = Field(default="", description="Short caption.")
     findings: list[Finding] = Field(
         default_factory=list,
         description=(
-            "Maximum documentary detail visible: lamps, gauges, fluids, identifiers, "
-            "damage, alignment. Do not limit yourself to a preset form. If the photo is "
-            "a cluster, report every lit indicator and every readable value."
+            "Everything documentary in the frame: warning lamps on/off, gauges, "
+            "identifiers, damage. Not a fixed form."
         ),
     )
+
+
+class InventoryImage(BaseModel):
+    file: str
+    hits: list[RequirementHit] = Field(default_factory=list)
+    note: str = ""
+    findings: list[Finding] = Field(default_factory=list)
+    exact_duplicate_of: str | None = None
+
+    @property
+    def requirement_ids(self) -> list[str]:
+        return [h.id for h in self.hits]
+
+
+class Inventory(BaseModel):
+    checklist: ParsedChecklist
+    images: list[InventoryImage]
+    exact_duplicate_pairs: list[list[str]] = Field(default_factory=list)

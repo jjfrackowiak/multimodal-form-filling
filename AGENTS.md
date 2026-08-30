@@ -9,7 +9,7 @@ Two owners. Do not cross the line unless asked.
 - Image / CV tools (req. 13): image processing, image understanding, cropping.
 - GCP deployment. **Future: Terraform (infrastructure as code)** — Cloud Run, Firestore, GCS, IAM, Vertex access. Do not treat `gcloud` console clicks or `gcp/DEPLOY.md` as the long-term source of truth. No Terraform tree yet; when we provision for real, start with `.tf` in-repo.
 
-**CV is its own service** (`cv/`). Always: **`expected_requirements.yaml` + photos**. Read **`manifest.txt` only if** the yaml is missing ids or `source_span` (spans already embed the relevant manifest text). Output: inventory.
+**CV** is `cv.build_inventory` (parallel Vertex). Always: checklist yaml + photos. Raw manifest only if ids/`source_span` missing. Cropping deferred.
 
 Stay here. Interfaces the editor will call should be small, documented, and stable.
 

@@ -1,0 +1,44 @@
+"""CLI for the CV tool. Editor code should call cv.build_inventory instead."""
+
+from __future__ import annotations
+
+import argparse
+import sys
+from pathlib import Path
+
+from cv.dump import inventory_to_yaml
+from cv.pipeline import DEFAULT_WORKERS, build_inventory
+from cv.vertex import LOCATION, MODEL, PROJECT
+
+
+def main(argv: list[str] | None = None) -> int:
+    p = argparse.ArgumentParser(description=__doc__)
+    p.add_argument("images", type=Path)
+    p.add_argument("--requirements", type=Path, required=True)
+    p.add_argument("--manifest", type=Path, default=None)
+    p.add_argument("--out", type=Path, default=Path("inventory.generated.yaml"))
+    p.add_argument("--workers", type=int, default=DEFAULT_WORKERS)
+    args = p.parse_args(argv)
+
+    print(
+        f"Vertex project={PROJECT} location={LOCATION} model={MODEL} workers={args.workers}",
+        flush=True,
+    )
+    try:
+        inv = build_inventory(
+            images=args.images.resolve(),
+            requirements=args.requirements,
+            manifest=args.manifest,
+            workers=args.workers,
+        )
+    except (ValueError, FileNotFoundError) as e:
+        print(e, file=sys.stderr)
+        return 2
+
+    args.out.write_text(inventory_to_yaml(inv))
+    print(
+        f"wrote {args.out} ({len(inv.images)} unique / "
+        f"{len(inv.exact_duplicate_pairs)} dupe pairs)",
+        flush=True,
+    )
+    return 0
