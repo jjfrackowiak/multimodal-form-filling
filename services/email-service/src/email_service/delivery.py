@@ -39,10 +39,10 @@ from mff_contracts import (
     BlobStore,
     JobRecord,
     JobRepository,
-    Requirement,
     RequestRecord,
     RequestRepository,
     RequestResult,
+    Requirement,
     ReviewComment,
 )
 
@@ -148,10 +148,8 @@ def _render_summary_line(result: RequestResult) -> str:
     parts = []
     # `unverified` on RequestResult is authoritative (req 17); trust the list itself
     # over whatever count summary happens to carry for that key.
-    seen_unverified = False
     for key, count in result.summary.items():
         if key == "unverified":
-            seen_unverified = True
             continue
         label = _VERDICT_LABELS_PL.get(key, key)
         parts.append(f"{count} {label}")
@@ -163,7 +161,9 @@ def _render_summary_line(result: RequestResult) -> str:
 
 def _render_requirement_entry(requirement: Requirement) -> str:
     lines = [f"  {requirement.id}  {requirement.text}"]
-    lines.append(f'        z manifestu, wiersz {requirement.source_line}: "{requirement.source_span}"')
+    lines.append(
+        f'        z manifestu, wiersz {requirement.source_line}: "{requirement.source_span}"'
+    )
     constraint = requirement.constraint
     if constraint is not None:
         lines.append(f"        warunek: {constraint.kind} = {constraint.value}")
@@ -186,7 +186,9 @@ def _render_requirement_list(requirements: Sequence[Requirement]) -> str:
     )
 
 
-def _render_unverified_section(result: RequestResult, requirements_by_id: Mapping[str, Requirement]) -> str | None:
+def _render_unverified_section(
+    result: RequestResult, requirements_by_id: Mapping[str, Requirement]
+) -> str | None:
     if not result.unverified:
         return None
     lines = [
@@ -315,7 +317,8 @@ def _render_body(
 
 def _render_subject(result: RequestResult) -> str:
     labels = {"done": "zakończone", "partial": "częściowo zakończone", "failed": "nieudane"}
-    return f"Wyniki weryfikacji — zgłoszenie {result.request_id} ({labels.get(result.status, result.status)})"
+    status_label = labels.get(result.status, result.status)
+    return f"Wyniki weryfikacji — zgłoszenie {result.request_id} ({status_label})"
 
 
 # ---------------------------------------------------------------------------
@@ -400,16 +403,18 @@ def aggregate_result(request: RequestRecord, records: Sequence[JobRecord]) -> Re
     documents = [record.document for record in records if record.document is not None]
     failed_forms = [record.form_id for record in records if record.status == "failed"]
     unverified = sorted({req_id for record in records for req_id in record.unverified})
-    passed = sum(record.summary.get("pass", 0) + record.summary.get("realised", 0) for record in records)
-    failed = sum(record.summary.get("fail", 0) + record.summary.get("shortfall", 0) for record in records)
-    status: str
+    passed = sum(
+        record.summary.get("pass", 0) + record.summary.get("realised", 0) for record in records
+    )
+    failed = sum(
+        record.summary.get("fail", 0) + record.summary.get("shortfall", 0) for record in records
+    )
+    status: str = "done"
     if failed_forms:
         status = "partial" if documents else "failed"
-    else:
-        status = "done"
     return RequestResult(
         request_id=request.request_id,
-        status=status,  # type: ignore[arg-type]
+        status=status,
         documents=documents,
         requirements=request.requirements,
         summary={"pass": passed, "fail": failed},
