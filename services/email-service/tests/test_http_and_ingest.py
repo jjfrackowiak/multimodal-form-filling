@@ -74,6 +74,39 @@ async def test_jobs_from_parsed_puts_docx_and_images() -> None:
     assert await blobs.get(jobs[0].form) == b"PK\x03\x04docx"
 
 
+async def test_jobs_from_parsed_extracts_embedded_photos_from_derivative_docx() -> None:
+    from pathlib import Path
+
+    docx = (
+        Path(__file__).resolve().parents[3]
+        / "fixtures"
+        / "fleet-vehicle-return"
+        / "input"
+        / "derivative"
+        / "form_supplied.docx"
+    )
+    blobs = InMemoryBlobStore()
+    parsed = ParsedRequest(
+        message_id="<m@x>",
+        sender="a@b.test",
+        subject="s",
+        manifest_raw="Under the bonnet",
+        jobs=[
+            ParsedJob(
+                mode=Mode.DERIVATIVE,
+                form_id="form_supplied.docx",
+                form=ParsedForm(filename="form_supplied.docx", data=docx.read_bytes()),
+            )
+        ],
+    )
+    jobs = await jobs_from_parsed(
+        parsed, request_id="req-1", requirements=[_requirement()], blobs=blobs
+    )
+    assert len(jobs[0].images) == 15
+    assert {image.source for image in jobs[0].images} == {"embedded"}
+    assert all(image.blob.uri for image in jobs[0].images)
+
+
 async def test_http_slice_runner_posts_json() -> None:
     from mff_contracts import BlobRef, DerivativeArtifact, SliceRequest
 

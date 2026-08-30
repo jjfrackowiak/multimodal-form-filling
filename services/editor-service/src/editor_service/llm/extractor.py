@@ -35,11 +35,18 @@ Return ONLY a JSON object of this shape, no markdown fences, no commentary:
 
 Rules:
 - source_span must be copied character-for-character from the input text, typos included.
-- A count like "4x seats" is ONE requirement with expected_count 4.
-- One sentence can name two separately checkable things — emit two requirements, each
-  anchored to the same source_span.
-- A constraint stated elsewhere can qualify an item named earlier. Attach it via
-  "constraint"; omit the field on every other requirement.
+- A count like "4x seats" is ONE requirement with expected_count 4, never four requirements.
+- One sentence can name two separately checkable things (for example a windscreen shot
+  "from inside and outside") — emit two requirements, each anchored to the same source_span.
+- A constraint stated elsewhere in the text can qualify an item named earlier or later.
+  Attach it via "constraint"; omit the field on every other requirement.
+- A line that only states a total number of photos ("16 photos", "16 zdjęć") is NOT a
+  requirement. It is a checksum for the items below. Do not emit it.
+- If the same verbatim phrase appears more than once (for example "Under the bonnet" on
+  two lines), that is ONE requirement. Set expected_count to the number of mentions and
+  set ambiguity to "repeated_verbatim_in_manifest". Do not emit two requirements.
+- Never invent a requirement that is not named as a photographic or documentary item in
+  the text — recall may fall short, but precision must stay 1.0.
 """
 
 _FENCE = re.compile(r"```(?:json)?\s*(\{.*\})\s*```", re.DOTALL)

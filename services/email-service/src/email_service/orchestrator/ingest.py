@@ -2,12 +2,45 @@
 
 from __future__ import annotations
 
+import io
+import zipfile
+from pathlib import Path
+
 from email_service.intake import ParsedRequest
 from mff_contracts import BlobStore, JobImage, JobRequest, Mode, Requirement
 
 __all__ = ["jobs_from_parsed"]
 
 _DOCX_TYPE = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+
+
+def _sniff_image_type(data: bytes) -> str | None:
+    if data.startswith(b"\xff\xd8\xff"):
+        return "image/jpeg"
+    if data.startswith(b"\x89PNG\r\n\x1a\n"):
+        return "image/png"
+    if data.startswith(b"RIFF") and data[8:12] == b"WEBP":
+        return "image/webp"
+    return None
+
+
+def _embedded_rasters(docx: bytes) -> list[tuple[str, bytes, str]]:
+    """JPEG/PNG/WebP parts under `word/media/` — the client's photos, already in the form."""
+    try:
+        archive = zipfile.ZipFile(io.BytesIO(docx))
+    except zipfile.BadZipFile:
+        return []
+    found: list[tuple[str, bytes, str]] = []
+    with archive:
+        for name in archive.namelist():
+            if not name.startswith("word/media/") or name.endswith("/"):
+                continue
+            data = archive.read(name)
+            content_type = _sniff_image_type(data)
+            if content_type is None:
+                continue
+            found.append((Path(name).name, data, content_type))
+    return found
 
 
 async def jobs_from_parsed(
@@ -23,6 +56,16 @@ async def jobs_from_parsed(
         if parsed_job.mode is Mode.DERIVATIVE:
             assert parsed_job.form is not None
             form = await blobs.put(parsed_job.form.data, content_type=_DOCX_TYPE, kind="source")
+            images: list[JobImage] = []
+            for filename, data, content_type in _embedded_rasters(parsed_job.form.data):
+                blob = await blobs.put(data, content_type=content_type, kind="image")
+                images.append(
+                    JobImage(
+                        blob=blob,
+                        original_filename=filename,
+                        source="embedded",
+                    )
+                )
             jobs.append(
                 JobRequest(
                     job_id=job_id,
@@ -31,7 +74,7 @@ async def jobs_from_parsed(
                     form_id=parsed_job.form_id,
                     form=form,
                     requirements=requirements,
-                    images=[],
+                    images=images,
                 )
             )
             continue

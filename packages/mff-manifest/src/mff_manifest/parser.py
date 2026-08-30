@@ -10,6 +10,8 @@ fails that check — a structural failure, not a scored one.
 
 from __future__ import annotations
 
+import re
+
 from mff_contracts import Manifest, Requirement
 
 from .errors import ManifestParseError, NonVerbatimSpanError
@@ -74,6 +76,73 @@ async def _extract_chunk(
     ) from last_error
 
 
+# A line that only states a total ("16 photos," / "16 zdjęć") is a checksum, not a
+# photographic requirement. The extractor is told not to emit these; this catches it
+# when the model still does. Precision 1.0: never invent a rule the client did not write.
+_TOTAL_COUNT_ONLY = re.compile(
+    r"^\d+\s*(photos?|pics?|pictures?|zdj[eę][cć]|zdjec)\s*,?\s*$",
+    re.IGNORECASE,
+)
+
+
+def _occurrences(span: str, raw: str) -> int:
+    if not span:
+        return 0
+    count = 0
+    start = 0
+    while True:
+        found = raw.find(span, start)
+        if found < 0:
+            return count
+        count += 1
+        start = found + max(len(span), 1)
+
+
+def _drop_total_count_only(items: list[Requirement]) -> list[Requirement]:
+    return [req for req in items if not _TOTAL_COUNT_ONLY.match(req.source_span.strip())]
+
+
+def _fold_repeated_mentions(items: list[Requirement], raw: str) -> list[Requirement]:
+    """Same verbatim phrase on several lines → one requirement, expected_count = mentions.
+
+    A span that occurs once and still has two requirements is a legitimate split
+    (windscreen inside/outside, boot + equipment). A span that occurs twice and was
+    emitted twice ("Under the bonnet" on lines 2 and 5) is a repetition, not two items.
+    """
+    grouped: dict[str, list[Requirement]] = {}
+    order: list[str] = []
+    for req in items:
+        if req.source_span not in grouped:
+            order.append(req.source_span)
+            grouped[req.source_span] = []
+        grouped[req.source_span].append(req)
+
+    folded: list[Requirement] = []
+    for span in order:
+        group = grouped[span]
+        mentions = _occurrences(span, raw)
+        if mentions <= 1:
+            folded.extend(group)
+            continue
+        base = max(group, key=lambda r: (len(r.text), r.text))
+        constraint = next((r.constraint for r in group if r.constraint is not None), None)
+        count = max(mentions, max(r.expected_count for r in group))
+        ambiguity = next(
+            (r.ambiguity for r in group if r.ambiguity),
+            "repeated_verbatim_in_manifest",
+        )
+        folded.append(
+            base.model_copy(
+                update={
+                    "expected_count": count,
+                    "constraint": constraint,
+                    "ambiguity": ambiguity,
+                }
+            )
+        )
+    return folded
+
+
 def _canonicalise(items: list[Requirement], raw: str) -> list[Requirement]:
     """Recompute ordinal/source_line from source_span, sort, then assign ids.
 
@@ -95,6 +164,7 @@ def _canonicalise(items: list[Requirement], raw: str) -> list[Requirement]:
             )
         resolved.append(req.model_copy(update=updates))
 
+    resolved = _fold_repeated_mentions(_drop_total_count_only(resolved), raw)
     resolved.sort(key=lambda r: (r.ordinal, r.text))
     return [
         r.model_copy(update={"id": f"R-{index:02d}"}) for index, r in enumerate(resolved, start=1)
