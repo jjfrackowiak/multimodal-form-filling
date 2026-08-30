@@ -19,6 +19,7 @@ from docx.document import Document as DocxDocument
 from docx.oxml.ns import qn
 from docx.table import Table
 from docx.text.paragraph import Paragraph
+
 from mff_contracts import Node, RunSpan
 
 from ._images import EmbeddedImage, embedded_images_in_run

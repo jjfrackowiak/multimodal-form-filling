@@ -13,6 +13,7 @@ recording each entry's span the moment it writes it.
 from __future__ import annotations
 
 from docx import Document
+
 from mff_contracts import DerivativeArtifact, NetNewArtifact, RenderMap, RunSpan
 
 from ._io import dump_document

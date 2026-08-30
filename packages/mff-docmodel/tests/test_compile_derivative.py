@@ -4,13 +4,12 @@ from __future__ import annotations
 
 import io
 
+from _xml import canonical, read_document_xml
 from docx import Document
-from mff_contracts import BlobRef, DerivativeArtifact
 
+from mff_contracts import BlobRef, DerivativeArtifact
 from mff_docmodel import compile_derivative, parse_docx
 from mff_docmodel.parse import walk
-
-from _xml import canonical, read_document_xml
 
 
 def _artifact(source: bytes) -> DerivativeArtifact:
@@ -31,7 +30,7 @@ def test_compile_returns_source_bytes_unchanged(derivative_docx_bytes: bytes) ->
 
 
 def test_compile_opens_in_word(derivative_docx_bytes: bytes) -> None:
-    """"Opens in Word" stand-in: python-docx can load it back without error and the
+    """ "Opens in Word" stand-in: python-docx can load it back without error and the
     structure is intact."""
     artifact = _artifact(derivative_docx_bytes)
     compiled_bytes, _render_map = compile_derivative(artifact, derivative_docx_bytes)

@@ -13,11 +13,10 @@ added." Tested two ways:
 
 from __future__ import annotations
 
-from mff_contracts import Anchor, BlobRef, DerivativeArtifact, ReviewComment
-
-from mff_docmodel import attach_comments, compile_derivative, parse_docx
-
 from _xml import canonical, read_document_xml, strip_comment_ranges
+
+from mff_contracts import Anchor, BlobRef, DerivativeArtifact, ReviewComment
+from mff_docmodel import attach_comments, compile_derivative, parse_docx
 
 AUTHOR = "AI Editor"
 
@@ -62,7 +61,9 @@ def _full_pipeline_output(source: bytes) -> bytes:
             justification="No identifiable target for this requirement in the submitted form.",
         ),
     ]
-    out_bytes, count, unanchored = attach_comments(compiled_bytes, comments, render_map, author=AUTHOR)
+    out_bytes, count, unanchored = attach_comments(
+        compiled_bytes, comments, render_map, author=AUTHOR
+    )
     assert count == 4
     assert unanchored == ["R-99"]
     return out_bytes
@@ -109,7 +110,7 @@ def test_mutation_swapped_captions_is_caught(derivative_docx_bytes: bytes) -> No
     assert before == after
 
     placeholder = b"__SWAP__"
-    mutated = after.replace("Fotel kierowcy".encode(), placeholder)
-    mutated = mutated.replace("Fotel pasażera".encode(), "Fotel kierowcy".encode())
+    mutated = after.replace(b"Fotel kierowcy", placeholder)
+    mutated = mutated.replace("Fotel pasażera".encode(), b"Fotel kierowcy")
     mutated = mutated.replace(placeholder, "Fotel pasażera".encode())
     assert mutated != before

@@ -9,8 +9,8 @@ from __future__ import annotations
 import io
 
 from docx import Document as OpenDocument
-from mff_contracts import Anchor, BlobRef, DerivativeArtifact, ReviewComment
 
+from mff_contracts import Anchor, BlobRef, DerivativeArtifact, ReviewComment
 from mff_docmodel import attach_comments, compile_derivative, parse_docx
 
 AUTHOR = "AI Editor"
@@ -18,15 +18,19 @@ AUTHOR = "AI Editor"
 
 def _artifact(source: bytes) -> DerivativeArtifact:
     nodes = parse_docx(source)
-    blob = BlobRef(uri="mem://s", content_type="application/vnd.docx", size_bytes=len(source), sha256="x")
+    blob = BlobRef(
+        uri="mem://s", content_type="application/vnd.docx", size_bytes=len(source), sha256="x"
+    )
     return DerivativeArtifact(form_id="form_supplied", source=blob, nodes=nodes)
 
 
-def _comment(requirement_id: str, target_id: str, *, verdict: str = "pass", suggestion: str | None = None) -> ReviewComment:
+def _comment(
+    requirement_id: str, target_id: str, *, verdict: str = "pass", suggestion: str | None = None
+) -> ReviewComment:
     return ReviewComment(
         requirement_id=requirement_id,
         anchor=Anchor(kind="node", target_id=target_id),
-        verdict=verdict,  # type: ignore[arg-type]
+        verdict=verdict,
         justification=f"justification for {requirement_id}, long enough to pass the length check.",
         suggestion=suggestion,
     )
@@ -61,7 +65,9 @@ def test_two_comments_on_one_span_the_r05_r06_shape(derivative_docx_bytes: bytes
         _comment("R-05", heading.id),
         _comment("R-06", heading.id),
     ]
-    out_bytes, count, unanchored = attach_comments(compiled_bytes, comments, render_map, author=AUTHOR)
+    out_bytes, count, unanchored = attach_comments(
+        compiled_bytes, comments, render_map, author=AUTHOR
+    )
 
     assert count == 2
     assert unanchored == []
@@ -90,7 +96,9 @@ def test_document_anchored_comment_lands_and_is_reported(derivative_docx_bytes: 
         verdict="unverified",
         justification="Could not determine what this requirement refers to in the form.",
     )
-    out_bytes, count, unanchored = attach_comments(compiled_bytes, [comment], render_map, author=AUTHOR)
+    out_bytes, count, unanchored = attach_comments(
+        compiled_bytes, [comment], render_map, author=AUTHOR
+    )
 
     assert count == 1
     assert unanchored == ["R-99"]
@@ -108,7 +116,9 @@ def test_unresolvable_node_id_also_falls_back_and_is_reported(derivative_docx_by
     compiled_bytes, render_map = compile_derivative(artifact, derivative_docx_bytes)
 
     comment = _comment("R-42", "p9999-does-not-exist")
-    out_bytes, count, unanchored = attach_comments(compiled_bytes, [comment], render_map, author=AUTHOR)
+    out_bytes, count, unanchored = attach_comments(
+        compiled_bytes, [comment], render_map, author=AUTHOR
+    )
 
     assert count == 1
     assert unanchored == ["R-42"]
@@ -136,7 +146,9 @@ def test_mixed_batch_counts_and_unanchored_list(derivative_docx_bytes: bytes) ->
             suggestion="Fix it by doing the thing that is suggested here, in detail.",
         ),
     ]
-    out_bytes, count, unanchored = attach_comments(compiled_bytes, comments, render_map, author=AUTHOR)
+    out_bytes, count, unanchored = attach_comments(
+        compiled_bytes, comments, render_map, author=AUTHOR
+    )
 
     assert count == 3
     assert unanchored == ["R-11"]
@@ -152,7 +164,9 @@ def test_fail_verdict_carries_its_suggestion(derivative_docx_bytes: bytes) -> No
     comment = _comment(
         "R-01", heading.id, verdict="fail", suggestion="Supply a second engine-bay photograph."
     )
-    out_bytes, _count, _unanchored = attach_comments(compiled_bytes, [comment], render_map, author=AUTHOR)
+    out_bytes, _count, _unanchored = attach_comments(
+        compiled_bytes, [comment], render_map, author=AUTHOR
+    )
     doc = OpenDocument(io.BytesIO(out_bytes))
     text = next(iter(doc.comments)).text
     assert "FAIL" in text

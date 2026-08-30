@@ -9,7 +9,7 @@ import io
 from docx import Document
 from PIL import Image
 
-from mff_docmodel._images import _resolve, _is_decodable_image, embedded_images_in_run
+from mff_docmodel._images import _is_decodable_image, _resolve, embedded_images_in_run
 from mff_docmodel.parse import parse_docx
 
 

@@ -5,8 +5,8 @@ from __future__ import annotations
 import io
 
 from docx import Document
-from mff_contracts import BlobRef, Entry, FormDraft, NetNewArtifact, Section
 
+from mff_contracts import BlobRef, Entry, FormDraft, NetNewArtifact, Section
 from mff_docmodel import compile_netnew
 
 
@@ -74,7 +74,9 @@ def test_entry_images_are_noted_without_needing_bytes() -> None:
             Section(
                 id="s1",
                 title="Zdjęcia",
-                entries=[Entry(id="e1", order="a0", value="Podsufitka", images=[image], set_by="R-04")],
+                entries=[
+                    Entry(id="e1", order="a0", value="Podsufitka", images=[image], set_by="R-04")
+                ],
             )
         ]
     )

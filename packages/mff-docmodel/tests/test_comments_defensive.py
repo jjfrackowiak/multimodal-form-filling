@@ -6,8 +6,8 @@ from __future__ import annotations
 import io
 
 from docx import Document
-from mff_contracts import Anchor, RenderMap, ReviewComment, RunSpan
 
+from mff_contracts import Anchor, RenderMap, ReviewComment, RunSpan
 from mff_docmodel import attach_comments
 from mff_docmodel.comments import _fallback_run_pair, _resolve
 

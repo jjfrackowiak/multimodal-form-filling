@@ -81,6 +81,14 @@ namespace_packages = true
 module = "yaml.*"
 ignore_missing_imports = true
 
+[[tool.mypy.overrides]]
+# lxml ships no inline types and lxml-stubs is a separate, unpinned package; python-docx
+# (mff-docmodel's own dependency) already carries the same untyped dependency internally.
+# Only mff-docmodel's tests reach for it directly, to manipulate word/document.xml for the
+# byte-identical-body assertion (B1).
+module = "lxml.*"
+ignore_missing_imports = true
+
 # ---------------------------------------------------------------------------
 # import-linter — the highest-value gate in the repo
 # ---------------------------------------------------------------------------
