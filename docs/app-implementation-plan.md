@@ -500,6 +500,35 @@ protocols.
 That ordering matters for the branch plan: B3, B13 and the orchestrator never need a
 mailbox, so none of them wait on one.
 
+### What no test mailbox can tell you
+
+It is genuinely true that the whole pipeline — intake, validation, replies, job
+tracking, delivery, threading, idempotency — works with no mail server at all, because
+email is just bytes and the transport Protocol is the only part that touches a network.
+That is the design paying off, and it is why almost no branch waits on infrastructure.
+
+It is also the trap. Two classes of failure are invisible to both the fake and
+GreenMail, and both bite in production:
+
+**Deliverability.** A test server accepts everything. It cannot tell you whether a real
+recipient's provider puts our reply in spam, or drops it silently. SPF, DKIM and DMARC
+on the sending domain decide that, and no amount of green tests substitutes for one real
+message to a real inbox. Worth doing early — the failure mode is a client who says "I
+never got anything" while every log says delivered.
+
+**Real client MIME is far messier than ours.** Every message in our fixtures is one we
+generated, so it is exactly as well-formed as our own assumptions. Real requests arrive
+from Outlook, from Gmail on a phone, forwarded through three people, with inline images
+that should have been attachments, `Content-Disposition` headers that disagree with the
+filename, and Polish text in whatever encoding the sender's client felt like. Intake
+(B3) is where that lands, and its rule matrix will be wrong in ways no synthetic fixture
+reveals.
+
+The cheap mitigation: once a real mailbox exists, **keep every message that fails intake
+as a new fixture case**. Real malformed mail is the most valuable test data available
+and it cannot be invented — the fleet fixture is only as good as it is because it came
+from an actual submission rather than from imagination.
+
 ### In production
 
 A Gmail account with an **App Password** is the quickest real mailbox: enable 2-Step
