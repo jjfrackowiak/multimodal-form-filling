@@ -26,3 +26,7 @@ node_modules/
 mock-firestore-app.zip
 **/inventory.generated.yaml
 *.HEIC
+
+# Local agent notes — not part of the product
+AGENTS.md
+MISTAKES.md
