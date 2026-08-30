@@ -20,7 +20,7 @@ from pydantic import BaseModel
 from editor_service.llm.model import build_editor_model
 from editor_service.settings import Settings, get_settings
 
-__all__ = ["build_agent"]
+__all__ = ["BaseLlm", "build_agent"]
 
 
 def build_agent(
