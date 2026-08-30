@@ -1,0 +1,111 @@
+# Golden verdicts — ground truth for the L3 eval
+# (verdict agreement >= 0.90 against these human labels).
+#
+# Two requirements fail. Both failures are the interesting kind: the delivery
+# looks complete at a glance and is not.
+
+submission:
+  files_delivered: 17
+  distinct_images: 15
+  photos_required: 16
+
+verdicts:
+  - requirement_id: R-01
+    verdict: fail
+    satisfied_by: ["IMG_20260830_132754 (4).jpg"]
+    justification: >
+      Two engine-bay photographs were required; one was supplied. The manifest
+      lists "Pod maską" twice and the client's own stated total of 16 photos
+      only reconciles if both mentions are counted.
+    suggestion: >
+      Supply a second photograph under the bonnet from a different angle, or
+      confirm that the repeated line in the manifest was unintentional.
+
+  - requirement_id: R-02
+    verdict: pass
+    satisfied_by:
+      - "IMG_20260830_132755 (1).jpg"
+      - "IMG_20260830_132755.jpg"
+      - "IMG_20260830_132755 (2).jpg"
+      - "IMG_20260830_132755 (3).jpg"
+    justification: "Four seat photographs supplied: both front seats and two of the rear bench."
+
+  - requirement_id: R-03
+    verdict: pass
+    satisfied_by: ["IMG_20260830_132755 (10).jpg", "IMG_20260830_132755 (9).jpg"]
+    justification: "Front three-quarter and rear three-quarter views supplied."
+
+  - requirement_id: R-04
+    verdict: fail
+    satisfied_by: ["1000040420.jpg"]
+    rejected: ["IMG_20260830_132755 (5).jpg"]
+    justification: >
+      Two headliner photographs were supplied, but only one meets the positional
+      constraint. 1000040420.jpg is taken from between the front seats — both
+      front headrests are in frame with the overhead console visible.
+      IMG_20260830_132755 (5).jpg is taken from beside a seat and frames only the
+      rear section of the headliner.
+    suggestion: >
+      Retake the second headliner photograph with the camera positioned between
+      the two front seats, angled up and rearward, as in 1000040420.jpg.
+    # THE HEADLINE CASE for this fixture: the requirement is superficially met
+    # (two headliner photos exist) and substantively failed. Any checker that
+    # only counts photos per category passes this. That is the bug this fixture
+    # is designed to catch.
+
+  - requirement_id: R-05
+    verdict: pass
+    satisfied_by: ["IMG_20260830_132754.jpg"]
+    justification: "Windscreen photographed from the cabin; dashboard and mirror in frame."
+
+  - requirement_id: R-06
+    verdict: pass
+    satisfied_by: ["IMG_20260830_132754 (1).jpg"]
+    justification: "Windscreen photographed from outside; occupant visible through the glass."
+
+  - requirement_id: R-07
+    verdict: pass
+    satisfied_by: ["IMG_20260830_132755 (4).jpg"]
+    justification: "Tyre tread photographed."
+
+  - requirement_id: R-08
+    verdict: pass
+    satisfied_by: ["1000040429.jpg"]
+    justification: "Boot photographed with the tailgate open."
+
+  - requirement_id: R-09
+    verdict: pass
+    satisfied_by: ["IMG_20260830_132603.jpg"]
+    justification: >
+      Under-floor equipment photographed: spare wheel, tool kit, fire
+      extinguisher and warning triangle.
+
+  - requirement_id: R-10
+    verdict: pass
+    satisfied_by: ["IMG_20260830_132754 (2).jpg"]
+    justification: "Instrument cluster photographed; odometer legible at 59 650 km."
+
+# Findings that belong to the submission as a whole rather than to any single
+# requirement. A per-slice agent cannot see these by construction — this is
+# concern D3 showing up in the very first fixture we built. Recorded here so
+# the gap is measured rather than assumed away.
+submission_level_findings:
+  - kind: duplicate_files
+    detail: >
+      17 files were delivered but only 15 are distinct. 1000040429.jpg is
+      byte-identical to IMG_20260830_132755 (8).jpg, and IMG_20260830_132603.jpg
+      is byte-identical to IMG_20260830_132755 (7).jpg.
+    note: >
+      Content-addressing BlobRef by sha256 collapses these automatically on
+      ingest, so the duplicates should never reach an agent as separate images.
+      Assert that: it is a cheap, deterministic check of the store.
+
+  - kind: condition_observation
+    detail: >
+      The instrument cluster shows an active fault:
+      "Awaria skrzyni biegow - Niezwlocznie przeprowadz serwis"
+      (gearbox fault, service immediately).
+    note: >
+      Not required by this manifest, so it is not a verdict. Kept because it is
+      exactly the kind of thing a vehicle return report should surface, and it
+      is a ready-made case if an "unprompted findings" feature is ever scoped.

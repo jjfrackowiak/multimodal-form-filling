@@ -1,0 +1,89 @@
+# Golden parse of manifest.txt — the ground truth for the L1 eval
+# (manifest -> Requirement[], recall >= 0.95, precision 1.0).
+#
+# Every source_span below is a VERBATIM substring of manifest.txt, typos included.
+# The L1 eval asserts that as an invariant, not a score: a span that is not
+# verbatim-present means the parser invented provenance.
+
+expected_total_photos: 16   # stated by the client on line 1
+
+requirements:
+  - id: R-01
+    text: "A photograph of the engine bay, taken with the bonnet open."
+    source_span: "Pod maską"
+    scope: exterior_mechanical
+    expected_count: 2
+    # DELIBERATE AMBIGUITY — see README. "Pod maską" appears on both line 2 and
+    # line 5 of the manifest. Read as one repeated item, the list totals 15;
+    # read as two distinct photos, it totals 16, which is what the client
+    # themselves stated. We resolve to 2 on the client's own count.
+    ambiguity: repeated_verbatim_in_manifest
+
+  - id: R-02
+    text: "Four photographs of the seats."
+    source_span: "4x fotele"
+    scope: interior
+    expected_count: 4
+
+  - id: R-03
+    text: "Two photographs of the vehicle taken on the diagonal."
+    source_span: "2 przekatne pojazdu"
+    scope: exterior_body
+    expected_count: 2
+
+  - id: R-04
+    text: >
+      Two photographs of the headliner. Each must be taken from between
+      the front seats.
+    source_span: "2x podsufitka"
+    scope: interior
+    expected_count: 2
+    constraint:
+      kind: camera_position
+      value: between_front_seats
+      # The constraint arrives on manifest line 10, far away from the item it
+      # qualifies on line 4. A parser that only splits on lines will attach it
+      # to the wrong requirement, or drop it. That is the point of this case.
+      constraint_source_span: "Podsufitka trzeba spomiędzy forteli zrobić"
+      constraint_source_line: 10
+      note: "'forteli' is a typo for 'foteli' (seats) in the client's original."
+
+  - id: R-05
+    text: "A photograph of the windscreen taken from inside the cabin."
+    source_span: "Przednia szyba że środka i zewnątrz"
+    scope: glass
+    expected_count: 1
+    note: "'że' is a typo for 'ze'. One span yields two requirements (R-05, R-06)."
+
+  - id: R-06
+    text: "A photograph of the windscreen taken from outside the vehicle."
+    source_span: "Przednia szyba że środka i zewnątrz"
+    scope: glass
+    expected_count: 1
+
+  - id: R-07
+    text: "A photograph of the tyre tread."
+    source_span: "Bieżnik opony"
+    scope: tyres
+    expected_count: 1
+
+  - id: R-08
+    text: "A photograph of the boot."
+    source_span: "zdjęcie bagażnika + wyposażenia pod klapą"
+    scope: boot
+    expected_count: 1
+
+  - id: R-09
+    text: "A photograph of the equipment stowed under the boot lid/floor."
+    source_span: "zdjęcie bagażnika + wyposażenia pod klapą"
+    scope: boot
+    expected_count: 1
+
+  - id: R-10
+    text: "A photograph of the instrument cluster."
+    source_span: "i zegary"
+    scope: interior
+    expected_count: 1
+
+# Sum of expected_count = 2+4+2+2+1+1+1+1+1+1 = 16, matching the client's
+# stated total. This is the reading the golden data commits to.

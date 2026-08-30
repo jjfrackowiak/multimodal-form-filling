@@ -1,0 +1,139 @@
+# Structural completeness spec — the actual eval target.
+#
+# NOT an LLM judge. Every assertion below is decidable by reading the output
+# document and comparing it to this file. The system under test is
+# non-deterministic; the scorer is not. That is the whole design:
+#
+#     non-deterministic system  +  deterministic scorer  =  a repeatable number
+#
+# `check_output.py` in the fixture root evaluates a candidate .docx against this
+# file and exits non-zero on any violation. It is the reference implementation of
+# the L3/E1 evaluator and needs no API key.
+
+# ---------------------------------------------------------------------------
+# Assertions that hold for BOTH modes. This is the bulk of the spec.
+# ---------------------------------------------------------------------------
+common:
+
+  document:
+    title: "Protokół zwrotu pojazdu"
+    required_headings:
+      - "1. Pod maską"
+      - "2. Fotele"
+      - "3. Przekątne pojazdu"
+      - "4. Podsufitka"
+      - "5. Przednia szyba"
+      - "6. Bieżnik opony"
+      - "7. Bagażnik i wyposażenie"
+      - "8. Zegary"
+      - "9. Uwagi"
+    headings_in_order: true
+    vehicle_table:
+      present: true
+      required_labels: ["Marka i model", "Numer rejestracyjny", "Przebieg", "Data zwrotu"]
+      required_values:
+        Marka i model: "Nissan Qashqai"
+        Numer rejestracyjny: "WN 7020U"
+        Przebieg: "59 650 km"
+        Data zwrotu: "30.08.2026"
+    min_distinct_images: 15
+    signature_block_present: true
+
+  review:
+    total_comments: 10
+    exactly_one_comment_per_requirement: true
+    requirement_ids: [R-01, R-02, R-03, R-04, R-05, R-06, R-07, R-08, R-09, R-10]
+
+    # Invariants — asserted at 1.0, no tolerance. A violation is a contract
+    # breach, not a low score. (Plan: "Invariants are not scores".)
+    invariants:
+      every_comment_names_its_requirement: true    # "[R-nn]" present in text
+      every_comment_has_justification: true        # non-empty "Uzasadnienie:"
+      failing_comment_has_suggestion: true         # req 10
+      passing_comment_has_no_suggestion: true      # a pass needs no remedy
+      every_comment_has_source_reference: true     # "Źródło:" present
+      every_source_reference_resolves: true        # names a real R-nn
+      comment_anchored_to_governing_section: true  # not dumped at the document end
+
+    # The verdict set the run must arrive at. This is the correctness gate:
+    # getting these right is what "the form is complete in every aspect" means.
+    expected_verdicts:
+      R-01: fail
+      R-02: pass
+      R-03: pass
+      R-04: fail
+      R-05: pass
+      R-06: pass
+      R-07: pass
+      R-08: pass
+      R-09: pass
+      R-10: pass
+    verdict_counts: {pass: 8, fail: 2}
+    unverified_allowed: 0    # nothing here should exhaust its three attempts
+
+  # Per-requirement photo accounting. Purely structural: count what the manifest
+  # asked for against what the submission actually contains.
+  photo_coverage:
+    R-01: {required: 2, supplied: 1, satisfied: false}
+    R-02: {required: 4, supplied: 4, satisfied: true}
+    R-03: {required: 2, supplied: 2, satisfied: true}
+    R-04: {required: 2, supplied: 2, satisfied: false, note: "count met, constraint failed"}
+    R-05: {required: 1, supplied: 1, satisfied: true}
+    R-06: {required: 1, supplied: 1, satisfied: true}
+    R-07: {required: 1, supplied: 1, satisfied: true}
+    R-08: {required: 1, supplied: 1, satisfied: true}
+    R-09: {required: 1, supplied: 1, satisfied: true}
+    R-10: {required: 1, supplied: 1, satisfied: true}
+
+  # R-04 is the case that separates a real checker from a counter. The count is
+  # satisfied (2 of 2) and the requirement still fails. Any implementation that
+  # scores photo_coverage on counts alone passes R-04 and is wrong.
+  constraint_checks:
+    - requirement_id: R-04
+      kind: camera_position
+      value: between_front_seats
+      satisfied_by: ["1000040420.jpg"]
+      violated_by: ["IMG_20260830_132755 (5).jpg"]
+      decided_by: inventory.yaml    # until B11; then by the vision module
+
+  ingest:
+    files_received: 17
+    distinct_after_sha256_dedupe: 15
+    duplicate_pairs_collapsed: 2
+
+# ---------------------------------------------------------------------------
+# Where the two modes legitimately differ. Everything above is shared.
+# ---------------------------------------------------------------------------
+per_mode:
+
+  derivative:
+    input: input/derivative/form_supplied.docx
+    verdict_vocabulary: [pass, fail]
+    # The defining constraint of this mode: the client's body is not ours to fix.
+    client_body_unmodified: true
+    edits_outside_editable_regions: 0
+    body_text_matches_input_exactly: true
+
+  netnew:
+    input: input/netnew/client_inputs.yaml
+    verdict_vocabulary: [realised, shortfall]
+    # The defining capability of this mode: there was no document, so one was made.
+    document_generated_from_scaffold: true
+    scaffold_declares_own_regions: true
+    # Same two shortfalls surface — net-new does not get to paper over them by
+    # authoring around the gap.
+    expected_shortfalls: [R-01, R-04]
+
+# ---------------------------------------------------------------------------
+# Scoring. One number, and it is a count of violations, not a similarity.
+# ---------------------------------------------------------------------------
+scoring:
+  method: violation_count
+  pass_threshold: 0            # zero violations, or the run failed
+  report_fields: [violations, duration_seconds, input_tokens, output_tokens, model_id]
+  note: >
+    Deliberately not a similarity score against report_reviewed.docx. Byte or
+    text comparison against the golden document would fail on harmless wording
+    differences in the justifications while passing a document with the wrong
+    verdicts. The golden .docx is a reference for humans to eyeball; THIS file is
+    what the evaluator asserts.

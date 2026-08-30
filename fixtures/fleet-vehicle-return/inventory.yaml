@@ -1,0 +1,81 @@
+# Human-labelled ground truth: what each supplied file actually depicts.
+# This is the answer key the vision module (B11) will eventually be scored against.
+# Until B11 lands, it is what lets the derivative flow be evaluated with the
+# image understanding stubbed out — the labels stand in for the model's eyes.
+#
+# Vehicle: Nissan Qashqai, odometer 59 650 km.
+# NOTE: the number plate is legible in several frames. Decide whether to redact
+# before this repository is made public — see README.
+
+images:
+  - file: "IMG_20260830_132754 (4).jpg"
+    depicts: engine_bay
+    note: bonnet open, engine bay in full
+
+  - file: "IMG_20260830_132755 (1).jpg"
+    depicts: seat_front
+    note: front seat, passenger side
+
+  - file: "IMG_20260830_132755.jpg"
+    depicts: seat_front
+    note: front seat, driver side
+
+  - file: "IMG_20260830_132755 (2).jpg"
+    depicts: seat_rear
+    note: rear bench
+
+  - file: "IMG_20260830_132755 (3).jpg"
+    depicts: seat_rear
+    note: rear bench, second angle
+
+  - file: "IMG_20260830_132755 (10).jpg"
+    depicts: vehicle_diagonal
+    note: front three-quarter, front-left
+
+  - file: "IMG_20260830_132755 (9).jpg"
+    depicts: vehicle_diagonal
+    note: rear three-quarter
+
+  - file: "1000040420.jpg"
+    depicts: headliner
+    shot_from: between_front_seats      # <-- satisfies the positional constraint
+    note: both front headrests in frame, overhead console visible, full sweep to rear
+
+  - file: "IMG_20260830_132755 (5).jpg"
+    depicts: headliner
+    shot_from: beside_seat              # <-- VIOLATES the positional constraint
+    note: shot from a side position; only the rear section of the headliner is framed
+
+  - file: "IMG_20260830_132754.jpg"
+    depicts: windscreen_interior
+    note: from the cabin; dashboard and rear-view mirror in frame
+
+  - file: "IMG_20260830_132754 (1).jpg"
+    depicts: windscreen_exterior
+    note: from outside; occupant visible through the glass
+
+  - file: "IMG_20260830_132755 (4).jpg"
+    depicts: tyre_tread
+
+  - file: "1000040429.jpg"
+    depicts: boot
+    note: boot open, empty
+    exact_duplicate_of: "IMG_20260830_132755 (8).jpg"
+
+  - file: "IMG_20260830_132603.jpg"
+    depicts: boot_underfloor_equipment
+    note: spare wheel, tool kit, fire extinguisher, warning triangle
+    exact_duplicate_of: "IMG_20260830_132755 (7).jpg"
+
+  - file: "IMG_20260830_132754 (2).jpg"
+    depicts: instrument_cluster
+    note: >
+      59 650 km. Active warning on the display:
+      "Awaria skrzyni biegow - Niezwlocznie przeprowadz serwis"
+      (gearbox fault - service immediately). Condition-relevant.
+
+# Files delivered that are byte-identical copies of another file.
+# The submission contains 17 files but only 15 distinct images.
+exact_duplicate_pairs:
+  - ["1000040429.jpg", "IMG_20260830_132755 (8).jpg"]        # md5 e10cb99c...
+  - ["IMG_20260830_132603.jpg", "IMG_20260830_132755 (7).jpg"] # md5 d6018e83...
