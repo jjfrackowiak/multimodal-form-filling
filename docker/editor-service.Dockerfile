@@ -1,4 +1,4 @@
-# editor-service — the only service that calls a model. `pydantic-ai-slim[google,evals]`
+# editor-service — the only service that calls a model. Google ADK (`google-adk`)
 # lands with B8; python-docx must never appear here — the orchestrator (email-service)
 # parses documents into Nodes and hands them over as data, so a document library showing
 # up on this side means something has moved to the wrong service.

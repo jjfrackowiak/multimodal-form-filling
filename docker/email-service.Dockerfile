@@ -40,17 +40,23 @@ RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --frozen --no-dev --no-editable --package email-service
 
 # --- Architecture guard -----------------------------------------------------------------
-# pydantic-ai belongs to the editor service only. If it shows up here, something has moved
-# to the wrong side of the "only the editor calls a model" line and the build should fail
-# loudly rather than ship a quietly drifted image.
+# An agent framework belongs to the editor service only. If one shows up here, something
+# has moved to the wrong side of the "only the editor calls a model" line and the build
+# should fail loudly rather than ship a quietly drifted image.
+#
+# Both names are checked: google-adk is what the editor uses now, and pydantic-ai is
+# banned because pydantic-evals pins pydantic-ai-slim -- it is importable in the dev
+# environment, so only an explicit check stops it drifting into a service image.
 RUN set -eu; \
     deps="$(uv pip list --python "$UV_PROJECT_ENVIRONMENT/bin/python")"; \
     echo "$deps"; \
-    if echo "$deps" | grep -iq '^pydantic-ai'; then \
-        echo "ARCHITECTURE DRIFT: pydantic-ai must not appear in email-service." >&2; \
-        echo "The editor service is the only thing that calls a model." >&2; \
-        exit 1; \
-    fi
+    for banned in google-adk pydantic-ai; do \
+        if echo "$deps" | grep -iq "^$banned"; then \
+            echo "ARCHITECTURE DRIFT: $banned must not appear in email-service." >&2; \
+            echo "The editor service is the only thing that calls a model." >&2; \
+            exit 1; \
+        fi; \
+    done
 
 # ---------------------------------------------------------------------------------------
 # runtime
