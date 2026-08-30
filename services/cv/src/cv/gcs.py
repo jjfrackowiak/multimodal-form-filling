@@ -14,11 +14,7 @@ _DOWNLOAD_WORKERS = 8
 
 
 def _client() -> storage.Client:
-    project = (
-        os.environ.get("GOOGLE_CLOUD_PROJECT")
-        or os.environ.get("GCP_PROJECT")
-        or "local"
-    )
+    project = os.environ.get("GOOGLE_CLOUD_PROJECT") or os.environ.get("GCP_PROJECT") or "local"
     if os.environ.get("STORAGE_EMULATOR_HOST"):
         from google.auth.credentials import AnonymousCredentials
 
@@ -52,7 +48,7 @@ def download_uris(uris: list[str], dest: Path) -> list[tuple[str, Path]]:
     used: dict[str, int] = {}
     jobs: list[tuple[str, str]] = []
     for uri in uris:
-        bucket, path = parse_gs(uri)
+        _bucket, path = parse_gs(uri)
         if not is_supported_image(path):
             continue
         jobs.append((uri, _unique_name(path, used)))

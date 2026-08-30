@@ -26,7 +26,7 @@ fn-prepare           → prepared  (does not call CV)
 editor (when filled) → POST {CV_URL}/v1/inventory
 ```
 
-CV is a **tool**, not a job worker. Contract: [`../cv/integration_guide_CV.md`](../cv/integration_guide_CV.md).
+CV is a **tool**, not a job worker. Contract: [`../services/cv/integration_guide_CV.md`](../services/cv/integration_guide_CV.md).
 
 On GCP: `fn-prepare` is a Cloud Run **function** (or small service). `cv`, `email`, `editor` are Cloud Run **services**. Glue between prepare and the editor should be Cloud Tasks in production; locally it is HTTP.
 

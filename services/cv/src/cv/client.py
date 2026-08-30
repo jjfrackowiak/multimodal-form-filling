@@ -62,8 +62,7 @@ class CvClient:
         for item in images or []:
             refs.append(item if isinstance(item, ImageRef) else ImageRef(uri=item))
         reqs = [
-            r if isinstance(r, Requirement) else Requirement.model_validate(r)
-            for r in requirements
+            r if isinstance(r, Requirement) else Requirement.model_validate(r) for r in requirements
         ]
         body = InventoryRequest(
             images=refs,

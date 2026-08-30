@@ -59,7 +59,7 @@ services:
   cv:
     build:
       context: ..
-      dockerfile: cv/Dockerfile
+      dockerfile: services/cv/Dockerfile
     ports:
       - "8083:8080"
     environment:

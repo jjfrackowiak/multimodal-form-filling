@@ -1,11 +1,10 @@
 .git
 .venv
-cv/.venv
+**/.venv
 **/__pycache__
 **/*.pyc
 **/.DS_Store
-cv/reports
-cv/inventory.generated.yaml
+services/cv/reports
 example_images
 fixtures
 docs

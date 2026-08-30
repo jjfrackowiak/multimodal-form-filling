@@ -4,7 +4,7 @@ This is the production contract for the image / CV tool (req. 13). The AI editor
 calls it as a **Cloud Run HTTP tool**. Vision does **not** live inside the
 editor service.
 
-Canonical code: `cv/`. Deploy: `cv/DEPLOY.md`. In-process CLI: `python -m cv`.
+Canonical code: `services/cv/`. Deploy: `services/cv/DEPLOY.md`. CLI: `uv run python -m cv`.
 
 ## What it does
 
@@ -244,7 +244,7 @@ cd mock-firestore-app && docker compose up --build
 curl -s http://localhost:8083/health
 ```
 
-Compose builds `cv/Dockerfile` from the repo root, mounts ADC for Vertex, and
+Compose builds `services/cv/Dockerfile` from the repo root, mounts ADC for Vertex, and
 sets `CV_URL=http://cv:8080` on the **editor** stub. The editor `/runs`
 endpoint is still 501 — when it is filled in, that env is already the tool
 base URL. Compose does not require identity tokens.
@@ -255,7 +255,7 @@ still hits the real project via ADC.
 ## Local CLI (no Cloud Run)
 
 ```bash
-python -m cv fixtures/fleet-vehicle-return/images \
+uv run python -m cv fixtures/fleet-vehicle-return/input/netnew/WN-7020U \
   --requirements fixtures/fleet-vehicle-return/expected_requirements.yaml \
   --out /tmp/inventory.yaml
 ```
@@ -263,7 +263,7 @@ python -m cv fixtures/fleet-vehicle-return/images \
 Needs ADC (`gcloud auth application-default login`) on project
 `linen-badge-507111-r6`.
 
-Offline tests (no Vertex): `python -m cv.test_offline`
+Offline tests (no Vertex): `uv run pytest services/cv/tests -q`
 
 ## Latency / cost notes
 

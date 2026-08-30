@@ -24,10 +24,12 @@ resp = CvClient().inventory(
 )
 ```
 
+Layout matches the other Cloud Run services: `src/cv`, `tests/`, `Dockerfile`, `pyproject.toml`.
+
 ## Local CLI
 
 ```bash
-python -m cv fixtures/fleet-vehicle-return/input/netnew/WN-7020U \
+uv run python -m cv fixtures/fleet-vehicle-return/input/netnew/WN-7020U \
   --requirements fixtures/fleet-vehicle-return/expected_requirements.yaml \
   --out /tmp/inventory.yaml
 ```
@@ -44,4 +46,4 @@ inv = build_inventory(list_images(dir), load_checklist(yaml_path))
 
 Production callers use HTTP so the editor does not embed Vertex.
 
-Offline: `python -m cv.test_offline`
+Offline: `uv run pytest services/cv/tests -q`

@@ -12,7 +12,8 @@ __pycache__/
 *.egg-info/
 .pytest_cache/
 .venv/
-cv/.venv/
+# Old CV path leftover (.venv) after the move to services/cv
+/cv/
 venv/
 .venv-fixture/
 .coverage

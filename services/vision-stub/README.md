@@ -30,5 +30,5 @@ curl -s -X POST localhost:8099/v1/describe \
 The real service implements the same single route and the same payloads. Nothing
 in the editor changes — it depends on the `VisionTool` Protocol, not on this.
 
-The real service is repo-root `cv/` (`POST /v1/inventory`, same `{images, requirements}`
+The real service is `services/cv/` (`POST /v1/inventory`, same `{images, requirements}`
 payload). Hits + per-id `constraint_ok` replace a frozen `depicts` / `shot_from` enum.

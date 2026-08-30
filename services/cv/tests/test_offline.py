@@ -19,7 +19,7 @@ from cv.schema import (
 )
 from cv.service import _collect_uris, _job_adapter_enabled, health, inventory, process_job
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[3]
 FLEET_IMAGES = ROOT / "fixtures/fleet-vehicle-return/input/netnew/WN-7020U"
 
 
@@ -29,9 +29,7 @@ def _req(**kwargs) -> InventoryRequest:
         [Requirement(id="R-01", text="front")],
     )
     images = kwargs.pop("images", [])
-    refs = [
-        img if isinstance(img, ImageRef) else ImageRef(uri=img) for img in images
-    ]
+    refs = [img if isinstance(img, ImageRef) else ImageRef(uri=img) for img in images]
     return InventoryRequest(images=refs, requirements=requirements, **kwargs)
 
 

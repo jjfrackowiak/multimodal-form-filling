@@ -3,7 +3,7 @@
 Editor calls `POST /v1/inventory` (JSON). Runtime SA needs Vertex + Storage.
 Contract: [`integration_guide_CV.md`](integration_guide_CV.md).
 
-Build from **repo root** (Dockerfile copies `cv/`):
+Build from **repo root** (Dockerfile copies `services/cv`):
 
 ```bash
 PROJECT=linen-badge-507111-r6
@@ -11,7 +11,7 @@ REGION=europe-central2
 REPO=app
 IMG=$REGION-docker.pkg.dev/$PROJECT/$REPO/cv:v1
 
-gcloud builds submit --tag "$IMG" -f cv/Dockerfile .
+gcloud builds submit --tag "$IMG" -f services/cv/Dockerfile .
 
 gcloud run deploy cv \
   --image "$IMG" \

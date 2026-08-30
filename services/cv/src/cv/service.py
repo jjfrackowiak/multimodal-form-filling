@@ -14,7 +14,13 @@ from fastapi import FastAPI, HTTPException, Request
 from cv.gcs import download_uris, list_prefix, parse_gs
 from cv.images import check_image_name
 from cv.pipeline import build_inventory
-from cv.schema import Inventory, InventoryImage, InventoryRequest, InventoryResponse, ParsedChecklist
+from cv.schema import (
+    Inventory,
+    InventoryImage,
+    InventoryRequest,
+    InventoryResponse,
+    ParsedChecklist,
+)
 from cv.vertex import LOCATION, MODEL, PROJECT
 
 log = logging.getLogger("cv")
@@ -155,7 +161,7 @@ def process_job(body: dict) -> dict:
     """Local mock glue only. Production editor calls POST /v1/inventory."""
     if not _job_adapter_enabled():
         raise HTTPException(404, "job adapter disabled; use POST /v1/inventory")
-    from datetime import datetime, timezone
+    from datetime import UTC, datetime
 
     from google.cloud import firestore
 
@@ -170,7 +176,7 @@ def process_job(body: dict) -> dict:
     if not snap.exists:
         raise HTTPException(404, "job not found")
     data = snap.to_dict() or {}
-    now = datetime.now(timezone.utc).isoformat()
+    now = datetime.now(UTC).isoformat()
     ref.update({"status": "processing", "step": "process", "updatedAt": now, "error": None})
 
     checklist_raw = data.get("checklist")
@@ -207,7 +213,7 @@ def process_job(body: dict) -> dict:
                 "step": "process",
                 "result": payload,
                 "duration_seconds": round(time.perf_counter() - t0, 3),
-                "updatedAt": datetime.now(timezone.utc).isoformat(),
+                "updatedAt": datetime.now(UTC).isoformat(),
                 "error": None,
             }
         )
@@ -218,7 +224,7 @@ def process_job(body: dict) -> dict:
                 "status": "failed",
                 "step": "process",
                 "error": str(e),
-                "updatedAt": datetime.now(timezone.utc).isoformat(),
+                "updatedAt": datetime.now(UTC).isoformat(),
             }
         )
         raise HTTPException(502, str(e)) from e
