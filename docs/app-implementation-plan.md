@@ -459,6 +459,68 @@ Image weight is a deployment concern and deployment is not ours, which is exactl
 this belongs in the plan: we are the ones who decide what goes in the image, and the
 people who pay for it are not in this repo.
 
+## The mailbox
+
+### Locally — GreenMail, not Mailpit
+
+An earlier draft of this plan said Mailpit. That was wrong: **Mailpit is SMTP-only for
+receiving and speaks no IMAP**, so the inbound poller — the entire receiving half of the
+email service — cannot be developed against it. GreenMail serves both.
+
+```bash
+docker compose -f docker/compose.dev.yaml up -d
+python scripts/verify_mailbox.py
+```
+
+| Protocol | Port |
+|---|---|
+| SMTP | 3025 |
+| IMAP | 3143 |
+| SMTPS / IMAPS | 3465 / 3993 |
+| REST API | 8080 |
+
+GreenMail's standard +3000 offset means nothing collides with a real mail client or a
+system MTA on the same machine. Auth is disabled in the dev compose, so any
+user/password authenticates and the mailbox is created on first use — no account setup,
+and obviously never anywhere near a real deployment.
+
+`scripts/verify_mailbox.py` sends a message with an attachment and retrieves it over
+IMAP, asserting that both the attachment and the Polish characters survive. Run it
+before debugging the email service: it separates "our code is wrong" from "the mailbox
+is not up", which are otherwise easy to confuse and expensive to conflate.
+
+### What actually needs a real mailbox
+
+Almost nothing. The `MailTransport` Protocol (B4) ships an in-memory fake, so intake
+rules, reply templates, delivery, threading and idempotency are all testable with no
+mail server at all. GreenMail exists for **E1 only** — the end-to-end run that proves
+the real IMAP and SMTP code paths work against something that speaks the actual
+protocols.
+
+That ordering matters for the branch plan: B3, B13 and the orchestrator never need a
+mailbox, so none of them wait on one.
+
+### In production
+
+A Gmail account with an **App Password** is the quickest real mailbox: enable 2-Step
+Verification, generate an app password, and use it as `IMAP_PASSWORD` / `SMTP_PASSWORD`
+against `imap.gmail.com:993` and `smtp.gmail.com:587`. Plain account passwords stopped
+working when Google withdrew "less secure app access", so the app password is not
+optional.
+
+Two caveats worth knowing before committing to Gmail:
+
+- **Gmail refuses attachments over 25 MB.** The fixture's single reviewed document is
+  2.8 MB, so a multi-form job clears that quickly — which is why delivery (B13) falls
+  back to a signed link above a threshold rather than treating attachment as the only
+  path.
+- **Gmail's IMAP folders are labels, not folders**, and `\Seen` semantics differ subtly
+  from a conventional server. The poller's idempotency is keyed on `Message-ID` rather
+  than on read state precisely so this does not matter.
+
+A dedicated provider (Fastmail, Zoho, Migadu) avoids both quirks and is worth it if this
+outlives the hackathon.
+
 ## State & persistence
 
 Req 12 says the artifact lives "outside any single agent run". In-process that's a Python object — but across an HTTP boundary, a retry, a crash, or a second replica, an in-process object is gone. It needs a store, and that store is also what finally gives **D2** (job status after confirmation) something to report.
