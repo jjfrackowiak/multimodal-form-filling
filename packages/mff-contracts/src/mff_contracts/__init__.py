@@ -14,6 +14,7 @@ from .blobs import BlobRef, ImageAnalysis, JobImage, RequirementSpec
 from .compiled import CompiledForm, RenderMap, RunSpan
 from .docmodel import DraftOp, Entry, FormDraft, Node, Section
 from .jobs import (
+    ClientInputs,
     IntakeProblem,
     IntakeVerdict,
     JobCursor,
@@ -35,6 +36,7 @@ __all__ = [
     "ArtifactRepository",
     "BlobRef",
     "BlobStore",
+    "ClientInputs",
     "CompiledForm",
     "DerivativeArtifact",
     "DraftOp",

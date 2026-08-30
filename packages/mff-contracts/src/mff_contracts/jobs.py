@@ -13,12 +13,13 @@ from __future__ import annotations
 from enum import StrEnum
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from .blobs import BlobRef, JobImage
 from .requirements import Requirement
 
 __all__ = [
+    "ClientInputs",
     "IntakeProblem",
     "IntakeVerdict",
     "JobCursor",
@@ -47,10 +48,14 @@ class IntakeVerdict(BaseModel):
 
 
 class RequestRecord(BaseModel):
-    """The email — owns delivery."""
+    """The email — owns delivery.
+
+    The manifest always comes from the email body, never from an attachment. A request is
+    a bag of work items, and each item (`JobRequest`) knows its own mode — a single email
+    can carry both derivative and net-new jobs at once, so no request-level mode exists.
+    """
 
     request_id: str
-    mode: Mode
     manifest_raw: str
     requirements: list[Requirement] = Field(default_factory=list)  # parsed ONCE per request
     job_ids: list[str] = Field(default_factory=list)  # one per form
@@ -59,16 +64,43 @@ class RequestRecord(BaseModel):
     status: Literal["running", "delivered", "failed"]
 
 
+class ClientInputs(BaseModel):
+    """One set of net-new inputs — one folder inside the net-new zip."""
+
+    set_id: str  # the folder name; the client's own label
+    texts: dict[str, str] = Field(default_factory=dict)  # filename -> UTF-8 content
+
+
 class JobRequest(BaseModel):
-    """orchestrator -> runner. ONE form."""
+    """orchestrator -> runner. ONE form.
+
+    `mode` is per-job — the authority on what kind of work this is — and the model
+    validator below keeps it structurally paired with the right payload: derivative jobs
+    carry `form` and never `inputs`; net-new jobs carry `inputs` and never `form`.
+    """
 
     job_id: str
     request_id: str
     mode: Mode
-    form: BlobRef | None = None  # None for net-new: nothing supplied
-    form_id: str
+    form_id: str  # .docx filename, or input folder name
+    form: BlobRef | None = None  # derivative only
+    inputs: ClientInputs | None = None  # net-new only
     requirements: list[Requirement] = Field(default_factory=list)  # already filtered by applies_to
     images: list[JobImage] = Field(default_factory=list)  # already scoped to this form
+
+    @model_validator(mode="after")
+    def _mode_matches_payload(self) -> JobRequest:
+        if self.mode == Mode.DERIVATIVE:
+            if self.form is None:
+                raise ValueError("JobRequest: mode is derivative but form is not set")
+            if self.inputs is not None:
+                raise ValueError("JobRequest: mode is derivative but inputs is set")
+        elif self.mode == Mode.NET_NEW:
+            if self.inputs is None:
+                raise ValueError("JobRequest: mode is net_new but inputs is not set")
+            if self.form is not None:
+                raise ValueError("JobRequest: mode is net_new but form is set")
+        return self
 
 
 class RequestAccepted(BaseModel):
