@@ -19,6 +19,14 @@ dev = [
     "ruff>=0.7",
     "mypy>=1.13",
     "import-linter>=2.1",
+    # fixtures/fleet-vehicle-return/check_output.py (the reference evaluator every
+    # brief is told to run) imports docx directly. It is a standalone dev-time
+    # script, not a package, so this is a workspace dev dependency rather than
+    # something any single package should carry — mirrors pytest/ruff/mypy above.
+    # Not a violation of the "mff_contracts depends on pydantic and nothing else" /
+    # "python-docx must not appear in the editor" rules: those bind package source
+    # under packages/ and services/, not this repo-root dev tooling group.
+    "python-docx>=1.1",
 ]
 
 # ---------------------------------------------------------------------------
@@ -87,6 +95,12 @@ ignore_missing_imports = true
 # Only mff-docmodel's tests reach for it directly, to manipulate word/document.xml for the
 # byte-identical-body assertion (B1).
 module = "lxml.*"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+# B12: google-cloud-storage ships no py.typed (unlike google-cloud-firestore, which does),
+# so it is unresolved under mypy --strict regardless of import style.
+module = ["google.cloud.storage", "google.cloud.storage.*"]
 ignore_missing_imports = true
 
 # ---------------------------------------------------------------------------
@@ -169,6 +183,25 @@ forbidden_modules = ["pydantic_ai", "anthropic", "openai", "google", "vertexai",
 # placeholder calls no model at all. When the real service lands and imports one, give it
 # an `ignore_imports` entry or drop it from `source_modules`; do NOT strip its dependency
 # to match the editor, and do not report it as drift.
+#
+# B12: banning "google" also bans `google.cloud.firestore` / `google.cloud.storage` /
+# `google.auth`, which are not model libraries and are exactly what mff-store needs to
+# talk to Firestore and GCS. Two things about this tool matter here:
+#   1. The "forbidden" contract rejects a dotted external module (e.g.
+#      "google.generativeai") outright -- "subpackages of external packages are not
+#      valid" -- so narrowing the ban to just the Gemini/Vertex modules is not an
+#      option it supports.
+#   2. Because "google" is not itself one of this project's `root_packages`,
+#      `include_external_packages` collapses every import of it down to the top-level
+#      "google" module regardless of which submodule was actually imported -- so the
+#      exemption below has to target "google", not "google.cloud.firestore" /
+#      "google.cloud.storage" / "google.auth.credentials" (which is what the actual
+#      import statements name, and what a narrower, matching ignore would look like if
+#      grimp tracked external submodules by default).
+ignore_imports = [
+    "mff_store.firestore_store -> google",
+    "mff_store.gcs -> google",
+]
 
 # ---------------------------------------------------------------------------
 # coverage — per-package, not global (see Makefile). Protocol method bodies
