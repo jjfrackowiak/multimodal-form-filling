@@ -48,7 +48,7 @@ def _artifact() -> DerivativeArtifact:
         Node(id="n-1", kind="paragraph", text="Engine bay", parent_id=None),
         Node(id="n-2", kind="image", text="", parent_id="n-1", image_sha256="deadbeef"),
     ]
-    return DerivativeArtifact(form_id="form-1", source=SOURCE, nodes=nodes)
+    return DerivativeArtifact(job_id="j-1", form_id="form-1", source=SOURCE, nodes=nodes)
 
 
 def test_comments_are_appended_nodes_and_source_are_the_same_objects() -> None:

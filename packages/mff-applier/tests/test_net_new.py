@@ -21,7 +21,7 @@ BLOB_2 = BlobRef(uri="gs://b/y.jpg", content_type="image/jpeg", size_bytes=200, 
 
 
 def _artifact(sections: list[Section]) -> NetNewArtifact:
-    return NetNewArtifact(form_id="WN-7020U", draft=FormDraft(sections=sections))
+    return NetNewArtifact(job_id="j-1", form_id="WN-7020U", draft=FormDraft(sections=sections))
 
 
 def _draft(artifact: Artifact) -> FormDraft:
@@ -225,6 +225,7 @@ def test_delete_outside_scope_is_rejected_not_applied() -> None:
 def test_deleting_a_comment_anchored_entry_is_refused_and_names_the_comment() -> None:
     entry = Entry(id="e-1", order="a0", value="headliner shot", set_by="R-04")
     artifact = NetNewArtifact(
+        job_id="j-1",
         form_id="WN-7020U",
         draft=FormDraft(sections=[Section(id="s", title="s", entries=[entry])]),
         comments=[
@@ -267,6 +268,7 @@ def test_deleting_an_entry_anchored_by_a_comment_in_the_same_report_is_also_refu
 def test_deleting_an_entry_with_no_anchored_comment_succeeds() -> None:
     entry = Entry(id="e-1", order="a0", value="x", set_by="R-04")
     artifact = NetNewArtifact(
+        job_id="j-1",
         form_id="WN-7020U",
         draft=FormDraft(sections=[Section(id="s", title="s", entries=[entry])]),
         comments=[
@@ -289,6 +291,7 @@ def test_deleting_an_entry_with_no_anchored_comment_succeeds() -> None:
 def test_document_level_comments_do_not_protect_any_entry() -> None:
     entry = Entry(id="e-1", order="a0", value="x", set_by="R-04")
     artifact = NetNewArtifact(
+        job_id="j-1",
         form_id="WN-7020U",
         draft=FormDraft(sections=[Section(id="s", title="s", entries=[entry])]),
         comments=[

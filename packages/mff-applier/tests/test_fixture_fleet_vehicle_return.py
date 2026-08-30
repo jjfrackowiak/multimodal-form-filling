@@ -125,6 +125,7 @@ def test_two_sequential_slices_of_real_review_comments_accumulate_on_the_form() 
     slice_1, slice_2 = manifest.slices()
 
     artifact = DerivativeArtifact(
+        job_id="j-1",
         form_id="form_supplied",
         source=SOURCE,
         nodes=[Node(id=f"node-R-{n:02d}", kind="paragraph", text="") for n in range(1, 11)],
@@ -173,7 +174,7 @@ _R02_PHOTOS = [
 
 def test_r02s_four_seat_photographs_are_built_by_four_appends() -> None:
     section = Section(id="seats", title="Fotele", entries=[])
-    artifact = NetNewArtifact(form_id="WN-7020U", draft=FormDraft(sections=[section]))
+    artifact = NetNewArtifact(job_id="j-1", form_id="WN-7020U", draft=FormDraft(sections=[section]))
 
     ops = [
         DraftOp(

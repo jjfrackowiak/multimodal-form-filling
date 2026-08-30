@@ -29,7 +29,9 @@ def test_appends_never_change_a_pre_existing_entrys_order_string() -> None:
     for trial in range(40):
         n = rng.randint(1, 60)
         artifact = NetNewArtifact(
-            form_id="f", draft=FormDraft(sections=[Section(id="s", title="s", entries=[])])
+            job_id="j-1",
+            form_id="f",
+            draft=FormDraft(sections=[Section(id="s", title="s", entries=[])]),
         )
         seen_ids: set[str] = set()
         for i in range(n):
