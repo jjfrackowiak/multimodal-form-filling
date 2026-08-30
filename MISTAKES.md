@@ -4,7 +4,7 @@
 
 **What went wrong:** `schema.py` froze 11 `depicts` values from the Qashqai fixture. A new manifest (VIN plate, 4 tyres, …) would not change CV behaviour.
 
-**Prevention:** CV inputs are **`manifest.txt` + images** only. Do not require `expected_requirements.yaml` (that is an L1 eval artifact, not a product file). CV parses the manifest itself.
+**Prevention:** CV has **three** inputs: `expected_requirements.yaml` (documentation checklist / what to extract), `manifest.txt` (list of images provided), and the photo files. Do not treat the manifest as the look-for list.
 
 
 ## 2026-08-30 — GCP is Terraform later
