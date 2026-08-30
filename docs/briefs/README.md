@@ -4,6 +4,7 @@ One brief per branch. Each is the complete specification for one agent working i
 isolated worktree, and each names the directories it owns so ten can run without colliding.
 
 `docs/app-implementation-plan.md` is the design; these are the work orders.
+**[`CONTEXT.md`](CONTEXT.md)** is the shared preamble every brief assumes — read it once.
 
 ## Order
 
@@ -13,7 +14,7 @@ isolated worktree, and each names the directories it owns so ten can run without
 |---|---|---|
 | [B0](B0-scaffold-contracts.md) | `feat/scaffold-contracts` | workspace, CI, **frozen `mff-contracts`** |
 
-**Layer 1 — all ten branch from B0 and run in parallel**
+**Layer 1 — ten branches, but not ten-wide. See the dependency note below.**
 
 | | Branch | Owns | Needs a key? |
 |---|---|---|---|
@@ -27,6 +28,27 @@ isolated worktree, and each names the directories it owns so ten can run without
 | [B13](B13-delivery.md) | `feat/delivery` | the results email | no |
 | [B8](B8-llm-config.md) | `feat/llm-config` | Gemini wiring, `/slices:run`, the retry loop | smoke test only |
 | [B10](B10-docker.md) | `feat/docker` | images and compose | no |
+
+### Dispatch order
+
+An earlier version of this page called Layer 1 "fully parallel". That was wrong, and two
+couplings are real:
+
+**`InboundMessage` / `OutboundMessage` are defined in B4**, and both B3 and B13 consume
+them. Starting those before B4 lands means two branches inventing the same types.
+
+**`services/email-service/pyproject.toml` is one file that B3, B4, B5 and B13 all need to
+edit** to add their dependencies. That conflict is unavoidable; keep each edit to one line.
+
+```
+wave 1   B14  B1  B12  B2  B10        genuinely independent — own package only
+wave 2   B4                            defines the transport types
+wave 3   B3  B13  B5                   consume them; B5 also wants B12/B14/B1 stubs
+```
+
+B5 can start in wave 1 against Protocols alone if you want it early — it is designed to
+test with a fake runner and no other service — but its integration tests want the real
+adapters.
 
 **Layer 2 — needs B1, B14, B8**
 

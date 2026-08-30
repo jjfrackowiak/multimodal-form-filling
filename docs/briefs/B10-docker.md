@@ -4,6 +4,10 @@
 **Depends on:** B0 (merged). Works against skeletons if the services are not built yet.
 **Needs:** Docker. No GCP account, no credentials.
 
+
+**Read [`CONTEXT.md`](CONTEXT.md) first** — what the system does, what B0 left on disk,
+the contract surface, and the fixture. This brief assumes it.
+
 ---
 
 ## What you are building

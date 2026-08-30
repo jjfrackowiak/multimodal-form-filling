@@ -5,6 +5,10 @@
 has not landed, define the Protocol you need and expect a small merge.
 **Needs:** nothing. No key, no mailbox, no Docker.
 
+
+**Read [`CONTEXT.md`](CONTEXT.md) first** — what the system does, what B0 left on disk,
+the contract surface, and the fixture. This brief assumes it.
+
 ---
 
 ## What you are building

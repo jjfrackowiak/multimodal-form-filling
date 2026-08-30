@@ -4,6 +4,10 @@
 **Depends on:** B0 (merged). Nothing else.
 **Needs:** no API key, no GCP, no mailbox. `python-docx >= 1.2` and Pillow.
 
+
+**Read [`CONTEXT.md`](CONTEXT.md) first** — what the system does, what B0 left on disk,
+the contract surface, and the fixture. This brief assumes it.
+
 ---
 
 ## What you are building

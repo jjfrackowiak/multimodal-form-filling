@@ -4,6 +4,10 @@
 **Depends on:** B0 (merged). B4's transport Protocol and fake.
 **Needs:** nothing. Develops entirely against the in-memory transport.
 
+
+**Read [`CONTEXT.md`](CONTEXT.md) first** — what the system does, what B0 left on disk,
+the contract surface, and the fixture. This brief assumes it.
+
 ---
 
 ## What you are building

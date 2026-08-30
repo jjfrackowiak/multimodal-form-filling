@@ -6,6 +6,10 @@ Protocols and a stub applier and expect a small merge.
 **Needs:** nothing. It is designed to be testable with no editor service, no mailbox and no
 credentials.
 
+
+**Read [`CONTEXT.md`](CONTEXT.md) first** — what the system does, what B0 left on disk,
+the contract surface, and the fixture. This brief assumes it.
+
 ---
 
 ## What you are building
