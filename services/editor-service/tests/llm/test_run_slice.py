@@ -9,14 +9,13 @@ correctly; this module is entirely about `run_slice`'s own retry lifecycle.
 
 from __future__ import annotations
 
+from golden import GOLDEN_REQUIREMENTS, golden_artifact, golden_slice_request, make_comment
 from google.adk.agents import LlmAgent
-from mff_fakes import FakeLlm
 
 from editor_service.llm.deps import EditorDeps
 from editor_service.llm.output import SliceTurnOutput
 from editor_service.llm.run import run_slice
-
-from golden import GOLDEN_REQUIREMENTS, golden_artifact, golden_slice_request, make_comment
+from mff_fakes import FakeLlm
 
 REQUIREMENT_IDS = [r.id for r in GOLDEN_REQUIREMENTS]
 
@@ -102,7 +101,9 @@ async def test_settled_answer_never_revisited() -> None:
     turn1 = SliceTurnOutput(comments=[original_r01])  # R-02 left pending on purpose
 
     changed_r01 = make_comment(
-        "R-01", verdict="fail", justification="Attempt 2 changed its mind — must be ignored.",
+        "R-01",
+        verdict="fail",
+        justification="Attempt 2 changed its mind — must be ignored.",
         suggestion="Retake the photo.",
     )
     turn2 = SliceTurnOutput(comments=[changed_r01, make_comment("R-02")])

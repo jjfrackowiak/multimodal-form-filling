@@ -74,10 +74,10 @@ class Settings:
                 "construction, not later on the first model call."
             )
 
-        location = source.get("GOOGLE_CLOUD_LOCATION", _DEFAULT_LOCATION).strip() or _DEFAULT_LOCATION
-        use_enterprise = _parse_bool(
-            source.get("GOOGLE_GENAI_USE_ENTERPRISE"), default=True
+        location = (
+            source.get("GOOGLE_CLOUD_LOCATION", _DEFAULT_LOCATION).strip() or _DEFAULT_LOCATION
         )
+        use_enterprise = _parse_bool(source.get("GOOGLE_GENAI_USE_ENTERPRISE"), default=True)
         editor_model_id = source.get("EDITOR_MODEL_ID", "").strip() or _DEFAULT_EDITOR_MODEL_ID
         parser_model_id = source.get("PARSER_MODEL_ID", "").strip() or _DEFAULT_PARSER_MODEL_ID
 

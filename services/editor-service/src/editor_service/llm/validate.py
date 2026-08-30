@@ -17,9 +17,8 @@ after every attempt, and `tests/llm/test_run_slice.py::test_settled_answer_never
 
 from __future__ import annotations
 
-from mff_contracts import Anchor, Artifact, DerivativeArtifact, NetNewArtifact, ReviewComment
-
 from editor_service.llm.output import SliceTurnOutput
+from mff_contracts import Anchor, Artifact, DerivativeArtifact, ReviewComment
 
 __all__ = ["validate"]
 
@@ -36,7 +35,9 @@ def validate(
     did not (with a human-readable reason to feed back into `prompts.retry_prompt`).
     """
     by_id = {
-        comment.requirement_id: comment for comment in output.comments if comment.requirement_id in pending
+        comment.requirement_id: comment
+        for comment in output.comments
+        if comment.requirement_id in pending
     }
     passed: dict[str, ReviewComment] = {}
     errors: dict[str, str] = {}

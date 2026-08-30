@@ -4,8 +4,8 @@ never constructs a model client."""
 from __future__ import annotations
 
 import pytest
+from golden import GOLDEN_REQUIREMENTS, golden_slice_request, make_comment
 from google.adk.agents import LlmAgent
-from mff_fakes import FakeLlm
 from starlette.testclient import TestClient
 
 from editor_service.api.deps import get_slice_runner
@@ -14,8 +14,7 @@ from editor_service.llm.output import SliceTurnOutput
 from editor_service.llm.run import run_slice
 from editor_service.main import create_app
 from mff_contracts import SliceReport, SliceRequest
-
-from golden import GOLDEN_REQUIREMENTS, golden_artifact, golden_slice_request, make_comment
+from mff_fakes import FakeLlm
 
 
 def test_healthz_does_not_require_credentials(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -47,9 +46,7 @@ def test_unwired_slice_runner_names_what_is_missing() -> None:
     """Before B6/B7 wire a real flow, the default dependency fails clearly rather than
     silently building an agent with an invented instruction."""
     client = TestClient(create_app(), raise_server_exceptions=False)
-    response = client.post(
-        "/slices:run", json=golden_slice_request().model_dump(mode="json")
-    )
+    response = client.post("/slices:run", json=golden_slice_request().model_dump(mode="json"))
     assert response.status_code == 500
 
 

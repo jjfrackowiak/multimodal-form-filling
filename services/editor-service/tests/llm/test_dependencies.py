@@ -22,5 +22,5 @@ def test_banned_sdk_not_importable(module_name: str) -> None:
 
 def test_google_adk_and_genai_are_importable() -> None:
     """The base install itself must work — a suite full of skips would prove nothing."""
-    import google.adk  # noqa: F401
+    import google.adk
     import google.genai  # noqa: F401

@@ -7,17 +7,16 @@ wiring into `run_slice`/`App` was still broken).
 
 from __future__ import annotations
 
+from golden import GOLDEN_REQUIREMENTS, golden_artifact, golden_slice_request, make_comment
 from google.adk.agents import LlmAgent
 from google.adk.models.llm_response import LlmResponse
 from google.genai import types
-from mff_fakes import FakeLlm
 
 from editor_service.llm.deps import EditorDeps
 from editor_service.llm.output import SliceTurnOutput
 from editor_service.llm.plugins import UsagePlugin
 from editor_service.llm.run import run_slice
-
-from golden import GOLDEN_REQUIREMENTS, golden_artifact, golden_slice_request, make_comment
+from mff_fakes import FakeLlm
 
 TWO_REQUIREMENTS = GOLDEN_REQUIREMENTS[:2]  # R-01, R-02
 
@@ -34,7 +33,9 @@ async def test_usage_totals_and_budget_short_circuit() -> None:
     turn1 = LlmResponse(
         content=types.Content(
             role="model",
-            parts=[types.Part(text=SliceTurnOutput(comments=[make_comment("R-01")]).model_dump_json())],
+            parts=[
+                types.Part(text=SliceTurnOutput(comments=[make_comment("R-01")]).model_dump_json())
+            ],
         ),
         usage_metadata=types.GenerateContentResponseUsageMetadata(total_token_count=1500),
     )

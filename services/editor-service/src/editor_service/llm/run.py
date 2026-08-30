@@ -65,7 +65,7 @@ async def run_slice(req: SliceRequest, deps: EditorDeps) -> SliceReport:
     message = initial_prompt(req)
     attempt = 0
 
-    for attempt in range(1, MAX_ATTEMPTS + 1):
+    for attempt in range(1, MAX_ATTEMPTS + 1):  # noqa: B007 - read after the loop, for attempts_used
         output, turn_error = await _one_turn(runner, req, message)
 
         if output is None:
@@ -106,7 +106,7 @@ async def _one_turn(
             user_id=req.job_id, session_id=req.slice_id, new_message=content
         ):
             final_event = event
-    except Exception as exc:  # noqa: BLE001 - the run boundary; nothing may escape it
+    except Exception as exc:
         return None, f"{type(exc).__name__}: {exc}"
 
     if final_event is None or final_event.content is None or not final_event.content.parts:
