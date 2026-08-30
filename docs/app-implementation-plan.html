@@ -475,7 +475,8 @@ flowchart TD
 <pre class="mermaid">
 %%{init:{"theme":"base","themeVariables":{"fontFamily":"JetBrains Mono, ui-monospace, monospace","fontSize":"13px","primaryColor":"#ffffff","primaryTextColor":"#16191d","primaryBorderColor":"#155e63","lineColor":"#5f6b78","tertiaryColor":"#f6f7f8"}}}%%
 flowchart TD
-    P["PARSE_MANIFEST"] --> PLAN["PLAN SLICES<br/>disjoint requirement sets"]
+    P["PARSE_MANIFEST"] --> FORM["for each form — SEQUENTIAL<br/>filtered by applies_to"]
+    FORM --> PLAN["PLAN SLICES<br/>disjoint requirement sets"]
     PLAN --> SEED["SEED ARTIFACT<br/>parse docx, or generate scaffold"]
     SEED --> F1["editor instance<br/>slice A"]
     SEED --> F2["editor instance<br/>slice B"]
@@ -489,11 +490,22 @@ flowchart TD
     V -->|ok| AP["APPLY SERIALLY<br/>slice order · conflict detection"]
     U --> AP
     AP --> RND["RENDER_DOCX + comments"]
-    RND --> DEL["delivery reply — req 10"]
+    RND --> MORE{"more forms?"}
+    MORE -->|yes| FORM
+    MORE -->|no| DEL["delivery reply<br/>one document per form"]
 </pre>
         </div>
         <figcaption>Fig. 2 — reasoning fans out; writing funnels back into one ordered place.</figcaption>
       </figure>
+
+      <h3>Forms are processed one at a time</h3>
+      <p>Req 2 allows a request to carry several forms. <strong>They are handled in a sequential loop, one form at a time.</strong> Parallelism exists only <em>within</em> a form, across its requirement slices.</p>
+      <div class="callout">
+        <span class="tag">This is what makes the contract coherent</span>
+        <p>An earlier draft had <code>JobRequest.forms</code> as a list while <code>Artifact</code> carried a single <code>doc_id</code> and <code>ReviewComment</code> had no form dimension at all — a shape that cannot express req 10's "one comment per requirement <em>per form</em>". Freezing that into <code>mff-contracts</code> would have had every Layer-1 branch build single-document and discover it at B9.</p>
+      </div>
+      <p>The loop resolves it without adding a dimension anywhere. <strong>One <code>Artifact</code> per form</strong> — <code>doc_id</code> identifies it and comments live inside their own artifact, so form scope is structural rather than a field that must be set correctly everywhere. <strong><code>Requirement.applies_to</code> is the filter</strong>, and it already exists. Everything downstream keeps the shape it has.</p>
+      <p>The cost is wall-clock: a three-form job takes roughly three times a one-form job. That is the right trade for now — the parallelism that matters is across requirements, and form-level concurrency can be added later without changing any of these types.</p>
 
       <h3>Why the writes are serialised</h3>
       <p>Every editor instance receives a <strong>read-only snapshot</strong> of the artifact plus its own slice, and returns a <code>SliceReport</code> of <em>proposed</em> edits and comments. No instance writes to the document, or to the store.</p>
@@ -504,7 +516,33 @@ flowchart TD
         <p><strong>Conflicts become visible.</strong> The applier holds every proposal before writing anything, so two slices targeting the same <code>line_id</code> is a detectable event rather than a silent last-write-wins.</p>
       </div>
       <p>That second point is a real gain against concern <strong>D3</strong>. Contradictory requirements were previously invisible by construction — each agent saw only its own slice and nothing compared them. Fan-in gives the one moment where all proposals coexist, which is the only place a cross-slice contradiction <em>can</em> be caught. It does not solve D3 — two requirements can contradict in meaning while touching different lines — but it converts the line-level case from undetectable to detectable.</p>
-      <p>Req 12 still holds: each run gets a live <code>Artifact</code> it may mutate freely at any point. It is a snapshot, and the orchestrator merges the resulting edit list.</p>
+      <h3>Where validation sits</h3>
+      <p>Req 12 is satisfied literally, not reinterpreted: <strong>inside a run the agent has a live Python <code>Artifact</code> object and mutates it freely at any point</strong>, including between tool calls. Nothing is gated during reasoning — the agent can experiment, revise its own work and change its mind. The gate is at the <strong>exit</strong>, not the write.</p>
+      <pre class="code">in-session   Artifact object   <span class="c">← agent mutates freely, no gate (req 12)</span>
+     │
+     ▼ run ends
+extract      diff → Edit[] + ReviewComment[]  =  SliceReport
+     │
+     ▼
+validate     per requirement — answered, justified, citations verbatim
+     │        <span class="c">accepted answers frozen; failures retried with history</span>
+     ▼
+queue        surviving proposals, ordered by slice id
+     │
+     ▼
+apply        one atomic write to shared state</pre>
+      <p>Validation therefore happens <strong>before the write to shared memory, never before the write to the in-session object.</strong> That ordering is what lets both properties hold at once: the agent is unconstrained where it needs to be, and the shared document only ever receives content that has passed every invariant.</p>
+      <p>It also means an agent that thrashes — writes, reverts, rewrites — costs nothing but its own tokens. Only the net result of the run reaches the queue.</p>
+
+      <h3>Retry keeps state, and never revisits a settled answer</h3>
+      <p>Re-running a whole slice because one of five requirements failed validation re-asks the model about the four that succeeded. The model is not deterministic, so <strong>an answer that passed on attempt 1 could come back different on attempt 2</strong> — retry that can make the output worse, and which would make E1 flaky by construction since the fixture asserts an exact verdict set.</p>
+      <p><strong>1. The retry is a continuation.</strong> The failed attempt's <code>message_history</code> is passed back with the validator error as the new turn — Pydantic AI's documented pattern. The agent sees its own previous output and what was wrong with it rather than starting cold.</p>
+      <p><strong>2. A settled answer is never up for revision.</strong> Validation runs per requirement. Anything that passes is accepted and frozen; the next attempt's <code>pending</code> list holds only what is outstanding, and a comment for an already-accepted id is discarded.</p>
+      <div class="callout">
+        <span class="tag">The guarantee is structural, not hoped for</span>
+        <p>A requirement's verdict is decided once and cannot change, however many attempts the slice needs. Each attempt is also cheaper than the last, and <code>unverified</code> becomes precise — only the still-pending ids are marked, rather than a whole slice because one requirement in it was stubborn.</p>
+        <p><strong>Every attempt sees the identical artifact snapshot.</strong> An invariant, not an optimisation: if the artifact could shift between attempts, a retry would produce different edits for reasons unrelated to the validator error, reopening exactly the non-determinism these rules close.</p>
+      </div>
 
       <h3>The editor becomes a worker</h3>
       <p><code>editor-service</code> no longer owns a state machine or a loop. It exposes essentially one operation:</p>
@@ -698,7 +736,7 @@ Podsufitka trzeba spomiędzy forteli zrobić</pre>
     job_id: str
     requirements: list[Requirement]   <span class="c"># parsed once, here</span>
 
-<span class="k">class</span> Artifact(BaseModel):  <span class="c"># req 12: outlives any single run</span>
+<span class="k">class</span> Artifact(BaseModel):  <span class="c"># ONE PER FORM; outlives any run</span>
     lines: list[Line]
     regions: list[Region]
     edits: list[Edit]
@@ -990,17 +1028,8 @@ Podsufitka trzeba spomiędzy forteli zrobić</pre>
 
 <script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
 <script>
-  if (window.mermaid) {
-    mermaid.initialize({ startOnLoad: true, theme: "base", securityLevel: "loose" });
-  } else {
-    document.querySelectorAll("pre.mermaid").forEach(function (el) {
-      el.style.whiteSpace = "pre";
-      el.style.font = "12px ui-monospace, monospace";
-      el.insertAdjacentHTML("beforebegin",
-        '<p style="font:12px ui-monospace,monospace;color:#b3341f">' +
-        'Diagram could not render \u2014 mermaid failed to load (offline?). Source below.</p>');
-    });
-  }
+  if (window.mermaid) { mermaid.initialize({ startOnLoad: true, theme: "base", securityLevel: "loose" }); }
+  else { document.querySelectorAll("pre.mermaid").forEach(function (el) { el.style.whiteSpace = "pre"; el.style.font = "12px ui-monospace, monospace"; }); }
 </script>
 </body>
 </html>
