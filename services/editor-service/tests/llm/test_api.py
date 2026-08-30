@@ -42,17 +42,20 @@ def test_healthz_imports_nothing_from_llm_or_settings() -> None:
     assert "editor_service.settings" not in source
 
 
-def test_unwired_slice_runner_names_what_is_missing() -> None:
-    """Before B6/B7 wire a real flow, the default dependency fails clearly rather than
-    silently building an agent with an invented instruction."""
+def test_wired_runner_without_a_model_project_fails_cleanly(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """No images → skip CV; missing GOOGLE_CLOUD_PROJECT fails at agent construction."""
+    monkeypatch.delenv("GOOGLE_CLOUD_PROJECT", raising=False)
+    monkeypatch.delenv("CV_URL", raising=False)
     client = TestClient(create_app(), raise_server_exceptions=False)
     response = client.post("/slices:run", json=golden_slice_request().model_dump(mode="json"))
-    assert response.status_code == 500
+    assert response.status_code == 400
 
 
 def test_slices_run_round_trips_a_real_slice_request_from_the_fixture() -> None:
     """Overrides `get_slice_runner` with a `FakeLlm`-backed runner — the same pattern
-    `vision_stub.api.deps.get_analysis_service` uses for its own placeholder-swap tests —
+    `HttpVisionTool` tests use for the CV client —
     and posts a real `SliceRequest` built from the fixture's first six requirements."""
     turn_output = SliceTurnOutput(comments=[make_comment(r.id) for r in GOLDEN_REQUIREMENTS])
     fake = FakeLlm.script([turn_output])

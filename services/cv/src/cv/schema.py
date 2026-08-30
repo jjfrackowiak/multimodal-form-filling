@@ -89,7 +89,7 @@ class ImageRef(BaseModel):
 
 
 class InventoryRequest(BaseModel):
-    """Editor → CV tool. Same payload as mff-vision / vision-stub."""
+    """Editor → CV tool. Same payload as mff-vision."""
 
     model_config = ConfigDict(
         json_schema_extra={

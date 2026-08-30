@@ -4,10 +4,11 @@ delegate to the injected runner, return. No retry or validation logic lives here
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 
 from editor_service.api.deps import SliceRunner, get_slice_runner
 from mff_contracts import SliceReport, SliceRequest
+from mff_vision import VisionUnavailable
 
 __all__ = ["router"]
 
@@ -19,4 +20,9 @@ async def run_slice_endpoint(
     body: SliceRequest,
     runner: SliceRunner = Depends(get_slice_runner),
 ) -> SliceReport:
-    return await runner(body)
+    try:
+        return await runner(body)
+    except VisionUnavailable as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc

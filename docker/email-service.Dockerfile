@@ -76,13 +76,10 @@ COPY --from=builder /app/.venv /app/.venv
 
 USER app
 
-EXPOSE 8000
+ENV PORT=8080
+EXPOSE 8080
 
-# No curl in slim; urllib is stdlib and needs nothing extra.
-HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-  CMD python -c "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8000/healthz').status==200 else 1)"
+HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \
+  CMD python -c "import os,urllib.request,sys; p=os.environ.get('PORT','8080'); sys.exit(0 if urllib.request.urlopen(f'http://127.0.0.1:{p}/healthz').status==200 else 1)"
 
-# email_service.main:app is the documented entrypoint shape (docs/app-implementation-plan.md,
-# "Service structure") and lands with B3/B4/B5/B13. Until then this image builds cleanly
-# but the module does not exist yet — see docker's own README for what that means today.
-CMD ["uvicorn", "email_service.main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["sh", "-c", "exec uvicorn email_service.main:app --host 0.0.0.0 --port ${PORT}"]

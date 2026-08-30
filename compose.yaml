@@ -1,23 +1,10 @@
-# Full local stack: the three application images plus the dev infra they need.
+# Full local stack: CV (real Vertex) + editor + email + GreenMail/emulators.
 #
 #   docker compose up -d
 #   python scripts/verify_mailbox.py
 #
-# GreenMail — not Mailpit — is defined once in docker/compose.dev.yaml and pulled in below
-# via `include` rather than duplicated here. Mailpit is SMTP-only for receiving and speaks
-# no IMAP, so the inbound poller (B4) cannot be developed against it. B12 may extend that
-# file with Firestore/GCS emulators; this file picks those up automatically through the
-# include — nothing to edit here when it does.
-#
-# GCP blocks outbound SMTP port 25 permanently; 587 and 465 are unrestricted. Nothing in
-# this stack, or in .env.example, references 25 — on purpose. A fallback to 25 works
-# locally against GreenMail and fails silently the moment this ships to Cloud Run, which is
-# the most common way a mail integration dies there.
-#
-# email-service and editor-service are still empty skeletons (B0) — their images build and
-# their healthchecks are wired for when B3/B4/B5/B13 and B8 land the app/`/healthz` route
-# each owns. Until then `docker compose up` brings GreenMail and vision-stub to healthy;
-# the other two build but have no entrypoint to run yet. See docker/README.md.
+# CV replaces vision-stub. Mount ADC so Vertex works locally.
+# Editor calls CV at slice time (CV_URL). Email never talks to CV.
 
 include:
   - docker/compose.dev.yaml
@@ -27,21 +14,41 @@ x-healthz-probe: &healthz-probe
     - CMD
     - python
     - -c
-    - "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8000/healthz').status==200 else 1)"
+    - "import os,urllib.request,sys; p=os.environ.get('PORT','8000'); sys.exit(0 if urllib.request.urlopen(f'http://localhost:{p}/healthz').status==200 else 1)"
   interval: 10s
   timeout: 3s
   retries: 5
-  start_period: 5s
+  start_period: 15s
 
 services:
-  vision-stub:
+  cv:
     build:
       context: .
-      dockerfile: docker/vision-stub.Dockerfile
-    container_name: mff-vision-stub
+      dockerfile: docker/cv.Dockerfile
+    container_name: mff-cv
     ports:
-      - "8002:8000"
-    healthcheck: *healthz-probe
+      - "8002:8080"
+    environment:
+      PORT: "8080"
+      GOOGLE_CLOUD_PROJECT: ${GOOGLE_CLOUD_PROJECT:-linen-badge-507111-r6}
+      GOOGLE_CLOUD_LOCATION: global
+      GOOGLE_APPLICATION_CREDENTIALS: /home/app/.config/gcloud/application_default_credentials.json
+      STORAGE_EMULATOR_HOST: http://gcs:4443
+    volumes:
+      - ${HOME}/.config/gcloud:/home/app/.config/gcloud:ro
+    depends_on:
+      gcs:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8080/healthz').status==200 else 1)"
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 20s
     restart: unless-stopped
 
   editor-service:
@@ -50,16 +57,20 @@ services:
       dockerfile: docker/editor-service.Dockerfile
     container_name: mff-editor-service
     ports:
-      - "8001:8000"
+      - "8001:8080"
     environment:
-      # Read from the host/.env at `docker compose up` time — never baked into the image.
-      # Empty is fine locally: B8's /healthz must not construct a model client, so a
-      # missing key cannot fail the healthcheck.
-      GOOGLE_API_KEY: ${GOOGLE_API_KEY:-}
+      PORT: "8080"
+      GOOGLE_CLOUD_PROJECT: ${GOOGLE_CLOUD_PROJECT:-linen-badge-507111-r6}
+      GOOGLE_CLOUD_LOCATION: global
+      GOOGLE_GENAI_USE_ENTERPRISE: "true"
       EDITOR_MODEL_ID: ${EDITOR_MODEL_ID:-gemini-2.5-flash}
-      VISION_SERVICE_URL: http://vision-stub:8000
+      PARSER_MODEL_ID: ${PARSER_MODEL_ID:-gemma-4-26b-a4b-it-maas}
+      CV_URL: http://cv:8080
+      GOOGLE_APPLICATION_CREDENTIALS: /home/app/.config/gcloud/application_default_credentials.json
+    volumes:
+      - ${HOME}/.config/gcloud:/home/app/.config/gcloud:ro
     depends_on:
-      vision-stub:
+      cv:
         condition: service_healthy
     healthcheck: *healthz-probe
     restart: unless-stopped
@@ -70,11 +81,9 @@ services:
       dockerfile: docker/email-service.Dockerfile
     container_name: mff-email-service
     ports:
-      - "8000:8000"
+      - "8000:8080"
     environment:
-      # GreenMail's own ports (docker/compose.dev.yaml), reached by compose service name
-      # rather than localhost since this container is on the compose network. Never 25 —
-      # see the file header.
+      PORT: "8080"
       IMAP_HOST: greenmail
       IMAP_PORT: "3143"
       IMAP_FOLDER: ${IMAP_FOLDER:-INBOX}
@@ -90,12 +99,19 @@ services:
       MAIL_FROM_NAME: ${MAIL_FROM_NAME:-Form Validation}
       ALLOWED_SENDERS: ${ALLOWED_SENDERS:-}
       MAX_JOBS_PER_SENDER_PER_HOUR: ${MAX_JOBS_PER_SENDER_PER_HOUR:-10}
-      EDITOR_SERVICE_URL: http://editor-service:8000
-      VISION_SERVICE_URL: http://vision-stub:8000
+      EDITOR_SERVICE_URL: http://editor-service:8080
+      FIRESTORE_EMULATOR_HOST: firestore:8090
+      STORAGE_EMULATOR_HOST: http://gcs:4443
+      GOOGLE_CLOUD_PROJECT: ${GOOGLE_CLOUD_PROJECT:-mff-local}
+      MFF_GCS_BUCKET: ${MFF_GCS_BUCKET:-mff-local}
     depends_on:
       greenmail:
         condition: service_healthy
       editor-service:
+        condition: service_healthy
+      firestore:
+        condition: service_healthy
+      gcs:
         condition: service_healthy
     healthcheck: *healthz-probe
     restart: unless-stopped

@@ -73,15 +73,15 @@ def _requirements() -> list[Requirement]:
 
 def _artifact() -> DerivativeArtifact:
     headings = [
-        "1. Pod maską",
-        "2. Fotele",
-        "3. Przekątne pojazdu",
-        "4. Podsufitka",
-        "5. Przednia szyba",
-        "6. Bieżnik opony",
-        "7. Bagażnik i wyposażenie",
-        "8. Zegary",
-        "9. Uwagi",
+        "1. Under the bonnet",
+        "2. Seats",
+        "3. Vehicle diagonals",
+        "4. Headliner",
+        "5. Windscreen",
+        "6. Tyre tread",
+        "7. Boot and equipment",
+        "8. Gauges",
+        "9. Notes",
     ]
     return DerivativeArtifact(
         job_id=JOB_ID,
@@ -311,7 +311,7 @@ async def test_inventory_is_injected_as_structured_context() -> None:
     assert report.unverified == []
     request_text = str(fake.requests[-1])
     assert "section-4" in request_text
-    assert "4. Podsufitka" in request_text
+    assert "4. Headliner" in request_text
     assert "1000040420.jpg" in request_text
     assert "constraint_ok" in request_text
     assert "IMG_20260830_132755 (5).jpg" in request_text

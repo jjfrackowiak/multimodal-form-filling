@@ -77,7 +77,6 @@ known-first-party = [
     "mff_fakes",
     "email_service",
     "editor_service",
-    "vision_stub",
     "cv",
 ]
 
@@ -154,7 +153,6 @@ root_packages = [
     "mff_fakes",
     "email_service",
     "editor_service",
-    "vision_stub",
     "cv",
 ]
 
@@ -162,7 +160,7 @@ root_packages = [
 name = "services depend on packages depend on mff_contracts, never sideways or upward"
 type = "layers"
 layers = [
-    "email_service | editor_service | vision_stub | cv",
+    "email_service | editor_service | cv",
     "mff_vision | mff_docmodel | mff_manifest | mff_applier | mff_store | mff_fakes",
     "mff_contracts",
 ]
@@ -188,7 +186,6 @@ forbidden_modules = [
     "mff_fakes",
     "email_service",
     "editor_service",
-    "vision_stub",
     "cv",
 ]
 
@@ -204,7 +201,6 @@ source_modules = [
     "mff_store",
     "email_service",
     "editor_service",
-    "vision_stub",
 ]
 # `mff_fakes` is deliberately NOT in `source_modules` above: its one job (the ADK test
 # double, B15) is to subclass `google.adk.models.BaseLlm` directly, so it must import
@@ -225,13 +221,8 @@ forbidden_modules = ["pydantic_ai", "anthropic", "openai", "google", "vertexai",
 #   ignore_imports = ["editor_service.agents.reviewer -> google.adk"]
 # rather than removing this contract.
 #
-# VISION IS EXEMPT FROM THE ADK DECISION. ADK is the editor's choice, not a repo-wide
-# mandate. The vision service is separately owned (see AGENTS.md, req 13) and MAY use
-# Pydantic AI or any other framework -- it sits behind an HTTP contract and what runs on
-# the far side is its owner's call. `vision_stub` is listed above only because today's
-# placeholder calls no model at all. When the real service lands and imports one, give it
-# an `ignore_imports` entry or drop it from `source_modules`; do NOT strip its dependency
-# to match the editor, and do not report it as drift.
+# CV is exempt from this contract (`cv` is not in source_modules): Vertex lives in
+# services/cv, behind POST /v1/inventory. The editor calls it over HTTP.
 #
 # B12: banning "google" also bans `google.cloud.firestore` / `google.cloud.storage` /
 # `google.auth`, which are not model libraries and are exactly what mff-store needs to
@@ -262,11 +253,15 @@ forbidden_modules = ["pydantic_ai", "anthropic", "openai", "google", "vertexai",
 ignore_imports = [
     "mff_store.firestore_store -> google",
     "mff_store.gcs -> google",
+    "mff_vision.client -> google",
     "editor_service.llm.agent -> google",
     "editor_service.llm.deps -> google",
+    "editor_service.llm.extractor -> google",
     "editor_service.llm.model -> google",
     "editor_service.llm.plugins -> google",
     "editor_service.llm.run -> google",
+    "email_service.runner.http -> google",
+    "email_service.runner.editor -> google",
 ]
 
 # ---------------------------------------------------------------------------

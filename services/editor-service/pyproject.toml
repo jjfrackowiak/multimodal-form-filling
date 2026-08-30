@@ -5,6 +5,7 @@ description = "The AI editor — the only service that constructs a model client
 requires-python = ">=3.11"
 dependencies = [
     "mff-contracts",
+    "mff-manifest",
     "mff-vision",
     # Base install only — see B8 brief ("Use bare google-adk — no extras"):
     # google-adk[extensions]/[all] both bundle anthropic/openai, which the dependency
@@ -33,5 +34,6 @@ packages = ["src/editor_service"]
 
 [tool.uv.sources]
 mff-contracts = { workspace = true }
+mff-manifest = { workspace = true }
 mff-vision = { workspace = true }
 mff-fakes = { workspace = true }

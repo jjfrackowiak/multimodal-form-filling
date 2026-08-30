@@ -47,6 +47,9 @@ def test_slice_request_carries_no_retry_state() -> None:
         scope_ids=["n-1"],
     )
     assert request.scope_ids == ["n-1"]
+    assert request.images == []
+    assert request.checklist == []
+    assert request.client_texts == {}
     assert not hasattr(request, "history")
     assert not hasattr(request, "pending")
     assert not hasattr(request, "validator_error")

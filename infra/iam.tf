@@ -5,7 +5,30 @@ resource "google_service_account" "cv" {
 
 resource "google_service_account" "editor" {
   account_id   = "editor-runtime"
-  display_name = "Editor Cloud Run runtime (invokes cv later)"
+  display_name = "Editor Cloud Run runtime (calls CV + Vertex)"
+}
+
+resource "google_service_account" "email" {
+  account_id   = "email-runtime"
+  display_name = "Email Cloud Run runtime (IMAP poller, invokes editor)"
+}
+
+resource "google_project_iam_member" "editor_vertex" {
+  project = var.project_id
+  role    = "roles/aiplatform.user"
+  member  = "serviceAccount:${google_service_account.editor.email}"
+}
+
+resource "google_project_iam_member" "email_firestore" {
+  project = var.project_id
+  role    = "roles/datastore.user"
+  member  = "serviceAccount:${google_service_account.email.email}"
+}
+
+resource "google_storage_bucket_iam_member" "email_writes_files" {
+  bucket = google_storage_bucket.files.name
+  role   = "roles/storage.objectAdmin"
+  member = "serviceAccount:${google_service_account.email.email}"
 }
 
 resource "google_project_iam_member" "cv_vertex" {

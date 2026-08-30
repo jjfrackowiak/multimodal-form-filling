@@ -1,20 +1,18 @@
-name: deploy-cv
+name: deploy-editor
 
 on:
   workflow_dispatch:
   push:
-    # feat/gcp is the rollout branch so CD can smoke before this file exists on main.
-    # Drop it in the merge commit (workflow_dispatch then works from main).
     branches: [main, feat/gcp]
     paths:
-      - services/cv/**
-      - docker/cv.Dockerfile
-      - docker/cloudbuild-cv.yaml
+      - services/editor-service/**
+      - docker/editor-service.Dockerfile
+      - docker/cloudbuild-editor.yaml
       - infra/**
       - packages/**
       - pyproject.toml
       - uv.lock
-      - .github/workflows/deploy-cv.yml
+      - .github/workflows/deploy-editor.yml
 
 permissions:
   contents: read
@@ -39,14 +37,14 @@ jobs:
 
       - uses: google-github-actions/setup-gcloud@v2
 
-      - name: Build CV image
+      - name: Build editor image
         id: image
         run: |
-          IMG="${REGION}-docker.pkg.dev/${PROJECT_ID}/app/cv:${GITHUB_SHA}"
+          IMG="${REGION}-docker.pkg.dev/${PROJECT_ID}/app/editor:${GITHUB_SHA}"
           echo "img=$IMG" >> "$GITHUB_OUTPUT"
           gcloud builds submit \
             --region="$REGION" \
-            --config docker/cloudbuild-cv.yaml \
+            --config docker/cloudbuild-editor.yaml \
             --gcs-source-staging-dir="gs://${PROJECT_ID}-build/source" \
             --gcs-log-dir="gs://${PROJECT_ID}-build/logs" \
             --substitutions=_IMAGE="$IMG" \
@@ -65,15 +63,15 @@ jobs:
           TF_INPUT: "false"
         run: |
           terraform init
-          EDITOR_IMG=$(terraform output -raw editor_image 2>/dev/null || true)
+          CV_IMG=$(terraform output -raw cv_image)
           EMAIL_IMG=$(terraform output -raw email_image 2>/dev/null || true)
           terraform apply -auto-approve \
-            -var="cv_image=${{ steps.image.outputs.img }}" \
-            -var="editor_image=${EDITOR_IMG}" \
+            -var="cv_image=${CV_IMG}" \
+            -var="editor_image=${{ steps.image.outputs.img }}" \
             -var="email_image=${EMAIL_IMG}"
-          echo "url=$(terraform output -raw cv_url)" >> "$GITHUB_OUTPUT"
+          echo "url=$(terraform output -raw editor_url)" >> "$GITHUB_OUTPUT"
 
-      - name: GET /health
+      - name: GET /healthz
         env:
           URL: ${{ steps.tf.outputs.url }}
         run: |
@@ -84,4 +82,4 @@ jobs:
             "https://iamcredentials.googleapis.com/v1/projects/-/serviceAccounts/github-deploy@${PROJECT_ID}.iam.gserviceaccount.com:generateIdToken" \
             -d "{\"audience\":\"${URL}\"}")"
           TOKEN="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["token"])' <<<"${RESP}")"
-          curl -fsS -H "Authorization: Bearer ${TOKEN}" "${URL}/health"
+          curl -fsS -H "Authorization: Bearer ${TOKEN}" "${URL}/healthz"
