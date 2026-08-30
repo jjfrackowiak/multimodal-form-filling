@@ -118,6 +118,23 @@ ignore_missing_imports = true
 module = ["google.cloud.storage", "google.cloud.storage.*"]
 ignore_missing_imports = true
 
+[[tool.mypy.overrides]]
+# B2: packages/mff-manifest/tests/live_extractor.py — used ONLY by the manual,
+# env-flag-gated live eval (test_live_eval.py), never by the package itself or by any
+# other test. `google-genai` is mff-manifest's `live-eval` OPTIONAL extra, never installed
+# by `uv sync --all-packages`, so `google.genai` is unresolved in this environment by
+# design. mypy still type-checks everything under tests/ (see the Makefile's `typecheck`
+# target), so the import needs to resolve as `Any` even though the underlying package is
+# absent here. The bare "google" entry is required alongside the dotted ones: with
+# `google.genai` itself absent from disk, mypy's namespace-package resolution reports the
+# gap against the "google" namespace it importantly did locate (via mff-store's
+# google-cloud-* packages), not against "google.genai" — narrowing this to the dotted
+# form alone leaves the original error in place. It does not widen what the existing
+# `google.cloud.storage` override already covers: a bare, non-wildcard "google" entry
+# matches only `import google` itself, and mff-store never imports the package that way.
+module = ["google", "google.genai", "google.genai.*"]
+ignore_missing_imports = true
+
 # ---------------------------------------------------------------------------
 # import-linter — the highest-value gate in the repo
 # ---------------------------------------------------------------------------
