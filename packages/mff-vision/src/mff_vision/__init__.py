@@ -8,7 +8,6 @@ in-process stand-in for tests and evals.
 from .client import HttpVisionTool
 from .mock import InventoryVisionTool
 from .models import (
-    UNKNOWN,
     ImageAnalysis,
     ImageRef,
     RequirementSpec,
@@ -17,7 +16,6 @@ from .models import (
 )
 
 __all__ = [
-    "UNKNOWN",
     "HttpVisionTool",
     "ImageAnalysis",
     "ImageRef",

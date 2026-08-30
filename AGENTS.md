@@ -9,7 +9,7 @@ Two owners. Do not cross the line unless asked.
 - Image / CV tools (req. 13): image processing, image understanding, cropping.
 - GCP deployment. **Future: Terraform (infrastructure as code)** — Cloud Run, Firestore, GCS, IAM, Vertex access. Do not treat `gcloud` console clicks or `gcp/DEPLOY.md` as the long-term source of truth. No Terraform tree yet; when we provision for real, start with `.tf` in-repo.
 
-**CV** is Cloud Run `POST /v1/inventory` (`cv/` package, parallel Vertex). Always: checklist + `gs://` JPEG/PNG/WebP. Raw manifest only if ids/`source_span` missing. Cropping deferred. Not HEIC. Contract: `cv/integration_guide_CV.md`.
+**CV** is Cloud Run `POST /v1/inventory` (`cv/` package, parallel Vertex). Payload matches `mff-vision`: `{images: [{uri}], requirements: [{id, text, constraint?}]}`. Look-for is `text`. Cropping deferred. Not HEIC. Contract: `cv/integration_guide_CV.md`.
 
 Stay here. Interfaces the editor will call should be small, documented, and stable.
 

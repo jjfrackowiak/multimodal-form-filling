@@ -20,7 +20,7 @@ class HttpVisionTool:
         self,
         base_url: str,
         client: httpx.AsyncClient | None = None,
-        timeout: float = 120.0,
+        timeout: float = 300.0,
     ) -> None:
         # A whole job's images in one call, so the timeout is generous by design.
         self._base = base_url.rstrip("/")

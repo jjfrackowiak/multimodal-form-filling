@@ -1,6 +1,6 @@
 # CV tool (Cloud Run)
 
-The AI editor calls this over HTTP. Same logic is available in-process.
+The AI editor calls this over HTTP. Same payload as `mff-vision` / `HttpVisionTool`.
 
 **Integration:** [`integration_guide_CV.md`](integration_guide_CV.md)  
 **Deploy:** [`DEPLOY.md`](DEPLOY.md)
@@ -8,26 +8,26 @@ The AI editor calls this over HTTP. Same logic is available in-process.
 ```
 POST /v1/inventory
 {
-  "checklist": { "requirements": [ { "id": "R-01", "text": "...", "source_span": "...", "expected_count": 1 } ] },
-  "image_uris": ["gs://bucket/jobs/.../a.jpg"],
-  "image_prefix": null,
-  "manifest": null
+  "images": [{"uri": "gs://bucket/jobs/.../a.jpg"}],
+  "requirements": [{"id": "R-01", "text": "A photograph of the front of the vehicle."}]
 }
 ```
 
 Photos are `gs://` JPEG/PNG/WebP. Not HEIC. Not bytes in the body.
-
-If every requirement already has `id` + `source_span`, `manifest` is omitted.
+Look-for is `text`. Omit `manifest` when every requirement has `id` + `text`.
 
 ```python
 from cv import CvClient
-resp = CvClient().inventory(checklist, image_prefix="gs://bucket/jobs/abc/images/")
+resp = CvClient().inventory(
+    [{"id": "R-01", "text": "A photograph of the front of the vehicle."}],
+    images=["gs://bucket/jobs/abc/front.jpg"],
+)
 ```
 
 ## Local CLI
 
 ```bash
-python -m cv fixtures/fleet-vehicle-return/images \
+python -m cv fixtures/fleet-vehicle-return/input/netnew/WN-7020U \
   --requirements fixtures/fleet-vehicle-return/expected_requirements.yaml \
   --out /tmp/inventory.yaml
 ```

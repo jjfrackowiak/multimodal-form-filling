@@ -30,11 +30,5 @@ curl -s -X POST localhost:8099/v1/describe \
 The real service implements the same single route and the same payloads. Nothing
 in the editor changes — it depends on the `VisionTool` Protocol, not on this.
 
-Two things to agree with the owner before that happens:
-
-1. **The payload shapes**, which are defined in `mff_vision.models`. They were
-   written from the editor's needs, not from what a CV pipeline naturally emits,
-   so they are a proposal rather than a decision.
-2. **Whether `shot_from` is a closed vocabulary.** The fixture uses
-   `between_front_seats` and `beside_seat`. If it stays free text, the editor has
-   to interpret strings it has never seen, and R-04 stops being decidable.
+The real service is repo-root `cv/` (`POST /v1/inventory`, same `{images, requirements}`
+payload). Hits + per-id `constraint_ok` replace a frozen `depicts` / `shot_from` enum.

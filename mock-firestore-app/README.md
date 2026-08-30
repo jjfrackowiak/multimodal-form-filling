@@ -58,12 +58,10 @@ Call CV the way the editor will (photos must already be `gs://` JPEG/PNG/WebP):
 curl -s http://localhost:8083/v1/inventory \
   -H 'content-type: application/json' \
   -d '{
-    "checklist": {
-      "requirements": [
-        {"id":"R-01","text":"Front of the vehicle","source_span":"front","expected_count":1}
-      ]
-    },
-    "image_prefix": "gs://mock-files/jobs/JOB_ID/images/"
+    "images": [{"uri": "gs://mock-files/jobs/JOB_ID/images/front.jpg"}],
+    "requirements": [
+      {"id":"R-01","text":"A photograph of the front of the vehicle."}
+    ]
   }'
 ```
 

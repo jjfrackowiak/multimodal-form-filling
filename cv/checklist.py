@@ -37,10 +37,14 @@ def load_checklist(path: Path) -> ParsedChecklist:
 
 
 def spans_complete(checklist: ParsedChecklist) -> bool:
+    """True when every requirement has a unique id and non-empty text.
+
+    `text` is the look-for. `source_span` is optional provenance and is not required.
+    """
     reqs = checklist.requirements
     if not reqs:
         return False
     ids = [r.id for r in reqs if r.id]
     if len(ids) != len(reqs) or len(set(ids)) != len(reqs):
         return False
-    return all(r.source_span for r in reqs)
+    return all(r.text.strip() for r in reqs)

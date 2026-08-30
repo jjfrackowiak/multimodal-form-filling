@@ -28,7 +28,7 @@ feeds comments / verdicts.
 
 ```
 editor (or any caller with run.invoker)
-  POST /v1/inventory  { checklist, image_uris | image_prefix, manifest? }
+  POST /v1/inventory  { images: [{uri}], requirements: [{id, text, constraint?}] }
     → CV downloads gs:// objects
     → downscales each frame (max edge 1536, JPEG q80)
     → sha256-dedupes
@@ -62,52 +62,33 @@ for the local mock job skeleton. Production must leave that unset.
 Python:
 
 ```python
-from cv import CvClient, ParsedChecklist
+from mff_vision import HttpVisionTool, ImageRef, RequirementSpec
 
-cv = CvClient()  # CV_URL, ID token on *.run.app
-resp = cv.inventory(
-    checklist,
-    image_uris=["gs://bucket/jobs/<id>/images/front.jpg"],
-    # or image_prefix="gs://bucket/jobs/<id>/images/",
+cv = HttpVisionTool(base_url=CV_URL)  # identity token on *.run.app
+images = await cv.build_inventory(
+    [ImageRef(uri="gs://bucket/jobs/<id>/images/front.jpg")],
+    [RequirementSpec(id="R-01", text="A photograph of the front of the vehicle.")],
 )
-inv = resp.inventory
 ```
 
-`CvClient` lives in `cv/client.py`. The editor may vendor that file or issue
-the same HTTP itself. Do not import `cv.pipeline` / Vertex from the editor.
+Same payload from `cv.CvClient`. Do not import `cv.pipeline` / Vertex from the editor.
 
 ## Expected inputs
 
-### `checklist` (required)
+### `requirements` (required)
 
-JSON object, same shape as `expected_requirements.yaml`:
-
-```yaml
-expected_total_photos: 8          # optional, unused by scoring
-requirements:
-  - id: R-01
-    text: Front of the vehicle
-    source_span: front of the vehicle    # verbatim from the manifest
-    expected_count: 1
-    constraint: between_front_seats      # optional; per-id, not global
-```
+Same as `mff_contracts.RequirementSpec`: `id`, `text`, optional `constraint`.
+`text` is the look-for. Do not send the raw email quote.
 
 | Field | Required | Notes |
 |---|---|---|
 | `requirements` | yes, ≥ 1 | |
 | `requirements[].id` | yes | Stable, unique (`R-01`, …) |
-| `requirements[].text` | yes | What to look for |
-| `requirements[].source_span` | yes* | Verbatim origin in the client manifest |
-| `requirements[].expected_count` | no, default 1 | How many supporting photos that id wants |
+| `requirements[].text` | yes | What to look for (already parsed) |
 | `requirements[].constraint` | no | Extra pixel check (`between_front_seats`, …) |
-| `expected_total_photos` | no | Informational |
 
-\*If **every** requirement already has `id` + `source_span`, **omit**
-`manifest`. Pass `manifest` (raw shot-list text) only when those fields are
-missing. The tool will 400 if ids/spans are incomplete and `manifest` is empty.
-
-The checklist is **not** a car enum. A new form type is a new YAML, not a CV
-code change.
+If every item has `id` + `text`, omit `manifest`. The tool 400s only when ids/text
+are incomplete and `manifest` is empty.
 
 ### Photos
 
@@ -115,8 +96,8 @@ Always **pointers**, never bytes:
 
 | Field | Use |
 |---|---|
-| `image_uris` | Explicit `gs://bucket/object` list |
-| `image_prefix` | `gs://bucket/jobs/<id>/images/` — lists objects under the prefix |
+| `images` | `{ "uri": "gs://bucket/object" }` list (editor interface) |
+| `image_prefix` | `gs://bucket/jobs/<id>/images/` — extra objects under the prefix |
 
 At least one of the two is required. Prefix listing **skips** non-images.
 Explicit URIs that are not images **400**.
@@ -133,17 +114,13 @@ Objects must be readable by the CV runtime service account
 
 ```json
 {
-  "checklist": {
-    "requirements": [
-      {
-        "id": "R-01",
-        "text": "Front of the vehicle",
-        "source_span": "front of the vehicle",
-        "expected_count": 1
-      }
-    ]
-  },
-  "image_prefix": "gs://linen-badge-507111-r6-files/jobs/abc/images/"
+  "images": [{"uri": "gs://linen-badge-507111-r6-files/jobs/abc/images/front.jpg"}],
+  "requirements": [
+    {
+      "id": "R-01",
+      "text": "A photograph of the front of the vehicle."
+    }
+  ]
 }
 ```
 
@@ -153,28 +130,25 @@ Objects must be readable by the CV runtime service account
 
 ```json
 {
-  "inventory": {
-    "checklist": { "requirements": [ /* echo */ ] },
-    "images": [
-      {
-        "file": "front.jpg",
-        "uri": "gs://bucket/jobs/abc/images/front.jpg",
-        "hits": [
-          {
-            "id": "R-01",
-            "constraint_ok": null,
-            "constraint_evidence": null
-          }
-        ],
-        "note": "front three-quarter of a silver hatchback",
-        "findings": [
-          { "what": "damage", "value": "scuff on front bumper", "evidence": "lower right" }
-        ],
-        "exact_duplicate_of": null
-      }
-    ],
-    "exact_duplicate_pairs": [["front.jpg", "front-copy.jpg"]]
-  },
+  "images": [
+    {
+      "file": "front.jpg",
+      "uri": "gs://bucket/jobs/abc/images/front.jpg",
+      "hits": [
+        {
+          "id": "R-01",
+          "constraint_ok": null,
+          "constraint_evidence": null
+        }
+      ],
+      "note": "front three-quarter of a silver hatchback",
+      "findings": [
+        { "what": "damage", "value": "scuff on front bumper", "evidence": "lower right" }
+      ],
+      "exact_duplicate_of": null
+    }
+  ],
+  "exact_duplicate_pairs": [["front.jpg", "front-copy.jpg"]],
   "duration_seconds": 18.4,
   "model": "gemini-2.5-flash",
   "project": "linen-badge-507111-r6"
@@ -190,7 +164,7 @@ Objects must be readable by the CV runtime service account
 | `images[].findings` | Generic observations. Not a frozen odometer/plate/seat schema. |
 | `exact_duplicate_pairs` | `[canonical_name, extra_name]` for sha256 matches. Only the canonical is labeled. |
 
-`images` is unique photos only. Correlate with `uri`, not just `file`.
+`images` is index-aligned with the request. Correlate with `uri`. Byte-duplicates share a label.
 
 Findings are hints for the editor, not a form. The editor decides verdicts.
 
@@ -198,7 +172,7 @@ Findings are hints for the editor, not a form. The editor decides verdicts.
 
 | HTTP | When |
 |---|---|
-| 400 | Missing images, empty checklist, bad `gs://`, HEIC/non-image, too many images, incomplete ids/spans without `manifest` |
+| 400 | Missing images, empty requirements, bad `gs://`, HEIC/non-image, too many images, incomplete ids/text without `manifest` |
 | 404 | `POST /process` in production (adapter off) |
 | 502 | GCS download/list failed, or Vertex failed after retries |
 | 422 | JSON does not match the request schema |

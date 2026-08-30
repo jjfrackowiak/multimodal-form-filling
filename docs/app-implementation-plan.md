@@ -1013,10 +1013,10 @@ class BlobRef(BaseModel):
 
 class ImageAnalysis(BaseModel):   # LIVES HERE, not in mff-vision
     file: str
-    depicts: str            # "headliner", "seat_front", … or "unknown"
-    shot_from: str | None   # "between_front_seats" — a SEPARATE question
+    uri: str | None
+    hits: list[RequirementHit]    # checklist ids this frame supports
     note: str | None
-    confidence: float
+    findings: list[Finding]
 
 class JobImage(BaseModel):
     blob: BlobRef
@@ -1027,8 +1027,8 @@ class JobImage(BaseModel):
 
 `ImageAnalysis` belongs here rather than in `mff-vision`: it is a wire type shared by the
 vision service and the editor, and owning it there would make the frozen package depend on
-a service client. `depicts` and `shot_from` stay separate — "what is this" and "taken from
-where" are different questions, and merging them loses R-04.
+a service client. Hits are checklist ids; `constraint_ok` is per id, which is how R-04
+stays decidable. The look-for is `RequirementSpec.text`.
 
 Content-addressing collapses duplicates at ingest: the fixture's 17 files become 15 blobs
 before any agent sees them.

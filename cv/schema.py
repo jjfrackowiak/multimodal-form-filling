@@ -70,37 +70,41 @@ class Inventory(BaseModel):
     exact_duplicate_pairs: list[list[str]] = Field(default_factory=list)
 
 
+class ImageRef(BaseModel):
+    """How an image is named across the wire. Production URIs are gs://."""
+
+    uri: str
+
+
 class InventoryRequest(BaseModel):
-    """Editor → CV tool. Photos stay in GCS; this payload is JSON only."""
+    """Editor → CV tool. Same payload as mff-vision / vision-stub."""
 
     model_config = ConfigDict(
         json_schema_extra={
             "example": {
-                "checklist": {
-                    "requirements": [
-                        {
-                            "id": "R-01",
-                            "text": "Front of the vehicle",
-                            "source_span": "front of the vehicle",
-                            "expected_count": 1,
-                        }
-                    ]
-                },
-                "image_uris": ["gs://bucket/jobs/abc/front.jpg"],
+                "images": [{"uri": "gs://bucket/jobs/abc/front.jpg"}],
+                "requirements": [
+                    {
+                        "id": "R-01",
+                        "text": "A photograph of the front of the vehicle.",
+                        "constraint": None,
+                    }
+                ],
             }
         }
     )
 
-    checklist: ParsedChecklist
-    image_uris: list[str] = Field(default_factory=list, description="gs:// URIs")
+    images: list[ImageRef] = Field(default_factory=list)
+    requirements: list[Requirement] = Field(default_factory=list)
     image_prefix: str | None = Field(
-        default=None, description="gs://bucket/prefix/ — image objects under it"
+        default=None, description="gs://bucket/prefix/ — extra objects under it"
     )
     manifest: str | None = None
 
 
 class InventoryResponse(BaseModel):
-    inventory: Inventory
+    images: list[InventoryImage]
+    exact_duplicate_pairs: list[list[str]] = Field(default_factory=list)
     duration_seconds: float
     model: str
     project: str

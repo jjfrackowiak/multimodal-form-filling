@@ -51,7 +51,7 @@ def build_inventory(
     source_uris: dict[str, str] | None = None,
 ) -> Inventory:
     if not spans_complete(checklist) and not (manifest_text or "").strip():
-        raise ValueError("checklist missing ids/source_span; pass manifest_text")
+        raise ValueError("checklist missing ids/text; pass manifest_text")
     if spans_complete(checklist):
         manifest_text = None
     if not image_paths:

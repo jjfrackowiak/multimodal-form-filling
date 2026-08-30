@@ -14,7 +14,7 @@ from fastapi import FastAPI, HTTPException, Request
 from cv.gcs import download_uris, list_prefix, parse_gs
 from cv.images import check_image_name
 from cv.pipeline import build_inventory
-from cv.schema import InventoryRequest, InventoryResponse, ParsedChecklist
+from cv.schema import Inventory, InventoryImage, InventoryRequest, InventoryResponse, ParsedChecklist
 from cv.vertex import LOCATION, MODEL, PROJECT
 
 log = logging.getLogger("cv")
@@ -63,7 +63,7 @@ def _dedupe(uris: list[str]) -> list[str]:
 
 
 def _collect_uris(req: InventoryRequest) -> list[str]:
-    uris = list(req.image_uris)
+    uris = [img.uri for img in req.images]
     if req.image_prefix:
         try:
             uris.extend(list_prefix(req.image_prefix))
@@ -74,7 +74,7 @@ def _collect_uris(req: InventoryRequest) -> list[str]:
             raise HTTPException(502, f"gcs: {e}") from e
     uris = _dedupe(uris)
     if not uris:
-        raise HTTPException(400, "image_uris or image_prefix required")
+        raise HTTPException(400, "images or image_prefix required")
     if len(uris) > MAX_IMAGES:
         raise HTTPException(400, f"too many images ({len(uris)} > {MAX_IMAGES})")
     for u in uris:
@@ -86,10 +86,31 @@ def _collect_uris(req: InventoryRequest) -> list[str]:
     return uris
 
 
+def _align(requested: list[str], inv: Inventory) -> list[InventoryImage]:
+    """One row per request URI, same order. Duplicates share the canonical label."""
+    by_uri = {im.uri: im for im in inv.images if im.uri}
+    by_name = {im.file: im for im in inv.images}
+    for a, b in inv.exact_duplicate_pairs:
+        if a in by_name and b not in by_name:
+            by_name[b] = by_name[a]
+        if b in by_name and a not in by_name:
+            by_name[a] = by_name[b]
+    out: list[InventoryImage] = []
+    for uri in requested:
+        name = Path(uri).name
+        src = by_uri.get(uri) or by_name.get(name)
+        if src is None:
+            out.append(InventoryImage(file=name, uri=uri))
+        else:
+            out.append(src.model_copy(update={"file": name, "uri": uri}))
+    return out
+
+
 @app.post("/v1/inventory", response_model=InventoryResponse)
 def inventory(req: InventoryRequest) -> InventoryResponse:
-    if not req.checklist.requirements:
-        raise HTTPException(400, "checklist.requirements must not be empty")
+    if not req.requirements:
+        raise HTTPException(400, "requirements must not be empty")
+    checklist = ParsedChecklist(requirements=req.requirements)
     uris = _collect_uris(req)
     log.info("inventory images=%d prefix=%s", len(uris), bool(req.image_prefix))
 
@@ -107,7 +128,7 @@ def inventory(req: InventoryRequest) -> InventoryResponse:
         try:
             inv = build_inventory(
                 paths,
-                req.checklist,
+                checklist,
                 manifest_text=req.manifest,
                 source_uris=source_uris,
             )
@@ -117,7 +138,8 @@ def inventory(req: InventoryRequest) -> InventoryResponse:
             log.exception("inventory")
             raise HTTPException(502, f"vertex: {e}") from e
     return InventoryResponse(
-        inventory=inv,
+        images=_align(uris, inv),
+        exact_duplicate_pairs=inv.exact_duplicate_pairs,
         duration_seconds=round(time.perf_counter() - t0, 3),
         model=MODEL,
         project=PROJECT,

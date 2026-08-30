@@ -1,12 +1,12 @@
 """A deterministic stand-in for the vision service.
 
-Answers from the fixture's `inventory.yaml` — the human-labelled ground truth for what
-each photograph shows. Two consequences worth being explicit about:
+Answers from the fixture's `inventory.yaml` — the human-labelled ground truth for which
+checklist ids each photograph supports. Two consequences worth being explicit about:
 
-  * **It is a lookup, not a guess.** Each image gets its own correct label, so the editor
-    exercises real branching. In particular the two headliner photographs return different
-    `shot_from` values, which is what lets a derivative run fail R-04 for the right reason
-    instead of by luck.
+  * **It is a lookup, not a guess.** Each image gets its own correct hits, so the editor
+    exercises real branching. In particular the two headliner photographs both hit R-04
+    and disagree on `constraint_ok`, which is what lets a derivative run fail R-04 for
+    the right reason instead of by luck.
   * **It cannot be wrong.** That makes it useless for measuring vision quality and ideal
     for everything else: the editor and the evals become fully deterministic, so a failing
     test means the editor is broken, never that a model had an off day.
@@ -22,7 +22,9 @@ from pathlib import Path
 
 import yaml
 
-from .models import UNKNOWN, ImageAnalysis, ImageRef, RequirementSpec
+from mff_contracts import RequirementHit
+
+from .models import ImageAnalysis, ImageRef, RequirementSpec
 
 __all__ = ["InventoryVisionTool", "default_inventory"]
 
@@ -48,6 +50,10 @@ def default_inventory() -> Path:
     return Path(__file__).resolve().parents[-1] / _RELATIVE
 
 
+def _hits(entry: dict) -> list[RequirementHit]:
+    return [RequirementHit.model_validate(h) for h in entry.get("hits") or []]
+
+
 class InventoryVisionTool:
     """In-process `VisionTool` backed by a labelled inventory file."""
 
@@ -62,9 +68,9 @@ class InventoryVisionTool:
         self._by_name: dict[str, ImageAnalysis] = {
             entry["file"]: ImageAnalysis(
                 file=entry["file"],
-                depicts=entry["depicts"],
-                shot_from=entry.get("shot_from"),
+                hits=_hits(entry),
                 note=entry.get("note"),
+                exact_duplicate_of=entry.get("exact_duplicate_of"),
             )
             for entry in data["images"]
         }
@@ -82,13 +88,11 @@ class InventoryVisionTool:
     ) -> list[ImageAnalysis]:
         # `requirements` is ignored here and that is the honest behaviour: the answer key
         # was written by a human who already knew what was being looked for. The real
-        # service will use it to decide what it is discriminating between.
+        # service will use `text` to decide what it is discriminating between.
         return [self._one(ref) for ref in images]
 
     def _one(self, ref: ImageRef) -> ImageAnalysis:
         known = self._by_name.get(ref.name)
         if known is None:
-            # An unrecognised image is evidence, not an error. The editor has to decide
-            # what an unidentifiable photograph means for a requirement.
-            return ImageAnalysis(file=ref.name, depicts=UNKNOWN, confidence=0.0)
-        return known
+            return ImageAnalysis(file=ref.name, uri=ref.uri)
+        return known.model_copy(update={"uri": ref.uri, "file": ref.name})

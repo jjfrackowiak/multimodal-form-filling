@@ -9,20 +9,30 @@ from fastapi import HTTPException
 
 from cv.checklist import load_checklist, spans_complete
 from cv.images import check_image_name, collapse_duplicates, list_images
-from cv.schema import Inventory, InventoryImage, InventoryRequest, ParsedChecklist, Requirement
+from cv.schema import (
+    ImageRef,
+    Inventory,
+    InventoryImage,
+    InventoryRequest,
+    ParsedChecklist,
+    Requirement,
+)
 from cv.service import _collect_uris, _job_adapter_enabled, health, inventory, process_job
 
 ROOT = Path(__file__).resolve().parents[1]
+FLEET_IMAGES = ROOT / "fixtures/fleet-vehicle-return/input/netnew/WN-7020U"
 
 
 def _req(**kwargs) -> InventoryRequest:
-    checklist = kwargs.pop(
-        "checklist",
-        ParsedChecklist(
-            requirements=[Requirement(id="R-01", text="front", source_span="front")]
-        ),
+    requirements = kwargs.pop(
+        "requirements",
+        [Requirement(id="R-01", text="front")],
     )
-    return InventoryRequest(checklist=checklist, **kwargs)
+    images = kwargs.pop("images", [])
+    refs = [
+        img if isinstance(img, ImageRef) else ImageRef(uri=img) for img in images
+    ]
+    return InventoryRequest(images=refs, requirements=requirements, **kwargs)
 
 
 def test_fleet_spans() -> None:
@@ -34,8 +44,7 @@ def test_fleet_spans() -> None:
 
 
 def test_fleet_dupes() -> None:
-    folder = ROOT / "fixtures/fleet-vehicle-return/images"
-    files = list_images(folder)
+    files = list_images(FLEET_IMAGES)
     unique, pairs = collapse_duplicates(files)
     assert len(files) == 17
     assert len(unique) == 15
@@ -77,7 +86,7 @@ def test_inventory_requires_images() -> None:
 
 def test_inventory_rejects_heic_uri() -> None:
     try:
-        inventory(_req(image_uris=["gs://bucket/jobs/a/photo.heic"]))
+        inventory(_req(images=["gs://bucket/jobs/a/photo.heic"]))
     except HTTPException as e:
         assert e.status_code == 400
         assert "heic" in str(e.detail).lower()
@@ -85,9 +94,9 @@ def test_inventory_rejects_heic_uri() -> None:
         raise AssertionError("expected 400")
 
 
-def test_inventory_rejects_empty_checklist() -> None:
+def test_inventory_rejects_empty_requirements() -> None:
     try:
-        inventory(_req(checklist=ParsedChecklist(requirements=[]), image_uris=["gs://b/a.jpg"]))
+        inventory(_req(requirements=[], images=["gs://b/a.jpg"]))
     except HTTPException as e:
         assert e.status_code == 400
     else:
@@ -96,7 +105,7 @@ def test_inventory_rejects_empty_checklist() -> None:
 
 def test_collect_uris_bad_gs() -> None:
     try:
-        _collect_uris(_req(image_uris=["https://example/a.jpg"]))
+        _collect_uris(_req(images=["https://example/a.jpg"]))
     except HTTPException as e:
         assert e.status_code == 400
     else:
@@ -115,9 +124,7 @@ def test_process_disabled() -> None:
 
 def test_inventory_http_happy_path() -> None:
     fake_inv = Inventory(
-        checklist=ParsedChecklist(
-            requirements=[Requirement(id="R-01", text="front", source_span="front")]
-        ),
+        checklist=ParsedChecklist(requirements=[Requirement(id="R-01", text="front")]),
         images=[
             InventoryImage(
                 file="front.jpg",
@@ -127,11 +134,14 @@ def test_inventory_http_happy_path() -> None:
         ],
     )
     with (
-        patch("cv.service.download_uris", return_value=[("gs://bucket/jobs/a/front.jpg", Path("/tmp/front.jpg"))]),
+        patch(
+            "cv.service.download_uris",
+            return_value=[("gs://bucket/jobs/a/front.jpg", Path("/tmp/front.jpg"))],
+        ),
         patch("cv.service.build_inventory", return_value=fake_inv) as built,
     ):
-        resp = inventory(_req(image_uris=["gs://bucket/jobs/a/front.jpg"]))
-    assert resp.inventory.images[0].uri == "gs://bucket/jobs/a/front.jpg"
+        resp = inventory(_req(images=["gs://bucket/jobs/a/front.jpg"]))
+    assert resp.images[0].uri == "gs://bucket/jobs/a/front.jpg"
     assert built.call_args.kwargs["source_uris"]["front.jpg"] == "gs://bucket/jobs/a/front.jpg"
 
 
@@ -142,7 +152,7 @@ if __name__ == "__main__":
     test_health()
     test_inventory_requires_images()
     test_inventory_rejects_heic_uri()
-    test_inventory_rejects_empty_checklist()
+    test_inventory_rejects_empty_requirements()
     test_collect_uris_bad_gs()
     test_process_disabled()
     test_inventory_http_happy_path()

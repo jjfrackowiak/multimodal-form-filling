@@ -34,7 +34,6 @@ from pydantic import BaseModel
 from mff_contracts import ImageAnalysis, RequirementSpec
 
 __all__ = [
-    "UNKNOWN",
     "ImageAnalysis",
     "ImageRef",
     "RequirementSpec",
@@ -42,16 +41,14 @@ __all__ = [
     "VisionUnavailable",
 ]
 
-UNKNOWN = "unknown"
-
 
 class VisionUnavailable(RuntimeError):
     """The vision service could not be reached or refused the request.
 
     Distinct from an image the service looked at and could not identify — that comes back
-    as an ImageAnalysis with `depicts == UNKNOWN`. Treat this one as infrastructure
-    failure and the other as evidence: an unreachable service must never be recorded as a
-    finding about the client's photographs.
+    as an ImageAnalysis with empty `hits`. Treat this one as infrastructure failure and
+    the other as evidence: an unreachable service must never be recorded as a finding
+    about the client's photographs.
     """
 
 

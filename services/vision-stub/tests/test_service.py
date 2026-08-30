@@ -33,8 +33,9 @@ async def test_inventory_over_http(vision: HttpVisionTool) -> None:
         [ImageRef(uri="1000040420.jpg"), ImageRef(uri="IMG_20260830_132755 (5).jpg")],
         REQS,
     )
-    assert [a.depicts for a in out] == ["headliner", "headliner"]
-    assert [a.shot_from for a in out] == ["between_front_seats", "beside_seat"]
+    assert [h.id for h in out[0].hits] == [h.id for h in out[1].hits] == ["R-04"]
+    assert out[0].hits[0].constraint_ok is True
+    assert out[1].hits[0].constraint_ok is False
 
 
 async def test_whole_submission_in_one_call(vision: HttpVisionTool) -> None:

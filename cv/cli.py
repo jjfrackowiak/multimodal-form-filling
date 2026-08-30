@@ -35,7 +35,7 @@ def main(argv: list[str] | None = None) -> int:
     manifest_text = None
     if not spans_complete(checklist):
         if not args.manifest:
-            print("checklist missing ids/source_span; pass --manifest", file=sys.stderr)
+            print("checklist missing ids/text; pass --manifest", file=sys.stderr)
             return 2
         manifest_text = args.manifest.read_text()
     try:

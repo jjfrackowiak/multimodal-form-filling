@@ -1,6 +1,6 @@
 """HTTP client the AI editor uses to call the Cloud Run CV tool.
 
-Images stay in GCS. This client sends JSON (checklist + gs:// URIs).
+Images stay in GCS. This client sends JSON (`images` + `requirements`).
 On Cloud Run (`*.run.app`) it attaches an identity token unless
 `authenticated=False`.
 """
@@ -12,7 +12,7 @@ import os
 import urllib.error
 import urllib.request
 
-from cv.schema import InventoryRequest, InventoryResponse, ParsedChecklist
+from cv.schema import ImageRef, InventoryRequest, InventoryResponse, Requirement
 
 
 class CvError(RuntimeError):
@@ -52,17 +52,22 @@ class CvClient:
 
     def inventory(
         self,
-        checklist: ParsedChecklist | dict,
+        requirements: list[Requirement] | list[dict],
         *,
-        image_uris: list[str] | None = None,
+        images: list[str] | list[ImageRef] | None = None,
         image_prefix: str | None = None,
         manifest: str | None = None,
     ) -> InventoryResponse:
-        if isinstance(checklist, dict):
-            checklist = ParsedChecklist.model_validate(checklist)
+        refs: list[ImageRef] = []
+        for item in images or []:
+            refs.append(item if isinstance(item, ImageRef) else ImageRef(uri=item))
+        reqs = [
+            r if isinstance(r, Requirement) else Requirement.model_validate(r)
+            for r in requirements
+        ]
         body = InventoryRequest(
-            checklist=checklist,
-            image_uris=image_uris or [],
+            images=refs,
+            requirements=reqs,
             image_prefix=image_prefix,
             manifest=manifest,
         )

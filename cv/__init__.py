@@ -9,11 +9,13 @@ from cv.pipeline import build_inventory
 from cv.schema import (
     Finding,
     ImageLabel,
+    ImageRef,
     Inventory,
     InventoryImage,
     InventoryRequest,
     InventoryResponse,
     ParsedChecklist,
+    Requirement,
 )
 
 __all__ = [
@@ -21,10 +23,12 @@ __all__ = [
     "CvError",
     "Finding",
     "ImageLabel",
+    "ImageRef",
     "Inventory",
     "InventoryImage",
     "InventoryRequest",
     "InventoryResponse",
     "ParsedChecklist",
+    "Requirement",
     "build_inventory",
 ]
