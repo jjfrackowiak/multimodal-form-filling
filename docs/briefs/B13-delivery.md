@@ -56,7 +56,10 @@ request with latency. The sweep is cheap because `RequestRepository` already exi
   visible to a human: the system tried three times and gave up, and the client must be told
   which checks were never completed rather than left to infer it from a document that looks
   complete.
-- **`failed_forms`**, when `status == "partial"`.
+- **`failed_forms`**, when `status == "partial"`. Use the client's own `form_id` — the
+  `.docx` filename or the input folder name they chose — not an internal id.
+- A request may mix modes, so the email may report on both validated forms and composed
+  ones. Group them so a reader can tell which is which.
 - **The parsed requirement list.** Comments cite `R-04` and nothing more, so the list is
   where `R-04` is explained — each requirement's text plus the manifest span and line it
   came from. `fixtures/fleet-vehicle-return/expected_output/delivery.txt` is the golden

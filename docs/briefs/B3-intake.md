@@ -49,12 +49,62 @@ The editor parses **once** and returns `RequestAccepted.requirements` in the 202
 `render_confirmation` **quotes that**. Nothing in this branch imports a model library, and
 `import-linter` enforces it.
 
-## Mode inference
+## Reading an email — the shape you must implement
 
-Req 3: a validation request must supply the initial version of each form. So forms present
-→ `DERIVATIVE`; no forms → `NET_NEW`. Be explicit about the ambiguous case — forms present
-*and* the client asking for something new — and put your resolution in the code as a named
-rule with a comment, not an inline `if`.
+**The manifest is always the email body.** Never an attachment. That is fixed, and it
+removes a whole class of question: which attachment is the manifest, what format, what if
+there are two. `RequestRecord.manifest_raw` is the body text byte-for-byte, because
+`Requirement.source_span` quotes from it.
+
+**Attachments are work items:**
+
+```
+derivative.zip           → each .docx inside      = one DERIVATIVE job
+net-new.zip / netnew.zip → each top-level folder  = one NET-NEW job
+a bare .docx attachment  → one DERIVATIVE job
+```
+
+Inside the net-new zip, **one folder is one set of inputs** — its `.txt` files and its
+images:
+
+```
+net-new.zip
+├── pojazd-A/          → job, form_id "pojazd-A"
+│   ├── dane.txt       → ClientInputs.texts["dane.txt"]
+│   └── *.jpg          → JobRequest.images
+└── pojazd-B/          → another job
+```
+
+**The folder name becomes `form_id`**, so the client's own labelling survives into the
+results email. They named it; refer to it by that name.
+
+**Containment is how a client says what belongs to what.** An image in `pojazd-A/` belongs
+to the `pojazd-A` job. No naming convention to learn, no metadata file. This is the answer
+to a question that was open for a long time — do not reinvent a different one.
+
+## One email can carry both modes
+
+The realistic complex case: `derivative.zip` with three forms **and** `net-new.zip` with
+four input sets = **seven jobs, one request, one delivery email.**
+
+`mode` lives on `JobRequest`, **not** on `RequestRecord`. Do not infer a single mode for
+the email — that was the old shape and it could not express this. Build a list of work
+items, each with its own mode, and a model validator enforces that derivative carries a
+`form` and net-new carries `inputs`.
+
+## Unzipping is attacker-facing
+
+These archives come from outside. Before extracting anything:
+
+- **Reject path traversal.** An entry named `../../etc/passwd` must not escape the
+  extraction root. This is zip-slip and it is the classic one.
+- **Reject absolute paths and symlinks.**
+- **Cap entry count and total uncompressed size**, checked *before* extraction. A zip bomb
+  is a plausible accident as much as an attack — someone zips a folder of RAW photos.
+- **Extract to a temp directory you control**, never in place.
+
+Use `zipfile` and validate every `ZipInfo.filename` yourself. `extractall` is not safe on
+untrusted input.
 
 ## The intake rule matrix (req 6, req 8)
 
@@ -65,8 +115,12 @@ Every rejection must say **exactly what to add or change**. `IntakeProblem(code,
 |---|---|
 | No manifest at all | `missing_manifest` |
 | Manifest present but empty | `empty_manifest` |
-| Derivative mode with no forms attached | `missing_forms` |
-| An attachment that is not a `.docx` | `unsupported_format` (D1: v1 is Word only) |
+| No work items at all — no zip, no `.docx` | `no_work_items` |
+| An attachment that is not a `.docx` or a recognised zip | `unsupported_format` (D1: v1 is Word only) |
+| A zip with no usable work items inside | `empty_archive` |
+| A net-new zip whose entries are loose files, not folders | `unstructured_inputs` |
+| Path traversal, absolute path or symlink in a zip | `unsafe_archive` |
+| Archive exceeds the entry or size cap | `archive_too_large` |
 | Sender not in `ALLOWED_SENDERS` | `sender_not_allowed` |
 | Rate cap exceeded | `rate_limited` |
 
@@ -92,7 +146,12 @@ what you accept and explicit about what you reject.
 3. A test that this package imports no model library — `pydantic-ai` must not appear.
 4. `render_confirmation` output contains every requirement id and text from the
    `RequestAccepted` it was handed, and the fixture's ten requirements round-trip.
-5. Mode inference tested both ways plus the ambiguous case.
+5. **The seven-job case**: an email with a 3-form `derivative.zip` and a 4-set
+   `net-new.zip` produces 7 `JobRequest`s — 3 derivative with `form` set, 4 net-new with
+   `inputs` set — and `form_id` matches the `.docx` filenames and folder names.
+6. A zip-slip archive (`../escape.docx`) is rejected with `unsafe_archive` and **nothing is
+   written outside the temp root** — assert on the filesystem, not just the verdict.
+7. A zip declaring a huge uncompressed size is rejected **before** extraction.
 6. An RFC 2047 encoded Polish filename is decoded correctly.
 7. A `.docx` with the wrong extension and a `.pdf` with a `.docx` name both land the right
    verdict — sniff content, do not trust the name.

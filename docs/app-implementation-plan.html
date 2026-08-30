@@ -376,6 +376,7 @@ html{scroll-behavior:smooth}
       <a href="#context">Context</a>
       <a href="#framework-grounding-verified-against-current-docs">Framework grounding (verified against current docs)</a>
       <a href="#architecture">Architecture</a>
+      <a href="#what-an-email-looks-like">What an email looks like</a>
       <a href="#how-the-manifest-becomes-requirements">How the manifest becomes requirements</a>
       <a href="#how-requirements-are-referenced">How requirements are referenced</a>
       <a href="#net-new-builds-a-draft-then-compiles-it">Net-new builds a draft, then compiles it</a>
@@ -449,9 +450,10 @@ html{scroll-behavior:smooth}
 </ul>
 <h2 id="architecture">Architecture</h2>
 <h3 id="request-job-slice">Request, Job, Slice</h3>
-<pre><code>Request                     one client email
-  └── Job  (one per form)   ← PARALLEL: forms are independent
-        └── Slice           ← SEQUENTIAL: requirements within a form interact
+<pre><code>Request                     one client email — the body is the manifest
+  └── Job  (one work item)  ← PARALLEL. A .docx to validate, or a folder of inputs
+        │                      to compose from. One email may carry both kinds.
+        └── Slice           ← SEQUENTIAL: requirements within a job interact
 </code></pre>
 <p>Concurrency sits exactly where it is safe. Requirement interdependence — a summary citing
 sections above it, a total depending on entries elsewhere — is <strong>within a form</strong>. Nothing
@@ -641,6 +643,76 @@ its own tokens. <strong>Ops are the tool-call log, not a computed diff</strong>,
 before/after diffing step to get wrong. And because nothing is written until validation
 passes, a failed attempt leaves no trace — which is what makes "identical snapshot across
 attempts" true rather than aspirational.</p>
+<h2 id="what-an-email-looks-like">What an email looks like</h2>
+<p>Nothing in this plan previously said what a request <em>is</em> on the wire. Intake had rules for
+rejecting one and none for reading one. This is that shape.</p>
+<h3 id="the-manifest-is-always-the-email-body">The manifest is always the email body</h3>
+<p><strong>Requirements are never a file attachment.</strong> They are the body of the email, always. That
+removes a whole class of question — which attachment is the manifest, what format is it in,
+what if there are two — and it matches how people actually write these: they type what they
+want and attach the material.</p>
+<p><code>RequestRecord.manifest_raw</code> is therefore the body text, byte-for-byte, and
+<code>Requirement.source_span</code> quotes from it.</p>
+<h3 id="attachments-are-work-items">Attachments are work items</h3>
+<pre><code>email body                  → the manifest. Always.
+derivative.zip              → each .docx inside = one DERIVATIVE job
+net-new.zip                 → each top-level folder = one NET-NEW job
+a bare .docx attachment     → one DERIVATIVE job
+</code></pre>
+<p>Inside the net-new zip, <strong>one folder is one set of inputs</strong> — its images and its <code>.txt</code>
+files:</p>
+<pre><code>net-new.zip
+├── pojazd-A/          → one net-new job, form_id &quot;pojazd-A&quot;
+│   ├── dane.txt
+│   ├── uwagi.txt
+│   └── *.jpg
+└── pojazd-B/          → another
+    └── …
+</code></pre>
+<p>The folder name becomes <code>form_id</code>, so the client's own labelling survives into the reply —
+they named it, and the results email refers to it by that name.</p>
+<h3 id="this-answers-a-question-that-was-open-all-day">This answers a question that was open all day</h3>
+<p><strong>W12</strong> asked how a client indicates that an image or a requirement pertains to a
+particular form. The zip structure answers it: <strong>containment is the signal.</strong> An image in
+<code>pojazd-A/</code> belongs to the <code>pojazd-A</code> job. No naming convention to learn, no metadata file,
+nothing to get wrong — and it is the same answer for both modes.</p>
+<p><code>Requirement.applies_to</code> remains for the case where the <em>manifest</em> singles out a form by
+name, which is a different and rarer thing.</p>
+<h3 id="one-email-can-carry-both-modes">One email can carry both modes</h3>
+<p>The realistic complex case is a <code>derivative.zip</code> with three forms <strong>and</strong> a <code>net-new.zip</code>
+with four input sets: <strong>seven jobs, one request, one delivery email.</strong></p>
+<p>That was previously unrepresentable, because <code>mode</code> sat on <code>RequestRecord</code> — one mode for
+the whole email — while also sitting on <code>JobRequest</code>. Redundant if they had to agree,
+contradictory if they could differ.</p>
+<p><strong><code>mode</code> now lives on the job and nowhere else.</strong> A request is a bag of work items; each
+item knows its own kind. Delivery still barriers across all seven.</p>
+<h3 id="clientinputs-net-new-jobs-can-now-carry-their-inputs"><code>ClientInputs</code> — net-new jobs can now carry their inputs</h3>
+<p><code>JobRequest</code> had <code>form: BlobRef | None</code>, <code>requirements</code> and <code>images</code>, and <strong>no field for the
+text a net-new job composes from.</strong> The fixture's <code>client_inputs.yaml</code> described data the
+contract could not transmit; B7 would have discovered that when it tried to write anything.</p>
+<pre><code class="language-python">class ClientInputs(BaseModel):
+    set_id: str                  # the folder name — the client's own label
+    texts: dict[str, str]        # filename -&gt; UTF-8 content
+
+class JobRequest(BaseModel):
+    mode: Mode                            # per-job; the authority
+    form_id: str                          # .docx filename, or input folder name
+    form: BlobRef | None = None           # derivative only
+    inputs: ClientInputs | None = None    # net-new only
+    requirements: list[Requirement]
+    images: list[JobImage]                # both modes; the source differs
+</code></pre>
+<p>A model validator enforces the pairing — derivative has a <code>form</code> and no <code>inputs</code>, net-new
+the reverse. Mode and payload cannot disagree, which makes the invariant structural rather
+than a convention someone has to remember.</p>
+<p>Images stay on <code>JobRequest</code> for both modes rather than moving inside <code>ClientInputs</code>: for
+derivative they are extracted from the <code>.docx</code>, for net-new they come from the input folder,
+and everything downstream treats them identically.</p>
+<h3 id="unzipping-is-attacker-facing">Unzipping is attacker-facing</h3>
+<p>The zips arrive from outside. Intake must refuse <strong>path traversal</strong> (<code>../</code> escaping the
+extraction root — zip-slip), <strong>absolute paths</strong>, <strong>symlinks</strong>, and enforce a cap on both
+entry count and uncompressed size before extracting. A zip bomb is a plausible accident as
+well as an attack.</p>
 <h2 id="how-the-manifest-becomes-requirements">How the manifest becomes requirements</h2>
 <p>Req 5 calls this "a simple parsing / normalisation step". The fleet fixture shows it
 is not simple, and it is worth being concrete about why — this stage is the single
@@ -1370,19 +1442,25 @@ class IntakeVerdict(BaseModel):
     valid: bool; problems: list[IntakeProblem]
 
 class RequestRecord(BaseModel):                 # the email — owns delivery
-    request_id: str; mode: Mode
-    manifest_raw: str
+    request_id: str                             # NO mode — it lives on the job
+    manifest_raw: str                           # ALWAYS the email body
     requirements: list[Requirement]             # parsed ONCE for the whole request
     job_ids: list[str]                          # one per form
     reply_to: str; original_message_id: str     # delivery threads on the ORIGINAL message
     status: Literal[&quot;running&quot;, &quot;delivered&quot;, &quot;failed&quot;]
 
-class JobRequest(BaseModel):                    # orchestrator → runner. ONE form.
-    job_id: str; request_id: str; mode: Mode
-    form: BlobRef | None                        # None for net-new: nothing supplied
-    form_id: str
-    requirements: list[Requirement]             # already filtered by applies_to
-    images: list[JobImage]                      # already scoped to this form
+class ClientInputs(BaseModel):                  # one folder in the net-new zip
+    set_id: str                                 # folder name — the client's own label
+    texts: dict[str, str]                       # filename -&gt; UTF-8 content
+
+class JobRequest(BaseModel):                    # orchestrator → runner. ONE work item.
+    job_id: str; request_id: str
+    mode: Mode                                  # PER JOB — one email may mix both
+    form_id: str                                # .docx filename, or input folder name
+    form: BlobRef | None = None                 # derivative only
+    inputs: ClientInputs | None = None          # net-new only
+    requirements: list[Requirement]             # already filtered
+    images: list[JobImage]                      # both modes; source differs
 
 class RequestAccepted(BaseModel):               # the 202 — req 7 quotes exactly this
     request_id: str
@@ -1447,7 +1525,7 @@ class BlobStore(Protocol):
 <tbody>
 <tr>
 <td>1, 2, 3</td>
-<td><code>RequestRecord</code> → one <code>JobRequest</code> per form</td>
+<td><code>RequestRecord</code> (body = manifest) → one <code>JobRequest</code> per work item</td>
 </tr>
 <tr>
 <td>4, 5</td>

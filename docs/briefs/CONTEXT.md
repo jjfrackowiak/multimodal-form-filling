@@ -21,12 +21,34 @@ Two modes:
 Source spec: `multimodal-form-filling/email-form-validation-requirements.pdf`, 17 numbered
 requirements. Briefs cite them as "req 5", "req 17".
 
+## What an email looks like
+
+**The manifest is always the email body.** Never an attachment.
+
+```
+email body               → the manifest, byte-for-byte
+derivative.zip           → each .docx inside     = one DERIVATIVE job
+net-new.zip              → each top-level folder = one NET-NEW job
+a bare .docx             → one DERIVATIVE job
+```
+
+A folder inside the net-new zip is one set of inputs — its `.txt` files and its images. The
+folder name becomes `form_id`, so the client's own label survives into the reply.
+
+**Containment is how a client says what belongs to what.** An image in `pojazd-A/` belongs
+to the `pojazd-A` job.
+
+**One email may carry both kinds.** Three forms to validate plus four sets to compose is
+seven jobs, one request, one delivery email. `mode` therefore lives on `JobRequest` and
+**not** on `RequestRecord` — never assume a request is homogeneous.
+
 ## The shape
 
 ```
 Request                     one client email
-  └── Job  (one per form)   ← PARALLEL: forms are independent
-        └── Slice           ← SEQUENTIAL: requirements within a form interact
+  └── Job  (one work item)  ← PARALLEL. A .docx to validate, or a folder of
+        │                      inputs to compose from. Both may appear together.
+        └── Slice           ← SEQUENTIAL: requirements within a job interact
 ```
 
 A **slice** is at most 6 requirements, taken in manifest order. Slices run in sequence so

@@ -19,10 +19,15 @@ life. Fan a request out into one job per form, walk each job's slices in order, 
 after each, check completeness, compile, and hold the delivery barrier.
 
 ```
-Request                     one client email
-  └── Job  (one per form)   ← PARALLEL: forms are independent
-        └── Slice           ← SEQUENTIAL: requirements within a form interact
+Request                     one client email — the body is the manifest
+  └── Job  (one work item)  ← PARALLEL. A .docx to validate, or a folder of inputs
+        │                      to compose from. ONE EMAIL MAY CARRY BOTH KINDS.
+        └── Slice           ← SEQUENTIAL: requirements within a job interact
 ```
+
+**`mode` is per job, not per request.** A single request may hold 3 derivative jobs and 4
+net-new ones. Dispatch each according to its own `JobRequest.mode`; never assume a request
+is homogeneous.
 
 ## Requirements you own
 
@@ -111,7 +116,9 @@ editor service, no HTTP, no model. That fake is also what B9's e2e test will use
    10 requirements, correct commit order.
 3. Resume test: kill after slice 1, restart, assert slice 2 runs and slice 1 does not.
 4. Atomicity test: crash between artifact and cursor write leaves neither.
-5. Parallel jobs: 3 forms, assert concurrency is bounded and each gets its own artifact.
+5. Parallel jobs: **a mixed request of 3 derivative + 4 net-new**, assert concurrency is
+   bounded, each gets its own artifact, and the derivative ones produce
+   `DerivativeArtifact` while the net-new ones produce `NetNewArtifact`.
 6. Barrier: 2 done + 1 failed → `RequestResult.status == "partial"`, `failed_forms` names
    the third, documents has 2 entries.
 7. A test that no retry loop exists here — a runner returning a report with `unverified`
