@@ -32,12 +32,12 @@ def make_source_ref(form_id: str = "form_supplied.docx") -> BlobRef:
 
 def make_artifact(form_id: str = "job-1") -> DerivativeArtifact:
     return DerivativeArtifact(
-        form_id=form_id, source=make_source_ref(form_id), nodes=[], comments=[]
+        job_id="j-1", form_id=form_id, source=make_source_ref(form_id), nodes=[], comments=[]
     )
 
 
 def make_netnew_artifact(form_id: str = "WN-7020U") -> NetNewArtifact:
-    return NetNewArtifact(form_id=form_id, draft=FormDraft(), comments=[])
+    return NetNewArtifact(job_id="j-1", form_id=form_id, draft=FormDraft(), comments=[])
 
 
 def make_cursor(slice_index: int = 0) -> JobCursor:

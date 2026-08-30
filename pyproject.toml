@@ -97,6 +97,12 @@ ignore_missing_imports = true
 module = "lxml.*"
 ignore_missing_imports = true
 
+[[tool.mypy.overrides]]
+# B12: google-cloud-storage ships no py.typed (unlike google-cloud-firestore, which does),
+# so it is unresolved under mypy --strict regardless of import style.
+module = ["google.cloud.storage", "google.cloud.storage.*"]
+ignore_missing_imports = true
+
 # ---------------------------------------------------------------------------
 # import-linter — the highest-value gate in the repo
 # ---------------------------------------------------------------------------
