@@ -1,4 +1,4 @@
-.PHONY: check lint format typecheck imports test sync
+.PHONY: check eval eval-b6 eval-b7 eval-b9 lint format typecheck imports test sync
 
 # All first-party packages, for lint/typecheck (which apply uniformly).
 PACKAGES := packages/mff-contracts packages/mff-vision packages/mff-docmodel \
@@ -52,3 +52,19 @@ test:
 		echo "== $$pkg (no new coverage gate — pre-existing, not B0's) =="; \
 		uv run pytest "$$pkg/tests" -q; \
 	done
+
+# Live model evaluation is deliberately separate from `test`: it consumes ADC-backed
+# Gemini calls and reports structural scores through pydantic-evals.
+eval: eval-b6 eval-b7 eval-b9
+
+eval-b6:
+	@test -n "$(GOOGLE_CLOUD_PROJECT)" || (echo "Set GOOGLE_CLOUD_PROJECT before make eval"; exit 2)
+	uv run python evals/b6/run.py
+
+eval-b7:
+	@test -n "$(GOOGLE_CLOUD_PROJECT)" || (echo "Set GOOGLE_CLOUD_PROJECT before make eval"; exit 2)
+	MFF_B7_LIVE_EVAL=1 uv run python evals/b7/run.py
+
+eval-b9:
+	@test -n "$(GOOGLE_CLOUD_PROJECT)" || (echo "Set GOOGLE_CLOUD_PROJECT before make eval"; exit 2)
+	MFF_B9_LIVE_EVAL=1 uv run python evals/b9/run.py

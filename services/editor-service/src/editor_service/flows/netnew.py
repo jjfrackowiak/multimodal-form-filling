@@ -9,10 +9,12 @@ from editor_service.llm.deps import EditorDeps
 from editor_service.llm.output import SliceTurnOutput
 from editor_service.llm.run import run_slice
 from mff_contracts import (
+    Entry,
     FormDraft,
     ImageAnalysis,
     Mode,
     NetNewArtifact,
+    Requirement,
     Section,
     SliceReport,
     SliceRequest,
@@ -36,7 +38,13 @@ supporting photo files when photos are relevant, and explain the evidence. Under
 ReviewComment contract, a suggestion is required only for a fail verdict; omit it for both
 realised and shortfall. Anchor each comment to the governing section through a real entry
 in that section, using an entry id from the draft rather than inventing an id. Return one
-comment for every requirement.
+comment for every requirement. Determine each verdict from the structured evidence: count
+the inventory `hits` whose id matches the requirement, compare that count with its
+`expected_count`, and inspect every matching hit's `constraint_ok` when a constraint is
+present. A requirement is realised when the hit count meets `expected_count` and all its
+constraints are satisfied; it is a shortfall only when the count is too low or a required
+constraint fails. Do not mark a requirement short merely because its content slot starts
+empty: populate that slot from the client evidence with `set_field` before commenting.
 """.strip()
 
 SCAFFOLD_SECTIONS: tuple[tuple[str, str], ...] = (
@@ -49,6 +57,19 @@ SCAFFOLD_SECTIONS: tuple[tuple[str, str], ...] = (
     ("section-07", "7. Boot and equipment"),
     ("section-08", "8. Gauges"),
     ("section-09", "9. Notes"),
+)
+
+_REQUIREMENT_SECTIONS = (
+    "section-01",
+    "section-02",
+    "section-03",
+    "section-04",
+    "section-05",
+    "section-05",
+    "section-06",
+    "section-07",
+    "section-07",
+    "section-08",
 )
 
 
@@ -64,10 +85,10 @@ async def compose_netnew(
     if req.mode is not Mode.NET_NEW:
         raise ValueError("compose_netnew requires a net-new SliceRequest")
 
-    _ensure_scaffold(artifact)
+    _ensure_scaffold(artifact, req.requirements)
     request = req.model_copy(update={"artifact": artifact})
     deps = EditorDeps(artifact=artifact, agent=cast(Any, None))
-    instruction = _contextual_instruction(inventory, client_texts)
+    instruction = _contextual_instruction(artifact, inventory, client_texts)
     deps.agent = build_agent(
         name="netnew_composer",
         output_schema=SliceTurnOutput,
@@ -78,7 +99,9 @@ async def compose_netnew(
     return await run_slice(request, deps)
 
 
-def _ensure_scaffold(artifact: NetNewArtifact) -> None:
+def _ensure_scaffold(
+    artifact: NetNewArtifact, requirements: list[Requirement] | None = None
+) -> None:
     existing = {section.id: section for section in artifact.draft.sections}
     artifact.draft = FormDraft(
         schema_version=artifact.draft.schema_version,
@@ -87,6 +110,15 @@ def _ensure_scaffold(artifact: NetNewArtifact) -> None:
             for section_id, title in SCAFFOLD_SECTIONS
         ],
     )
+    sections = {section.id: section for section in artifact.draft.sections}
+    for index, requirement in enumerate(requirements or []):
+        entry_id = f"entry-{requirement.id}"
+        if any(entry.id == entry_id for section in sections.values() for entry in section.entries):
+            continue
+        section_id = _REQUIREMENT_SECTIONS[min(index, len(_REQUIREMENT_SECTIONS) - 1)]
+        sections[section_id].entries.append(
+            Entry(id=entry_id, order=f"slot-{index + 1:02d}", set_by=requirement.id)
+        )
 
 
 def _scaffold_section(section: Section | None, section_id: str, title: str) -> Section:
@@ -95,12 +127,23 @@ def _scaffold_section(section: Section | None, section_id: str, title: str) -> S
     return section.model_copy(update={"title": title})
 
 
-def _contextual_instruction(inventory: list[ImageAnalysis], client_texts: dict[str, str]) -> str:
+def _contextual_instruction(
+    artifact: NetNewArtifact,
+    inventory: list[ImageAnalysis],
+    client_texts: dict[str, str],
+) -> str:
     inventory_lines = [f"- {analysis.file}: {analysis.model_dump_json()}" for analysis in inventory]
     text_lines = [f"- {name}: {content}" for name, content in sorted(client_texts.items())]
+    slots = [
+        f"- {entry.id} in {section.id}, for {entry.set_by}"
+        for section in artifact.draft.sections
+        for entry in section.entries
+    ]
     return "\n\n".join(
         [
             NET_NEW_INSTRUCTION,
+            "Use set_field to populate the matching deterministic content slot, then use that "
+            "same slot id as the comment anchor:\n" + ("\n".join(slots) or "- none"),
             "Inventory evidence:\n" + ("\n".join(inventory_lines) or "- none"),
             "Client text evidence:\n" + ("\n".join(text_lines) or "- none"),
         ]
