@@ -1,0 +1,862 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Form Validation Build Plan</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&family=JetBrains+Mono:wght@400;600&display=swap">
+
+<style>
+:root{
+  --paper:#f6f7f8;
+  --surface:#ffffff;
+  --sunken:#eef0f2;
+  --ink:#16191d;
+  --muted:#5f6b78;
+  --faint:#8b96a1;
+  --rule:#dde1e5;
+  --rule-strong:#c3cad1;
+  --accent:#155e63;
+  --accent-soft:#e2eeee;
+  --accent-line:#9cc2c4;
+  --pass:#2f7d4f;
+  --fail:#b3341f;
+  --unver:#a8700f;
+  --plate:#fcfcfb;
+  --plate-rule:#d8dde1;
+
+  --f-display:"Archivo","Helvetica Neue",Arial,sans-serif;
+  --f-body:"Source Serif 4",Georgia,"Times New Roman",serif;
+  --f-mono:"JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+
+  --col:68ch;
+  --pad:clamp(1.1rem,4vw,2.5rem);
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --paper:#101316;
+    --surface:#171b1f;
+    --sunken:#1d2227;
+    --ink:#e6e9ec;
+    --muted:#9aa6b1;
+    --faint:#6f7c88;
+    --rule:#282e34;
+    --rule-strong:#39414a;
+    --accent:#5fb3b6;
+    --accent-soft:#14282a;
+    --accent-line:#2c5457;
+    --pass:#6bbd88;
+    --fail:#e0765e;
+    --unver:#d7a13f;
+  }
+}
+:root[data-theme="dark"]{
+  --paper:#101316;
+  --surface:#171b1f;
+  --sunken:#1d2227;
+  --ink:#e6e9ec;
+  --muted:#9aa6b1;
+  --faint:#6f7c88;
+  --rule:#282e34;
+  --rule-strong:#39414a;
+  --accent:#5fb3b6;
+  --accent-soft:#14282a;
+  --accent-line:#2c5457;
+  --pass:#6bbd88;
+  --fail:#e0765e;
+  --unver:#d7a13f;
+}
+
+*{box-sizing:border-box}
+body{
+  background:var(--paper);
+  color:var(--ink);
+  font-family:var(--f-body);
+  font-size:1.0625rem;
+  line-height:1.62;
+  -webkit-font-smoothing:antialiased;
+}
+
+/* ---------- shell ---------- */
+.shell{
+  display:grid;
+  grid-template-columns:minmax(0,1fr);
+  max-width:1180px;
+  margin:0 auto;
+  padding:0 var(--pad) 6rem;
+}
+@media (min-width:1040px){
+  .shell{grid-template-columns:15rem minmax(0,1fr); gap:0 3.5rem;}
+}
+
+/* ---------- rail ---------- */
+.rail{display:none}
+@media (min-width:1040px){
+  .rail{
+    display:block;
+    grid-column:1;
+    position:sticky;
+    top:0;
+    align-self:start;
+    max-height:100vh;
+    overflow-y:auto;
+    padding:3.25rem 0 3rem;
+  }
+}
+.rail-label{
+  font-family:var(--f-display);
+  font-size:.6875rem;
+  font-weight:600;
+  letter-spacing:.13em;
+  text-transform:uppercase;
+  color:var(--faint);
+  margin:0 0 .9rem;
+}
+.rail nav{display:flex;flex-direction:column;gap:.1rem;border-left:1px solid var(--rule)}
+.rail a{
+  font-family:var(--f-display);
+  font-size:.8125rem;
+  font-weight:500;
+  line-height:1.35;
+  color:var(--muted);
+  text-decoration:none;
+  padding:.42rem 0 .42rem .9rem;
+  margin-left:-1px;
+  border-left:2px solid transparent;
+  transition:color .15s,border-color .15s;
+}
+.rail a:hover{color:var(--ink)}
+.rail a.on{color:var(--accent);border-left-color:var(--accent);font-weight:600}
+.rail a:focus-visible,main a:focus-visible{outline:2px solid var(--accent);outline-offset:3px;border-radius:2px}
+
+/* ---------- main ---------- */
+main{grid-column:1;min-width:0}
+@media (min-width:1040px){main{grid-column:2}}
+.col{max-width:var(--col)}
+
+/* ---------- masthead ---------- */
+.masthead{padding:3.25rem 0 2.25rem;border-bottom:2px solid var(--ink)}
+.eyebrow{
+  font-family:var(--f-mono);
+  font-size:.6875rem;
+  letter-spacing:.1em;
+  text-transform:uppercase;
+  color:var(--accent);
+  margin:0 0 1.1rem;
+}
+h1{
+  font-family:var(--f-display);
+  font-weight:700;
+  font-size:clamp(2rem,5.2vw,3.1rem);
+  line-height:1.04;
+  letter-spacing:-.022em;
+  text-wrap:balance;
+  margin:0 0 .85rem;
+}
+.standfirst{
+  font-size:1.1875rem;
+  line-height:1.55;
+  color:var(--muted);
+  margin:0;
+  max-width:56ch;
+}
+.meta{
+  display:flex;flex-wrap:wrap;gap:.5rem 2rem;
+  margin-top:1.9rem;
+  font-family:var(--f-mono);
+  font-size:.75rem;
+  color:var(--faint);
+}
+.meta b{color:var(--muted);font-weight:400}
+
+/* ---------- sections ---------- */
+section{padding-top:3.5rem}
+h2{
+  font-family:var(--f-display);
+  font-weight:700;
+  font-size:clamp(1.3rem,2.7vw,1.72rem);
+  letter-spacing:-.014em;
+  line-height:1.2;
+  text-wrap:balance;
+  margin:0 0 .3rem;
+  scroll-margin-top:1.5rem;
+}
+.h2-rule{width:2.5rem;height:3px;background:var(--accent);margin:0 0 1.4rem;border-radius:2px}
+h3{
+  font-family:var(--f-display);
+  font-weight:600;
+  font-size:1.0625rem;
+  letter-spacing:-.005em;
+  margin:2.4rem 0 .7rem;
+}
+p{margin:0 0 1.05rem;max-width:var(--col)}
+ul{margin:0 0 1.05rem;padding-left:1.15rem;max-width:var(--col)}
+li{margin-bottom:.5rem}
+li::marker{color:var(--accent-line)}
+strong{font-weight:600}
+em{font-style:italic;color:var(--muted)}
+a{color:var(--accent)}
+code{
+  font-family:var(--f-mono);
+  font-size:.855em;
+  background:var(--sunken);
+  border:1px solid var(--rule);
+  border-radius:3px;
+  padding:.08em .34em;
+  word-break:break-word;
+}
+h2 code,h3 code,th code{background:none;border:none;padding:0}
+
+/* ---------- breakout ---------- */
+.wide{max-width:100%;width:100%}
+
+/* ---------- tables ---------- */
+.tw{overflow-x:auto;margin:0 0 1.3rem;border:1px solid var(--rule);border-radius:6px;background:var(--surface)}
+table{border-collapse:collapse;width:100%;font-size:.875rem;font-family:var(--f-display);font-weight:500}
+th,td{text-align:left;padding:.62rem .85rem;border-bottom:1px solid var(--rule);vertical-align:top}
+thead th{
+  font-size:.6875rem;letter-spacing:.08em;text-transform:uppercase;
+  font-weight:600;color:var(--faint);
+  background:var(--sunken);
+  white-space:nowrap;
+  border-bottom:1px solid var(--rule-strong);
+}
+tbody tr:last-child td{border-bottom:none}
+td code{font-size:.8em}
+.num{font-variant-numeric:tabular-nums;white-space:nowrap;font-family:var(--f-mono);font-size:.8125rem}
+.id{font-family:var(--f-mono);font-size:.75rem;font-weight:600;color:var(--accent);white-space:nowrap}
+
+/* ---------- diagram plates ---------- */
+figure{margin:0 0 1.5rem}
+.plate{
+  background:var(--plate);
+  border:1px solid var(--plate-rule);
+  border-radius:8px;
+  padding:1.5rem 1rem;
+  overflow-x:auto;
+  box-shadow:0 1px 2px rgba(16,19,22,.05);
+}
+.plate .mermaid{display:flex;justify-content:center;min-width:min-content}
+figcaption{
+  font-family:var(--f-mono);
+  font-size:.7188rem;
+  color:var(--faint);
+  margin-top:.7rem;
+  padding-left:.1rem;
+}
+
+/* ---------- code block ---------- */
+pre.code{
+  background:var(--surface);
+  border:1px solid var(--rule);
+  border-radius:6px;
+  padding:1.15rem 1.25rem;
+  overflow-x:auto;
+  font-family:var(--f-mono);
+  font-size:.8125rem;
+  line-height:1.62;
+  margin:0 0 1.3rem;
+  tab-size:2;
+}
+pre.code .c{color:var(--faint)}
+pre.code .k{color:var(--accent);font-weight:600}
+
+/* ---------- callout ---------- */
+.callout{
+  background:var(--accent-soft);
+  border:1px solid var(--accent-line);
+  border-radius:6px;
+  padding:1.05rem 1.25rem;
+  margin:0 0 1.4rem;
+  max-width:var(--col);
+}
+.callout p{margin:0}
+.callout p + p{margin-top:.7rem}
+.callout .tag{
+  display:block;
+  font-family:var(--f-mono);
+  font-size:.6875rem;
+  letter-spacing:.09em;
+  text-transform:uppercase;
+  color:var(--accent);
+  margin-bottom:.45rem;
+}
+
+/* ---------- layer / branch cards ---------- */
+.layer{margin-bottom:2rem}
+.layer-head{
+  display:flex;align-items:baseline;gap:.75rem;flex-wrap:wrap;
+  padding-bottom:.5rem;margin-bottom:1rem;
+  border-bottom:1px solid var(--rule-strong);
+}
+.layer-n{
+  font-family:var(--f-mono);font-size:.6875rem;font-weight:600;
+  letter-spacing:.09em;text-transform:uppercase;
+  color:var(--surface);background:var(--accent);
+  padding:.2rem .5rem;border-radius:3px;
+}
+.layer-t{font-family:var(--f-display);font-weight:600;font-size:1rem}
+.layer-w{font-family:var(--f-mono);font-size:.75rem;color:var(--faint);margin-left:auto}
+
+.cards{display:grid;gap:.75rem;grid-template-columns:1fr}
+@media (min-width:760px){.cards{grid-template-columns:1fr 1fr}}
+.card{
+  background:var(--surface);
+  border:1px solid var(--rule);
+  border-radius:6px;
+  padding:.95rem 1.05rem;
+  display:flex;flex-direction:column;gap:.4rem;
+}
+.card-top{display:flex;align-items:baseline;gap:.55rem;flex-wrap:wrap}
+.card-id{font-family:var(--f-mono);font-size:.75rem;font-weight:600;color:var(--accent)}
+.card-br{font-family:var(--f-mono);font-size:.7188rem;color:var(--faint);word-break:break-all}
+.card p{font-size:.875rem;line-height:1.5;margin:0;max-width:none}
+.card .owns{
+  font-family:var(--f-mono);font-size:.7188rem;color:var(--muted);
+  background:var(--sunken);border-radius:3px;padding:.3rem .45rem;
+  word-break:break-all;
+}
+.card.block{border-color:var(--accent);border-left-width:3px;grid-column:1/-1}
+
+/* ---------- verdict chips ---------- */
+.chip{
+  display:inline-flex;align-items:center;gap:.32rem;
+  font-family:var(--f-mono);font-size:.7188rem;font-weight:600;
+  border-radius:3px;padding:.12rem .4rem;
+  border:1px solid currentColor;
+}
+.chip::before{content:"";width:.4rem;height:.4rem;border-radius:50%;background:currentColor}
+.chip.pass{color:var(--pass)}
+.chip.fail{color:var(--fail)}
+.chip.unver{color:var(--unver)}
+.chips{display:flex;flex-wrap:wrap;gap:.4rem;margin:0 0 1.2rem}
+
+/* ---------- footer ---------- */
+footer{
+  margin-top:4rem;padding-top:1.5rem;
+  border-top:1px solid var(--rule);
+  font-family:var(--f-mono);font-size:.75rem;color:var(--faint);
+  max-width:var(--col);
+}
+@media (prefers-reduced-motion:reduce){
+  *{animation:none!important;transition:none!important;scroll-behavior:auto!important}
+}
+html{scroll-behavior:smooth}
+</style>
+<style>
+  html{color-scheme:light dark}
+  body{margin:0}
+  img{max-width:100%}
+  [hidden]{display:none!important}
+  /* mermaid renders into the pre; keep it from inheriting the code-block look */
+  pre.mermaid{background:none;border:none;padding:0;margin:0}
+  pre.mermaid svg{max-width:100%;height:auto}
+</style>
+</head>
+<body>
+
+
+<div class="shell">
+
+  <aside class="rail">
+    <p class="rail-label">Contents</p>
+    <nav id="toc">
+      <a href="#scope">Scope &amp; decisions</a>
+      <a href="#grounding">Framework grounding</a>
+      <a href="#architecture">Architecture</a>
+      <a href="#state">State &amp; persistence</a>
+      <a href="#contract">The frozen contract</a>
+      <a href="#branches">Parallel branch tasks</a>
+      <a href="#evals">Evals &amp; latency</a>
+      <a href="#quality">Code quality bar</a>
+      <a href="#brief">Subagent brief</a>
+      <a href="#verify">Verification</a>
+      <a href="#open">Carried forward</a>
+    </nav>
+  </aside>
+
+  <main>
+
+    <header class="masthead">
+      <p class="eyebrow">Implementation plan · v1</p>
+      <h1>Form Validation Build Plan</h1>
+      <p class="standfirst">An email-driven service that turns a free-text manifest and a pile of Word forms into reviewed documents — decomposed into branch-sized tasks that run in parallel.</p>
+      <div class="meta">
+        <span><b>Scope</b> email service + AI editor</span>
+        <span><b>Source</b> email-form-validation-requirements.pdf</span>
+        <span><b>Reqs</b> 17 + 3 open</span>
+      </div>
+    </header>
+
+    <section id="scope">
+      <h2>Scope &amp; decisions</h2>
+      <div class="h2-rule"></div>
+      <p>Our responsibility is <strong>Part 1 (email server layer)</strong> and <strong>Part 2 (AI editor)</strong>. GCP deployment belongs to someone else — but every service we ship is containerised so they can take it straight from us.</p>
+      <div class="tw col">
+        <table>
+          <thead><tr><th>Question</th><th>Decision</th></tr></thead>
+          <tbody>
+            <tr><td>Email transport</td><td>IMAP poll inbound, SMTP send outbound</td></tr>
+            <tr><td>Locked / editable regions</td><td>Agent-derived on the first run, held in artifact state</td></tr>
+            <tr><td>Service boundary</td><td>Two services over HTTP, frozen contracts package between</td></tr>
+            <tr><td>Word comments</td><td><code>python-docx</code> native <code>add_comment</code></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p><strong>Not in v1:</strong> image tooling (req 13) ships as a stubbed interface only — the real cropping and understanding module lands later. Also deferred: OCR/PDF input, job-status polling, cross-requirement conflict detection.</p>
+    </section>
+
+    <section id="grounding">
+      <h2>Framework grounding</h2>
+      <div class="h2-rule"></div>
+      <p>Every claim below was checked against current documentation rather than recalled.</p>
+      <ul>
+        <li><strong>Agents — <code>pydantic-ai</code>.</strong> Programmatic hand-off (req 11) is a documented pattern: agents called in succession from <em>plain Python</em>, each run scoped to one requirement slice, context carried by <code>message_history</code> and shared <code>deps</code>/<code>usage</code>. No graph DSL — the state machine is our own explicit loop.</li>
+        <li><strong>Evals — <code>pydantic-evals</code>.</strong> Same ecosystem: <code>Case</code>, <code>Dataset</code>, <code>Evaluator</code>, plus built-in <code>LLMJudge</code>, <code>IsInstance</code> and <code>MaxDuration(seconds=…)</code> — the latency assertion, first-class. <code>EvaluatorContext</code> exposes <code>ctx.duration</code>, <code>ctx.metrics</code> and <code>ctx.span_tree</code>, so correctness, latency and token cost all fall out of one run.</li>
+        <li><strong>Shared state (req 12)</strong> is a <code>deps</code> dataclass holding the <code>Artifact</code> object. Tools mutate it in place; it outlives every run.</li>
+        <li><strong>Gemini.</strong> <code>GoogleModel(&lt;id&gt;, provider=GoogleProvider(api_key=…))</code>, with <code>HttpRetryOptions</code> for transport retry and <code>UsageLimits</code> per slice.</li>
+        <li><strong>Comments.</strong> <code>document.add_comment(runs=…, text=…, author=…)</code> and <code>document.comments</code> exist in <code>python-docx</code> ≥ 1.2.</li>
+      </ul>
+      <div class="callout">
+        <span class="tag">One correction worth flagging</span>
+        <p>The obvious reading of reqs 16–17 puts the retry in <code>@agent.output_validator</code> raising <code>ModelRetry</code>. That handles cheap structural fixes, but exhausting its budget <em>raises</em>. Req 17 needs a durable terminal outcome — a requirement marked <code>unverified</code> in the returned comments. So the <strong>three-attempt cap and the unverified marking live in our outer loop</strong>, not in the validator.</p>
+      </div>
+    </section>
+
+    <section id="architecture">
+      <h2>Architecture</h2>
+      <div class="h2-rule"></div>
+
+      <h3>Email layer</h3>
+      <figure class="wide">
+        <div class="plate">
+<pre class="mermaid">
+%%{init:{"theme":"base","themeVariables":{"fontFamily":"JetBrains Mono, ui-monospace, monospace","fontSize":"13px","primaryColor":"#ffffff","primaryTextColor":"#16191d","primaryBorderColor":"#155e63","lineColor":"#5f6b78","tertiaryColor":"#f6f7f8"}}}%%
+flowchart TD
+    IMAP["inbound IMAP"] --> ES["email-service"]
+    ES --> IV{"intake validation<br/>req 6"}
+    IV -->|invalid| BAD["SMTP reply:<br/>exactly what is missing<br/>req 8"]
+    IV -->|valid| JOB["POST /jobs<br/>to editor-service"]
+    IV -->|valid| ACK["SMTP reply: handed over<br/>+ parsed requirement list<br/>req 7"]
+</pre>
+        </div>
+        <figcaption>Fig. 1 — intake, and the two replies a client can receive.</figcaption>
+      </figure>
+      <p>The confirmation reply carries the <strong>parsed requirement list</strong> (req 7, <em>Recommended</em>). That is the cheapest correction point in the whole system: the client catches a misparsed requirement before a single comment is generated against it.</p>
+
+      <h3>Editor layer</h3>
+      <figure class="wide">
+        <div class="plate">
+<pre class="mermaid">
+%%{init:{"theme":"base","themeVariables":{"fontFamily":"JetBrains Mono, ui-monospace, monospace","fontSize":"13px","primaryColor":"#ffffff","primaryTextColor":"#16191d","primaryBorderColor":"#155e63","lineColor":"#5f6b78","tertiaryColor":"#f6f7f8"}}}%%
+flowchart TD
+    A["PARSE_MANIFEST"] --> M{"mode?"}
+    M -->|derivative| P["PARSE_DOCX<br/>the client's document"]
+    M -->|net-new| G["GENERATE_SCAFFOLD<br/>a section per requirement"]
+    P --> C["CLASSIFY_REGIONS<br/>an agent decides"]
+    D["DECLARE_REGIONS<br/>the generator marks its own"]
+    G --> D
+    C --> S["for slice in manifest.slices()"]
+    D --> S
+    S --> R["runner.run(slice, deps)"]
+    R --> V{"validate report<br/>req 16"}
+    V -->|"fail, attempt &lt; 3"| R
+    V -->|"fail, attempt = 3"| U["mark unanswered<br/>requirements unverified<br/>req 17"]
+    V -->|ok| N{"more slices?"}
+    U --> N
+    N -->|yes| S
+    N -->|no| E1["APPLY_EDITS"]
+    E1 --> E2["ATTACH_COMMENTS"] --> E3["RENDER_DOCX"] --> E4["JobResult"]
+</pre>
+        </div>
+        <figcaption>Fig. 2 — the state machine. The modes fork once, at the top, and share everything after.</figcaption>
+      </figure>
+      <p>The slice loop <em>is</em> the programmatic hand-off (req 11) — plain Python, not a framework abstraction. On a failed attempt the validator's error text is fed back into the next run.</p>
+      <h3>Are the two modes actually different?</h3>
+      <p>Mostly no — and it pays to be precise about the part that is, because it decides where the code splits.</p>
+      <p><strong>They diverge in exactly one place: how the artifact is seeded.</strong> Derivative parses the client's <code>.docx</code>. Net-new has no document, so <strong>it has to generate one</strong> — a scaffold with a section per requirement, built from <code>Requirement[]</code> plus the client's inputs. Everything downstream of that — the slice loop, validation, the retry cap, edit application, comments, rendering — is shared byte for byte.</p>
+      <p><strong>Both modes have regions.</strong> They differ only in who decides them. In derivative an agent classifies the client's existing content. In net-new the generator declares them as it emits the scaffold: headings and field labels come out locked, content slots come out editable. Same mechanism, different author.</p>
+      <div class="callout">
+        <span class="tag">So why keep two runners?</span>
+        <p>Not for structural reasons — for <strong>authority</strong>. A derivative run <strong>may not write</strong>; a net-new run <strong>must</strong>. That is the entire product distinction: a client sending a form for validation wants to be told it is wrong, not handed a silently corrected version.</p>
+        <p>You <em>could</em> collapse net-new into "derivative over an empty document where everything is editable and every requirement starts failing" — <code>realised</code> is then just <code>pass</code>, authored by us. It is elegant, and it is a trap: it puts writing on the common path, and every pressure from there runs the wrong way.</p>
+      </div>
+      <p><strong>Consequence for the plan:</strong> the scaffold generator is a real component, not the hand-wave "blank template" this plan carried earlier. It is the one genuinely new thing net-new needs, and it belongs to B7.</p>
+      <div class="chips">
+        <span class="chip pass">pass</span>
+        <span class="chip fail">fail — carries a suggestion</span>
+        <span class="chip unver">unverified — retries exhausted</span>
+      </div>
+    </section>
+
+    <section id="state">
+      <h2>State &amp; persistence</h2>
+      <div class="h2-rule"></div>
+      <p>Req 12 says the artifact lives "outside any single agent run". In-process that is a Python object — but across an HTTP boundary, a retry, a crash, or a second replica, an in-process object is simply gone. It needs a store, and that store is also what finally gives <strong>D2</strong> — job status after confirmation — something to report.</p>
+      <p><strong>So yes: a Firestore-backed store with async save and load. But it goes behind an interface, not into the flows.</strong></p>
+      <pre class="code"><span class="c"># ffx-contracts — frozen alongside the models</span>
+<span class="k">class</span> ArtifactRepository(Protocol):
+    <span class="k">async def</span> save(self, artifact: Artifact, *, expected_version: int) -&gt; int: ...
+    <span class="k">async def</span> load(self, job_id: str) -&gt; tuple[Artifact, int]: ...
+
+<span class="k">class</span> JobRepository(Protocol):
+    <span class="k">async def</span> put(self, record: JobRecord) -&gt; None: ...
+    <span class="k">async def</span> get(self, job_id: str) -&gt; JobRecord | None: ...</pre>
+      <p>Two implementations: <code>InMemoryRepository</code> for tests, evals and local dev, and <code>FirestoreRepository</code> for GCP via <code>google.cloud.firestore.AsyncClient</code>, which is natively async. The state machine only ever sees the Protocol.</p>
+      <p>That indirection is not ceremony. It is what lets <strong>CI and the entire Tier-A eval suite run with no GCP credentials and no emulator</strong>. Provisioning Firestore belongs to the deployment owner; the client code is ours.</p>
+
+      <h3>Four things a naive save/load gets wrong</h3>
+      <div class="callout">
+        <span class="tag">1 · Firestore caps a document at 1 MiB</span>
+        <p>An <code>Artifact</code> carrying every <code>Line</code> of a 50-page form plus a comment per requirement can approach that, and the <code>.docx</code> bytes blow straight past it. So <strong>Firestore holds the JSON state and GCS holds the documents</strong>, referenced by path. Get this wrong and it surfaces as a hard write failure on exactly the large documents the product exists to handle.</p>
+      </div>
+      <div class="callout">
+        <span class="tag">2 · The job record is not the artifact</span>
+        <p><code>JobRecord</code> — status, mode, current slice, attempts used, unverified ids, timestamps — is a separate small document that is cheap to poll. That is the D2 answer, and it stays readable even while the artifact is mid-write.</p>
+      </div>
+      <div class="callout">
+        <span class="tag">3 · Optimistic concurrency</span>
+        <p>The artifact is mutated across many slice runs. Carry a <code>version</code> int and check it on write. v1 runs slices sequentially so it should never fire — but if it ever does, a lost update means silently dropped review comments, which is the worst failure available here, because the output still looks complete.</p>
+      </div>
+      <div class="callout">
+        <span class="tag">4 · Checkpoint per slice, not per job</span>
+        <p>Save after each slice completes. That makes a crashed job resumable rather than restartable, and gives the job record real progress to report instead of a binary running/done.</p>
+      </div>
+      <h3>The blob pointer</h3>
+      <p>Firestore stores the run's <em>shape</em>; the bucket stores its <em>weight</em>. One reference type covers both directions:</p>
+      <pre class="code"><span class="k">class</span> BlobRef(BaseModel):
+    uri: str            <span class="c"># gs://&lt;bucket&gt;/jobs/&lt;job_id&gt;/&lt;kind&gt;/&lt;sha256&gt;</span>
+    content_type: str
+    size_bytes: int
+    sha256: str</pre>
+      <p>It carries the client's source <code>.docx</code>, the rendered output, and <strong>every image extracted from a form</strong>. Content-addressing by <code>sha256</code> means a retried job re-points at the existing object rather than writing a second copy — which matters, because req 17 retries up to three times and a naive path scheme would triple-write on every recovery.</p>
+      <p>This is also the seam the deferred image module — <strong>B11</strong> — picks up: it reads <code>BlobRef</code>s already sitting on the artifact and returns crops as new ones. No schema change when it lands, which is the whole reason for stubbing the interface now rather than leaving a hole.</p>
+    </section>
+
+    <section id="contract">
+      <h2>The frozen contract</h2>
+      <div class="h2-rule"></div>
+      <p>Everything else is written against <code>ffx-contracts</code>. <strong>No branch may edit it</strong> — a change request goes back through the layer-0 owner. This single rule is what makes seven simultaneous PRs safe.</p>
+      <pre class="code"><span class="k">class</span> Requirement(BaseModel):
+    id: str                 <span class="c"># "R-03"</span>
+    text: str               <span class="c"># one checkable statement (req 5)</span>
+    source_span: str        <span class="c"># verbatim manifest text it came from</span>
+    scope: str              <span class="c"># slice key — which run owns it (req 11)</span>
+    applies_to: list[str]   <span class="c"># form ids; empty = all</span>
+
+<span class="k">class</span> Line(BaseModel):      <span class="c"># the unit edits target (req 14)</span>
+    id: str                 <span class="c"># stable: "p12", "t3.r2.c1.p0"</span>
+    text: str
+
+<span class="k">class</span> Region(BaseModel):
+    line_ids: list[str]
+    locked: bool
+    rationale: str          <span class="c"># why the first run classified it so</span>
+
+<span class="k">class</span> ReviewComment(BaseModel):
+    line_id: str
+    requirement_id: str
+    verdict: Literal["pass", "fail", "realised", "unverified"]
+    justification: str      <span class="c"># req 16: every answer justified</span>
+    suggestion: str | None  <span class="c"># required when verdict == "fail"</span>
+    source_reference: str   <span class="c"># req 16: must resolve to a real source</span>
+
+<span class="k">class</span> Artifact(BaseModel):  <span class="c"># req 12: outlives any single run</span>
+    lines: list[Line]
+    regions: list[Region]
+    edits: list[Edit]
+    comments: list[ReviewComment]</pre>
+      <p>Repository layout mirrors that seam:</p>
+      <div class="tw col">
+        <table>
+          <thead><tr><th>Path</th><th>Purpose</th></tr></thead>
+          <tbody>
+            <tr><td><code>packages/ffx-contracts</code></td><td><strong>Frozen</strong> shared models; no dependency but pydantic</td></tr>
+            <tr><td><code>packages/ffx-docmodel</code></td><td>docx ⇄ line-addressable <code>Artifact</code>, regions, comment writer</td></tr>
+            <tr><td><code>packages/ffx-manifest</code></td><td>free text → discrete <code>Requirement[]</code></td></tr>
+            <tr><td><code>services/email-service</code></td><td>FastAPI + IMAP poller + SMTP sender</td></tr>
+            <tr><td><code>services/editor-service</code></td><td>FastAPI + state machine + agents</td></tr>
+            <tr><td><code>fixtures/fleet-vehicle-return</code></td><td>the illustrative example, as golden data</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="branches">
+      <h2>Parallel branch tasks</h2>
+      <div class="h2-rule"></div>
+      <p>Directory ownership is <strong>disjoint per branch</strong> — that is what keeps concurrent PRs from colliding. Layers are honest about dependencies: peak parallelism is eight-wide, not thirteen.</p>
+
+      <div class="layer">
+        <div class="layer-head">
+          <span class="layer-n">Layer 0</span>
+          <span class="layer-t">Blocking — must merge first</span>
+          <span class="layer-w">1 PR</span>
+        </div>
+        <div class="cards">
+          <div class="card block">
+            <div class="card-top"><span class="card-id">B0</span><span class="card-br">feat/scaffold-contracts</span></div>
+            <p>uv workspace, the frozen contracts package, <code>Makefile</code>, CI (ruff · mypy · pytest · import-linter), the eval harness, and empty package skeletons so later branches only ever <em>add</em> files.</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="layer">
+        <div class="layer-head">
+          <span class="layer-n">Layer 1</span>
+          <span class="layer-t">Fully parallel — all branch from B0</span>
+          <span class="layer-w">8 PRs</span>
+        </div>
+        <div class="cards">
+          <div class="card">
+            <div class="card-top"><span class="card-id">B1</span><span class="card-br">feat/docmodel</span></div>
+            <div class="owns">packages/ffx-docmodel</div>
+            <p>docx → <code>Artifact</code> with stable line ids including table cells; surgical <code>apply_edits</code> that <strong>refuses a locked target</strong>; comment attachment; render back. No AI.</p>
+          </div>
+          <div class="card">
+            <div class="card-top"><span class="card-id">B2</span><span class="card-br">feat/manifest</span></div>
+            <div class="owns">packages/ffx-manifest</div>
+            <p>Free text → <code>Requirement[]</code> (req 5). Deterministic pre-split plus a small extraction agent, stable ids, <code>source_span</code> provenance, slice grouping.</p>
+          </div>
+          <div class="card">
+            <div class="card-top"><span class="card-id">B3</span><span class="card-br">feat/intake</span></div>
+            <div class="owns">email-service/intake, replies</div>
+            <p>Reqs 6 · 7 · 8. MIME parse, attachment extraction, mode inference, the verdict rule matrix, and both reply templates.</p>
+          </div>
+          <div class="card">
+            <div class="card-top"><span class="card-id">B4</span><span class="card-br">feat/mail-transport</span></div>
+            <div class="owns">email-service/transport</div>
+            <p><code>MailTransport</code> protocol, IMAP poller with Message-ID idempotency, SMTP sender with correct threading headers, plus the in-memory fake every other branch tests against.</p>
+          </div>
+          <div class="card">
+            <div class="card-top"><span class="card-id">B5</span><span class="card-br">feat/editor-machine</span></div>
+            <div class="owns">editor-service/machine, validation</div>
+            <p>The slice loop, <code>EditorDeps</code>, the report validator, the three-attempt cap and the unverified terminal. Agent-agnostic behind a <code>SliceRunner</code> protocol.</p>
+          </div>
+          <div class="card">
+            <div class="card-top"><span class="card-id">B8</span><span class="card-br">feat/llm-config</span></div>
+            <div class="owns">editor-service/llm, settings</div>
+            <p>Gemini wiring, pinned model id, retry options, per-slice usage limits, shared usage accounting, structured logging. One <code>build_agent()</code> both flows call.</p>
+          </div>
+          <div class="card">
+            <div class="card-top"><span class="card-id">B12</span><span class="card-br">feat/state-store</span></div>
+            <div class="owns">packages/ffx-store</div>
+            <p><code>ArtifactRepository</code> and <code>JobRepository</code>: the in-memory adapter every other branch tests against, and the Firestore + GCS adapter for GCP. Versioned writes, per-slice checkpointing, no credentials on the in-memory path.</p>
+          </div>
+          <div class="card">
+            <div class="card-top"><span class="card-id">B10</span><span class="card-br">feat/docker</span></div>
+            <div class="owns">docker/, compose.yaml</div>
+            <p>Multi-stage non-root Dockerfile per service with healthchecks, and a compose file bringing both up alongside a local mailbox. No GCP, no Terraform.</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="layer">
+        <div class="layer-head">
+          <span class="layer-n">Layer 2</span>
+          <span class="layer-t">Needs B1 · B5 · B8</span>
+          <span class="layer-w">3 PRs</span>
+        </div>
+        <div class="cards">
+          <div class="card">
+            <div class="card-top"><span class="card-id">B6</span><span class="card-br">feat/flow-derivative</span></div>
+            <div class="owns">editor-service/flows/derivative</div>
+            <p>The region-classifying first run, and the per-slice validation agent: one comment per requirement per form, pass/fail with justification and suggestion. Never edits a locked region.</p>
+          </div>
+          <div class="card">
+            <div class="card-top"><span class="card-id">B7</span><span class="card-br">feat/flow-netnew</span></div>
+            <div class="owns">editor-service/flows/netnew</div>
+            <p><strong>The scaffold generator</strong> — <code>Requirement[]</code> plus client inputs into a document skeleton that declares its own locked and editable regions as it emits — plus the authoring runner. Comments show how each requirement was realised.</p>
+          </div>
+          <div class="card">
+            <div class="card-top"><span class="card-id">B11</span><span class="card-br">feat/vision-stub</span></div>
+            <div class="owns">editor-service/tools/vision</div>
+            <p>Req 13 placeholder only — a <code>VisionTool</code> protocol behind a feature flag defaulting off, so the real image module lands later without touching B6 or B7.</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="layer">
+        <div class="layer-head">
+          <span class="layer-n">Layer 3</span>
+          <span class="layer-t">The demo</span>
+          <span class="layer-w">1 PR</span>
+        </div>
+        <div class="cards">
+          <div class="card block">
+            <div class="card-top"><span class="card-id">B9</span><span class="card-br">feat/fleet-example</span></div>
+            <div class="owns">fixtures/fleet-vehicle-return, tests/e2e</div>
+            <p>The fleet vehicle return condition example as golden data — manifest, a supplied Word form, client inputs, expected comments — and an end-to-end test driving a real email through the fake transport into both modes.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="evals">
+      <h2>Evals &amp; latency budgets</h2>
+      <div class="h2-rule"></div>
+      <p><strong>Every branch ships an eval suite. A PR without one does not merge.</strong> No subagent gets to claim "it works" on its own recognisance — each stage produces a number.</p>
+
+      <h3>Two tiers</h3>
+      <p><strong>Tier A — deterministic components.</strong> No model anywhere: docmodel, intake rules, transport, contracts, the store. Golden assertions plus a wall-clock budget. Runs in CI on every push.</p>
+      <p><strong>Tier B — pipeline evals.</strong> The system under test calls a live model, so it costs money and runs nightly or on demand rather than on every push. CI substitutes <code>TestModel</code>.</p>
+      <div class="callout">
+        <span class="tag">The scorer is structural in both tiers</span>
+        <p><strong>No LLM-as-judge anywhere.</strong> The pipeline is non-deterministic; whether its output is complete is not. A judge is the wrong instrument here — the question is not "is this justification well written" but "does every requirement have a verdict, does every failure carry a suggestion, does every reference resolve, and are the verdicts <em>right</em>". All decidable by reading the document.</p>
+        <p>Scoring is a <strong>violation count against a spec</strong>, threshold zero. Deliberately not a text-similarity comparison against the golden output either: that fails on a harmlessly reworded justification while passing a document with the wrong verdicts.</p>
+      </div>
+
+      <div class="callout">
+        <span class="tag">Invariants are not scores</span>
+        <p>Some things are <strong>contract violations, not quality signals</strong>, and are asserted at 1.0 with no tolerance: every requirement answered; every answer justified; every <code>source_reference</code> resolving; every <code>fail</code> carrying a suggestion; no edit ever landing in a locked region.</p>
+        <p>Everything else is scored against a threshold. Blurring the two is how eval suites go green while the product is broken.</p>
+      </div>
+
+      <div class="tw wide">
+        <table>
+          <thead><tr><th>#</th><th>Stage</th><th>Owner</th><th>p95</th><th>Quality gate</th></tr></thead>
+          <tbody>
+            <tr><td class="id">A1</td><td>docx round-trip, 50pp</td><td class="num">B1</td><td class="num">800 ms</td><td>byte-stable on no-op; line ids stable across reload</td></tr>
+            <tr><td class="id">A2</td><td>apply edits + 100 comments</td><td class="num">B1</td><td class="num">1.5 s</td><td>opens clean in Word; comment count exact</td></tr>
+            <tr><td class="id">A3</td><td>MIME parse → verdict</td><td class="num">B3</td><td class="num">200 ms</td><td>100% on the intake rule matrix</td></tr>
+            <tr><td class="id">A4</td><td>SMTP send with attachments</td><td class="num">B4</td><td class="num">3 s</td><td>threading headers correct; idempotent on retry</td></tr>
+            <tr><td class="id">A5</td><td>arrival → confirmation sent</td><td class="num">B3+B4</td><td class="num">30 s</td><td>no double-send on redelivery</td></tr>
+            <tr><td class="id">L1</td><td>manifest → requirements</td><td class="num">B2</td><td class="num">8 s</td><td>recall ≥ 0.95, <strong>precision 1.0</strong>, every span verbatim</td></tr>
+            <tr><td class="id">L2</td><td>classify regions, 1 form</td><td class="num">B6</td><td class="num">15 s</td><td>accuracy ≥ 0.90, <strong>zero false-editable</strong></td></tr>
+            <tr><td class="id">L3</td><td>one slice run, 5 reqs</td><td class="num">B5+B6</td><td class="num">20 s</td><td>invariants 1.0; verdict set matches golden exactly</td></tr>
+            <tr><td class="id">L4</td><td>net-new slice run</td><td class="num">B7</td><td class="num">20 s</td><td>structural violations = 0; reference resolution 1.0</td></tr>
+            <tr><td class="id">A6</td><td>artifact save → load round-trip</td><td class="num">B12</td><td class="num">300 ms</td><td>version conflict detected; blob pointer resolves</td></tr>
+            <tr><td class="id">E1</td><td>full derivative job</td><td class="num">B9</td><td class="num">90 s</td><td>end-to-end on the fleet fixture</td></tr>
+            <tr><td class="id">E2</td><td>full net-new job</td><td class="num">B9</td><td class="num">120 s</td><td>end-to-end on the fleet fixture</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <p>Treat these as <strong>calibration targets, not measurements</strong>. B0 lands the harness; the first branch to run each stage records the real baseline in its PR. If a budget is wrong, the PR moves it and says why. What is not allowed is shipping without one.</p>
+      <p>Note the asymmetry in <strong>L2</strong>: a region wrongly marked <em>editable</em> means we overwrite the client's own content — far worse than one wrongly marked <em>locked</em>, where we merely decline to help. The eval weights those two errors differently on purpose.</p>
+
+      <h3>What a branch's eval directory looks like</h3>
+      <pre class="code">packages/ffx-manifest/evals/
+  cases.yaml       <span class="c"># the dataset — reviewable in a PR diff</span>
+  structure.yaml   <span class="c"># the spec this stage's output must satisfy</span>
+  evaluators.py    <span class="c"># assert the spec, never judge</span>
+  test_evals.py    <span class="c"># Tier A: runs under pytest with TestModel</span>
+  README.md        <span class="c"># baseline: violations, p95, tokens, model, date</span></pre>
+      <h3>Mutation-test the evaluator</h3>
+      <p>An evaluator that has only ever seen correct output is worthless — it may be asserting nothing. Every branch must break its own golden output in at least three ways and show the evaluator catching each.</p>
+      <p>This is not a hypothetical discipline. The fleet fixture's reference checker had a real bug — a field extractor that swallowed the rest of the comment, so a one-character justification still passed a length check — and <strong>only mutation testing found it</strong>. Five deliberate regressions now run against it; all five are caught, and the golden output still passes 88 of 88.</p>
+    </section>
+
+    <section id="quality">
+      <h2>Code quality bar</h2>
+      <div class="h2-rule"></div>
+      <p>Seven agents writing in parallel is exactly how a codebase turns to mud. The defence has to be machine-enforced, not review-enforced — no human reliably catches architectural drift across a dozen concurrent PRs.</p>
+
+      <h3>Enforced in CI</h3>
+      <ul>
+        <li><strong>ruff</strong> lint and format, one shared config, zero per-package overrides.</li>
+        <li><strong>mypy <code>--strict</code></strong> across the workspace. A <code>type: ignore</code> needs a specific error code and a reason.</li>
+        <li><strong>import-linter</strong> pinning dependency direction: services → packages → contracts. Never sideways, never upward. This is the highest-value gate here — it is what stops B6 reaching into B4's internals at 2am.</li>
+        <li><strong>No model call outside <code>llm/</code> and <code>agents/</code></strong>, enforced by the same contracts.</li>
+        <li><strong>Per-package coverage ≥ 85%</strong>, measured per package. A global number lets one well-tested package hide four untested ones.</li>
+      </ul>
+
+      <h3>Conventions</h3>
+      <ul>
+        <li><strong>Prompts live in versioned files</strong> under <code>agents/&lt;name&gt;/prompts/</code>, never inline f-strings. They are the highest-churn, highest-impact artefact in the repo and they need a diff history.</li>
+        <li>Each package declares its public API via <code>__all__</code>; everything else is private and may change without notice.</li>
+        <li>Structured logging only, with <code>job_id</code> and <code>slice</code> bound on every line. Print statements fail lint.</li>
+        <li>Any decision worth arguing about gets an ADR. Cheap to write, and it stops the same debate recurring across three PRs.</li>
+        <li>Domain language matches the spec exactly — <code>Requirement</code>, <code>Artifact</code>, <code>Line</code>, <code>Region</code>, <code>slice</code>, <code>verdict</code>. No synonyms.</li>
+      </ul>
+    </section>
+
+    <section id="brief">
+      <h2>Subagent brief</h2>
+      <div class="h2-rule"></div>
+      <p>Each Sonnet agent receives, verbatim:</p>
+      <ul>
+        <li>The <strong>requirement ids from the PDF</strong> it must satisfy — B1 owns reqs 14 and 15; B5 owns 11, 12, 16, 17.</li>
+        <li>The <strong>exact directories it owns</strong>, and that touching anything else — <code>ffx-contracts</code> above all — is out of bounds. Raise it in the PR description instead.</li>
+        <li>The <strong>frozen contract signatures</strong> it consumes and produces.</li>
+        <li><strong>Test requirements</strong>: unit tests in its own package, no live model calls in CI, <code>make check</code> green.</li>
+        <li><strong>Eval requirements</strong>: the <code>evals/</code> directory for its stage, invariants asserted at 1.0, and the recorded baseline pasted into the PR description. <em>A branch that cannot state its numbers is not done.</em></li>
+      </ul>
+    </section>
+
+    <section id="verify">
+      <h2>Verification</h2>
+      <div class="h2-rule"></div>
+      <ul>
+        <li><code>make check</code> — ruff, mypy, import-linter, pytest across the workspace, no network.</li>
+        <li>Round-trip a fixture docx; assert line ids stable and a locked-region edit raises; open the output in Word and confirm comments land in the review pane.</li>
+        <li>Force a validator failure three times under <code>TestModel</code> and assert the requirement returns as <code>unverified</code> rather than raising.</li>
+        <li>One live Gemini smoke test behind an env flag, run manually, never in CI.</li>
+        <li>End-to-end: compose up, drop the fleet vehicle return email into the local mailbox, and assert the confirmation lists parsed requirements, the returned document carries one comment per requirement, and net-new produces a document from client inputs alone.</li>
+      </ul>
+    </section>
+
+    <section id="open">
+      <h2>Carried forward</h2>
+      <div class="h2-rule"></div>
+      <p>Three concerns from Part 3 stay open. None blocks v1.</p>
+      <div class="tw col">
+        <table>
+          <thead><tr><th>#</th><th>Concern</th><th>Where it lands</th></tr></thead>
+          <tbody>
+            <tr><td class="id">D1</td><td>PDF and scanned input</td><td>Needs an OCR pre-step normalising to addressable lines</td></tr>
+            <tr><td class="id">D2</td><td>Job status after confirmation</td><td>The HTTP boundary leaves room for <code>GET /jobs/{id}</code></td></tr>
+            <tr><td class="id">D3</td><td>Contradictory requirements</td><td>Invisible to per-slice runs by construction; no owner assigned</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <footer>
+      Source of truth lives at <code>docs/implementation-plan.md</code> in the repository.
+    </footer>
+
+  </main>
+</div>
+
+<script>
+(function(){
+  var links = Array.prototype.slice.call(document.querySelectorAll('#toc a'));
+  var secs = links.map(function(a){ return document.getElementById(a.getAttribute('href').slice(1)); })
+                  .filter(Boolean);
+  if(!secs.length) return;
+  function sync(){
+    var y = window.scrollY + 120, cur = 0;
+    for(var i=0;i<secs.length;i++){ if(secs[i].offsetTop <= y) cur = i; }
+    links.forEach(function(a,i){ a.classList.toggle('on', i===cur); });
+  }
+  var tick = false;
+  window.addEventListener('scroll', function(){
+    if(tick) return; tick = true;
+    window.requestAnimationFrame(function(){ sync(); tick = false; });
+  }, {passive:true});
+  sync();
+})();
+</script>
+
+<script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
+<script>
+  // Diagrams sit on a constant light plate in both themes, so pin the mermaid
+  // theme to light rather than following the OS — its colours are baked into
+  // the emitted SVG and cannot re-resolve when the page theme flips.
+  if (window.mermaid) {
+    mermaid.initialize({ startOnLoad: true, theme: "base", securityLevel: "loose" });
+  } else {
+    document.querySelectorAll("pre.mermaid").forEach(function (el) {
+      el.style.whiteSpace = "pre";
+      el.style.font = "12px ui-monospace, monospace";
+      el.insertAdjacentHTML("beforebegin",
+        '<p style="font:12px ui-monospace,monospace;color:#b3341f">' +
+        'Diagram could not render \u2014 mermaid failed to load (offline?). Source below.</p>');
+    });
+  }
+</script>
+</body>
+</html>
