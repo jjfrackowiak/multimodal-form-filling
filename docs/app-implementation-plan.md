@@ -553,6 +553,36 @@ as a new fixture case**. Real malformed mail is the most valuable test data avai
 and it cannot be invented — the fleet fixture is only as good as it is because it came
 from an actual submission rather than from imagination.
 
+### Running against a real mailbox from a container
+
+It works, and it needs no inbound ports — the poller makes an outbound connection to the
+provider, so there is nothing to expose and nothing to forward. But five things are
+easy to get wrong.
+
+**Port 25 is blocked on GCP, permanently and with no exceptions.** Ports 587 and 465 are
+unrestricted. Our SMTP config uses 587, so this is fine — the rule is simply that there
+must never be a fallback to port 25, because it will work locally and fail silently the
+moment it is deployed. Worth passing to whoever owns deployment; it is the single most
+common way a working mail integration dies on GCP.
+
+**A first login from a datacenter IP can be challenged.** Google may treat the initial
+sign-in from an unfamiliar cloud address as suspicious and block it pending manual
+approval. App Passwords are more tolerant than plain password auth, but not immune. The
+practical order is: get the credentials working from your own machine first, so that when
+the container fails you know it is the environment and not the password.
+
+**Gmail caps sending.** Roughly 500 messages a day on a free account, 2000 on Workspace.
+Irrelevant for a demo, and worth remembering before anyone points a load test at it.
+
+**IMAP connections do not stay up.** Gmail drops idle ones, and IMAP `IDLE` has to be
+re-issued well before the ~29 minute limit. **B4 must reconnect rather than assume a
+durable connection** — a poller that works for twenty minutes and then quietly stops is
+the failure this causes, and it looks exactly like "no mail arrived".
+
+**Credentials are injected, never baked.** The App Password arrives as an environment
+variable or a mounted secret at runtime. An image with a working password inside it is a
+credential leak wearing a Dockerfile.
+
 ### In production
 
 A Gmail account with an **App Password** is the quickest real mailbox: enable 2-Step
