@@ -1,52 +1,35 @@
-# CV service — inventory labels
+# CV service — inventory from **manifest + photos**
 
-Cropping is **out of scope** for now.
+Cropping is out of scope.
 
-Photos in → `inventory.yaml` out (same shape as
-`fixtures/fleet-vehicle-return/inventory.yaml`):
+Inputs:
 
-- `depicts` from a closed taxonomy
-- `shot_from` only for headliner (`between_front_seats` | `beside_seat`)
-- `observations` a comment can cite: `odometer_km`, verbatim `warnings`, `registration`, `pose_evidence`, `seat_side`
-- `exact_duplicate_pairs` via **sha256**, not the model
+1. Client **manifest** (what to look for) — raw text or already-parsed requirements YAML
+2. Photo folder
 
-**Model: Vertex Gemini** on `linen-badge-507111-r6`. Shape is Pydantic `ImageLabel` in
-`cv/schema.py`, sent as Vertex `response_schema` (no “return JSON” prompt).
-Org policy **disallows API keys** — ADC only.
+Output: `inventory.yaml` — each file tagged with **requirement ids**, plus citable
+observations (km, warnings, plate, pose). Duplicates via sha256.
 
-The editor calls this later over HTTP. Nothing here lives inside `editor-service`.
+The 11 `depicts` labels from the Qashqai fixture are **not** the API. If the
+manifest changes, parse it again; do not edit a frozen enum.
 
-## Auth (ADC)
+Standalone CLI still parses `manifest.txt` with Vertex. When Janek’s L1 parser
+exists, pass `--requirements` and skip that step.
 
 ```bash
 gcloud auth application-default login
 gcloud auth application-default set-quota-project linen-badge-507111-r6
-```
 
-Do not create an API key. The console will reject it.
-
-Env (defaults shown):
-
-```bash
-export GOOGLE_CLOUD_PROJECT=linen-badge-507111-r6
-export GOOGLE_CLOUD_LOCATION=global          # Vertex Gemini
-export CV_MODEL=gemini-2.5-flash             # or gemini-2.5-pro
-```
-
-## Generate
-
-```bash
-python3 -m venv cv/.venv && cv/.venv/bin/pip install -r cv/requirements.txt
 cv/.venv/bin/python cv/generate_inventory.py fixtures/fleet-vehicle-return/images \
-    --out /tmp/inventory.generated.yaml
+    --manifest fixtures/fleet-vehicle-return/manifest.txt \
+    --out cv/inventory.generated.yaml
+
+# or, once requirements are parsed elsewhere:
+cv/.venv/bin/python cv/generate_inventory.py fixtures/fleet-vehicle-return/images \
+    --requirements fixtures/fleet-vehicle-return/expected_requirements.yaml \
+    --out cv/inventory.generated.yaml
+
+cv/.venv/bin/python cv/eval_inventory.py cv/inventory.generated.yaml \
+    --review fixtures/fleet-vehicle-return/expected_output/review.yaml \
+    --pairs fixtures/fleet-vehicle-return/inventory.yaml
 ```
-
-## Eval (no model)
-
-```bash
-cv/.venv/bin/python cv/eval_inventory.py /tmp/inventory.generated.yaml \
-    fixtures/fleet-vehicle-return/inventory.yaml
-```
-
-Pass = every golden file has the same `depicts` (and headliner `shot_from`),
-and the same duplicate pairs. Notes are ignored.

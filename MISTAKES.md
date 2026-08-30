@@ -1,5 +1,12 @@
 # Mistakes
 
+## 2026-08-30 — CV look-fors come from the manifest
+
+**What went wrong:** `schema.py` froze 11 `depicts` values from the Qashqai fixture. A new manifest (VIN plate, 4 tyres, …) would not change CV behaviour.
+
+**Prevention:** Manifest (raw or `Requirement[]`) is a required input. Inventory rows tag **requirement ids**, not a global car ontology. `--requirements` when L1 exists; `--manifest` only for standalone.
+
+
 ## 2026-08-30 — GCP is Terraform later
 
 **Note (not a bug yet):** User wants GCP as **code (Terraform)**. Do not design around permanent console/`gcloud` snowflakes. `DEPLOY.md` is temporary. When provisioning Cloud Run / Firestore / bucket / IAM / Vertex, add `.tf` in-repo.
