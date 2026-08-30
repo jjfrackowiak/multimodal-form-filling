@@ -3,7 +3,9 @@ name: deploy-cv
 on:
   workflow_dispatch:
   push:
-    branches: [main]
+    # feat/gcp is the rollout branch so CD can smoke before this file exists on main.
+    # Drop it in the merge commit (workflow_dispatch then works from main).
+    branches: [main, feat/gcp]
     paths:
       - services/cv/**
       - docker/cv.Dockerfile
@@ -24,7 +26,7 @@ env:
 
 jobs:
   deploy:
-    if: github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/main'
+    if: github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/feat/gcp'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
