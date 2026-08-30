@@ -32,3 +32,10 @@ AGENTS.md
 MISTAKES.md
 
 example_images/
+
+# Terraform
+**/.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+!*.tfvars.example

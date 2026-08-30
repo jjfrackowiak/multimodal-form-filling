@@ -48,6 +48,7 @@ async def request_id_mw(request: Request, call_next):
 
 
 @app.get("/health")
+@app.get("/healthz")
 def health():
     return {
         "ok": True,
