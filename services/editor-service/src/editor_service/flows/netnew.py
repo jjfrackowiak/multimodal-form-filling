@@ -4,9 +4,7 @@ from __future__ import annotations
 
 from typing import Any, cast
 
-from google.adk.models.base_llm import BaseLlm
-
-from editor_service.llm.agent import build_agent
+from editor_service.llm.agent import BaseLlm, build_agent
 from editor_service.llm.deps import EditorDeps
 from editor_service.llm.output import SliceTurnOutput
 from editor_service.llm.run import run_slice
