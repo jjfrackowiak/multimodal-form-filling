@@ -55,6 +55,7 @@ class OutboundMessage(BaseModel):
     to: str
     subject: str
     body: str
+    html_body: str | None = None  # optional multipart/alternative; plaintext stays canonical
     attachments: list[Attachment] = Field(default_factory=list)
     in_reply_to: str | None = None  # the client's Message-ID
     references: list[str] = Field(default_factory=list)

@@ -28,6 +28,9 @@ def test_every_problem_code_and_detail_appear_in_the_body() -> None:
     assert "Write the manifest in the body." in out.body
     assert "[unsafe_archive]" in out.body
     assert "remove it and re-zip." in out.body
+    assert out.html_body is not None
+    assert "missing_manifest" in out.html_body
+    assert "width=device-width" in out.html_body
 
 
 def test_no_documents_were_touched_is_stated() -> None:

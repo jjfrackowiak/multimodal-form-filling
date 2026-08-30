@@ -103,6 +103,8 @@ def build_outbound_email(message: OutboundMessage, *, mail_from: str) -> EmailMe
         # RFC 3834 — this is the header the loop guard on the *receiving* end checks.
         email_msg["Auto-Submitted"] = "auto-replied"
     email_msg.set_content(message.body)
+    if message.html_body:
+        email_msg.add_alternative(message.html_body, subtype="html")
     for attachment in message.attachments:
         maintype, _, subtype = attachment.content_type.partition("/")
         email_msg.add_attachment(

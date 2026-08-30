@@ -47,6 +47,7 @@ from mff_contracts import (
     ReviewComment,
 )
 
+from .mail_html import render_delivery_html
 from .transport.messages import Attachment, OutboundMessage
 from .transport.protocol import MailTransport
 
@@ -410,10 +411,23 @@ async def deliver(
         labeled, blobs=blobs, threshold_bytes=attach_threshold_bytes
     )
     body = _render_body(result=result, comments=comments, attached=attached, linked=linked)
+    html_attached = [
+        (attachment.filename, labeled.mode_label, labeled.ref.size_bytes)
+        for labeled, attachment in attached
+    ]
+    html_linked = [
+        (labeled.form_id or "dokument", labeled.mode_label, url) for labeled, url in linked
+    ]
     return OutboundMessage(
         to=request.reply_to,
         subject=_render_subject(result),
         body=body,
+        html_body=render_delivery_html(
+            result=result,
+            comments=comments,
+            attached=html_attached,
+            linked=html_linked,
+        ),
         attachments=[attachment for _, attachment in attached],
         in_reply_to=request.original_message_id,
         references=[request.original_message_id],

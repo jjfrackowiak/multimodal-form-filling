@@ -17,6 +17,7 @@ from __future__ import annotations
 from mff_contracts import IntakeVerdict, Mode, RequestAccepted, Requirement
 
 from .intake import ParsedRequest
+from .mail_html import render_confirmation_html, render_rejection_html
 from .transport import OutboundMessage
 
 __all__ = ["render_confirmation", "render_rejection"]
@@ -77,6 +78,13 @@ def render_confirmation(accepted: RequestAccepted, req: ParsedRequest) -> Outbou
         to=req.sender,
         subject=_reply_subject(req.subject),
         body="\n".join(lines),
+        html_body=render_confirmation_html(
+            request_id=accepted.request_id,
+            n_derivative=len(derivative_jobs),
+            n_net_new=len(net_new_jobs),
+            n_jobs=len(req.jobs),
+            requirements=accepted.requirements,
+        ),
         in_reply_to=req.message_id,
         references=[req.message_id],
     )
@@ -101,6 +109,9 @@ def render_rejection(verdict: IntakeVerdict, req: ParsedRequest) -> OutboundMess
         to=req.sender,
         subject=_reply_subject(req.subject),
         body="\n".join(lines),
+        html_body=render_rejection_html(
+            problems=[(problem.code, problem.detail) for problem in verdict.problems]
+        ),
         in_reply_to=req.message_id,
         references=[req.message_id],
     )
