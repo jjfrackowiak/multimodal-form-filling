@@ -355,7 +355,7 @@ Sugestia: Retake the second shot from the aisle between the front seats, looking
       <div class="gallery">
         <figure>
           <img src="../fixtures/fleet-vehicle-return/images/IMG_20260830_132754%20(4).jpg" alt="Engine bay" />
-          <figcaption><span class="tag warn">R-01</span> Engine bay — only <em>one</em> such photo; need 2. This requirement fails on count, not on pose.</figcaption>
+          <figcaption><span class="tag warn">R-01</span> The only engine-bay photo. CV is right that there is no second. Fail is “client asked for 2, folder has 1.”</figcaption>
         </figure>
         <figure>
           <img src="../fixtures/fleet-vehicle-return/images/IMG_20260830_132755.jpg" alt="Front seat" />
@@ -407,7 +407,7 @@ Sugestia: Retake the second shot from the aisle between the front seats, looking
           <tr><th>Requirement</th><th>Need</th><th>What happened</th><th>Should the form pass it?</th></tr>
         </thead>
         <tbody>
-          <tr><td>R-01 engine</td><td>2</td><td>1 unique photo</td><td><span class="tag bad">fail</span> short one shot</td></tr>
+          <tr><td>R-01 engine</td><td>2 <span class="muted">(on paper)</span></td><td>CV found <strong>1</strong> file — and that is correct: there is only one engine-bay photo in the dump (<code>132754 (4)</code>). Nothing was missed.</td><td><span class="tag bad">fail</span> because the <em>manifest</em> asked for two (<code>Pod maską</code> twice, so the total can be 16). Photographer delivered one.</td></tr>
           <tr><td>R-02–R-03, R-05–R-10</td><td>—</td><td>Subject tags matched golden</td><td><span class="tag ok">pass</span></td></tr>
           <tr><td>R-04 headliner</td><td>2 + pose</td><td>2 photos tagged R-04; pose on (5) marked OK by the model</td><td><span class="tag bad">fail</span> golden; model would wrongly pass</td></tr>
         </tbody>
