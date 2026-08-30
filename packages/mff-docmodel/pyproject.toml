@@ -1,0 +1,16 @@
+[project]
+name = "mff-docmodel"
+version = "0.1.0"
+description = "Empty skeleton (B0). Owned by a later branch: the document model — deriving nodes from a client's .docx and compiling a net-new draft into one."
+requires-python = ">=3.11"
+dependencies = ["mff-contracts"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/mff_docmodel"]
+
+[tool.uv.sources]
+mff-contracts = { workspace = true }
