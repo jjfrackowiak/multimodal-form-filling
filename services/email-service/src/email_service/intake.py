@@ -55,10 +55,10 @@ from mff_contracts import ClientInputs, IntakeProblem, IntakeVerdict, Mode
 from .transport import Attachment, InboundMessage
 
 __all__ = [
-    "ArchiveTooLargeError",
-    "CorruptArchiveError",
     "DEFAULT_MAX_ARCHIVE_BYTES",
     "DEFAULT_MAX_ARCHIVE_ENTRIES",
+    "ArchiveTooLargeError",
+    "CorruptArchiveError",
     "ParsedForm",
     "ParsedJob",
     "ParsedNetNewInputs",
@@ -105,12 +105,10 @@ class ParsedJob(BaseModel):
 
     @model_validator(mode="after")
     def _mode_matches_payload(self) -> ParsedJob:
-        if self.mode == Mode.DERIVATIVE:
-            if self.form is None or self.inputs is not None:
-                raise ValueError("ParsedJob: derivative mode requires form and no inputs")
-        elif self.mode == Mode.NET_NEW:
-            if self.inputs is None or self.form is not None:
-                raise ValueError("ParsedJob: net_new mode requires inputs and no form")
+        if self.mode == Mode.DERIVATIVE and (self.form is None or self.inputs is not None):
+            raise ValueError("ParsedJob: derivative mode requires form and no inputs")
+        if self.mode == Mode.NET_NEW and (self.inputs is None or self.form is not None):
+            raise ValueError("ParsedJob: net_new mode requires inputs and no form")
         return self
 
 
@@ -261,9 +259,7 @@ def safe_extract_zip(
     with zf:
         infolist = zf.infolist()
         if len(infolist) > max_entries:
-            raise ArchiveTooLargeError(
-                f"{len(infolist)} entries exceeds the cap of {max_entries}"
-            )
+            raise ArchiveTooLargeError(f"{len(infolist)} entries exceeds the cap of {max_entries}")
         total_bytes = sum(info.file_size for info in infolist)
         if total_bytes > max_total_bytes:
             raise ArchiveTooLargeError(
@@ -305,9 +301,7 @@ def safe_extract_zip(
 def _derivative_zip_to_jobs(
     dest: Path, archive_name: str
 ) -> tuple[list[ParsedJob], IntakeProblem | None]:
-    entries = sorted(
-        p for p in dest.iterdir() if p.is_file() and p.suffix.lower() == ".docx"
-    )
+    entries = sorted(p for p in dest.iterdir() if p.is_file() and p.suffix.lower() == ".docx")
     jobs: list[ParsedJob] = []
     for entry in entries:
         data = entry.read_bytes()
@@ -468,7 +462,9 @@ def parse_inbound(
                 problems.append(
                     IntakeProblem(
                         code="archive_too_large",
-                        detail=f"'{filename}' is too large ({exc}) — split it into smaller archives.",
+                        detail=(
+                            f"'{filename}' is too large ({exc}) — split it into smaller archives."
+                        ),
                     )
                 )
             except CorruptArchiveError as exc:
@@ -510,7 +506,9 @@ def parse_inbound(
 # ---------------------------------------------------------------------------
 
 
-def allowed_senders_from_env(env: os._Environ[str] | dict[str, str] | None = None) -> frozenset[str]:
+def allowed_senders_from_env(
+    env: os._Environ[str] | dict[str, str] | None = None,
+) -> frozenset[str]:
     """`ALLOWED_SENDERS` empty (or unset) means *closed*, not open — an empty allowlist
     that let everyone through would make this service an open robot that answers spam
     and can bounce-loop with another autoresponder."""
