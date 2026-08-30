@@ -310,10 +310,22 @@ async def test_inventory_is_injected_as_structured_context() -> None:
 
     assert report.unverified == []
     request_text = str(fake.requests[-1])
+    assert "section-4" in request_text
+    assert "4. Podsufitka" in request_text
     assert "1000040420.jpg" in request_text
     assert "constraint_ok" in request_text
     assert "IMG_20260830_132755 (5).jpg" in request_text
     assert "do not re-analyse photos" in request_text.lower()
+
+
+async def test_derivative_keeps_supplied_nodes_unchanged() -> None:
+    artifact = _artifact()
+    original_nodes = artifact.model_copy(deep=True).nodes
+    fake = FakeLlm.script([SliceTurnOutput(comments=_golden_comments())])
+
+    await review_derivative(_request(), artifact, _inventory(), model=fake)
+
+    assert artifact.nodes == original_nodes
 
 
 def test_instruction_is_a_substantial_derivative_policy() -> None:

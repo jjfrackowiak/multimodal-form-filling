@@ -31,13 +31,22 @@ comment per requirement in the slice. Derivative mode is read-only: do not emit 
 """.strip()
 
 
-def _instruction_with_inventory(inventory: list[ImageAnalysis]) -> str:
+def _instruction_with_context(artifact: DerivativeArtifact, inventory: list[ImageAnalysis]) -> str:
+    nodes_json = json.dumps(
+        [node.model_dump(mode="json") for node in artifact.nodes],
+        indent=2,
+        sort_keys=True,
+    )
     inventory_json = json.dumps(
         [image.model_dump(mode="json") for image in inventory],
         indent=2,
         sort_keys=True,
     )
-    return f"{DERIVATIVE_INSTRUCTION}\n\nPre-built image inventory (JSON):\n{inventory_json}"
+    return (
+        f"{DERIVATIVE_INSTRUCTION}\n\n"
+        f"Supplied document nodes (read-only JSON):\n{nodes_json}\n\n"
+        f"Pre-built image inventory (JSON):\n{inventory_json}"
+    )
 
 
 async def review_derivative(
@@ -55,7 +64,7 @@ async def review_derivative(
     agent = build_agent(
         name="derivative_reviewer",
         output_schema=SliceTurnOutput,
-        instruction=_instruction_with_inventory(inventory),
+        instruction=_instruction_with_context(artifact, inventory),
         tools=[],
         model=model,
     )
