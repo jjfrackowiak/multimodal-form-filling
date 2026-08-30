@@ -9,7 +9,7 @@ Two owners. Do not cross the line unless asked.
 - Image / CV tools (req. 13): image processing, image understanding, cropping.
 - GCP deployment. **Future: Terraform (infrastructure as code)** — Cloud Run, Firestore, GCS, IAM, Vertex access. Do not treat `gcloud` console clicks or `gcp/DEPLOY.md` as the long-term source of truth. No Terraform tree yet; when we provision for real, start with `.tf` in-repo.
 
-**CV is its own service** (`cv/`). It is **not** inside the AI editor. Inputs: **manifest (or parsed Requirement[]) + photos**. Output: inventory tagged with requirement ids. Do not hardcode a car-photo enum. Cropping deferred. Duplicates are sha256.
+**CV is its own service** (`cv/`). Inputs: **`manifest.txt` + photos** only. CV parses the manifest; do not feed `expected_requirements.yaml`. Output: inventory. Cropping deferred. Duplicates are sha256.
 
 Stay here. Interfaces the editor will call should be small, documented, and stable.
 

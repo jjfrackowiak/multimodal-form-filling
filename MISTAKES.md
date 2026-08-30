@@ -4,7 +4,7 @@
 
 **What went wrong:** `schema.py` froze 11 `depicts` values from the Qashqai fixture. A new manifest (VIN plate, 4 tyres, …) would not change CV behaviour.
 
-**Prevention:** Manifest (raw or `Requirement[]`) is a required input. Inventory rows tag **requirement ids**, not a global car ontology. `--requirements` when L1 exists; `--manifest` only for standalone.
+**Prevention:** CV inputs are **`manifest.txt` + images** only. Do not require `expected_requirements.yaml` (that is an L1 eval artifact, not a product file). CV parses the manifest itself.
 
 
 ## 2026-08-30 — GCP is Terraform later

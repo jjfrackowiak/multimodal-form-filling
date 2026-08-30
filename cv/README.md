@@ -1,35 +1,19 @@
-# CV service — inventory from **manifest + photos**
+# CV service — inventory from **manifest.txt + photos**
 
 Cropping is out of scope.
 
-Inputs:
+**Only two inputs:**
 
-1. Client **manifest** (what to look for) — raw text or already-parsed requirements YAML
-2. Photo folder
+1. `manifest.txt` — raw client text (look-fors)
+2. photo folder
 
-Output: `inventory.yaml` — each file tagged with **requirement ids**, plus citable
-observations (km, warnings, plate, pose). Duplicates via sha256.
+There is no `expected_requirements.yaml` in this path. CV parses the manifest itself.
 
-The 11 `depicts` labels from the Qashqai fixture are **not** the API. If the
-manifest changes, parse it again; do not edit a frozen enum.
-
-Standalone CLI still parses `manifest.txt` with Vertex. When Janek’s L1 parser
-exists, pass `--requirements` and skip that step.
+Output: `inventory.yaml` — files tagged with requirement ids from that parse, plus
+citable observations. Duplicates via sha256.
 
 ```bash
-gcloud auth application-default login
-gcloud auth application-default set-quota-project linen-badge-507111-r6
-
 cv/.venv/bin/python cv/generate_inventory.py fixtures/fleet-vehicle-return/images \
     --manifest fixtures/fleet-vehicle-return/manifest.txt \
     --out cv/inventory.generated.yaml
-
-# or, once requirements are parsed elsewhere:
-cv/.venv/bin/python cv/generate_inventory.py fixtures/fleet-vehicle-return/images \
-    --requirements fixtures/fleet-vehicle-return/expected_requirements.yaml \
-    --out cv/inventory.generated.yaml
-
-cv/.venv/bin/python cv/eval_inventory.py cv/inventory.generated.yaml \
-    --review fixtures/fleet-vehicle-return/expected_output/review.yaml \
-    --pairs fixtures/fleet-vehicle-return/inventory.yaml
 ```

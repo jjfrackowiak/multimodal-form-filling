@@ -213,10 +213,9 @@ Podsufitka trzeba spomiędzy forteli zrobić</pre>
     <section>
       <h2>2. Pipeline (what the code does, in order)</h2>
       <ol class="steps">
-        <li><strong>Read the manifest.</strong> Either parse <code>manifest.txt</code> with Vertex into
-          <code>ParsedManifest</code> (Pydantic), or accept already-parsed
-          <code>--requirements</code> (what Janek’s L1 will produce). This run used the golden parse:
-          R-01 … R-10.</li>
+        <li><strong>Read <code>manifest.txt</code>.</strong> Parse it with Vertex into
+          <code>ParsedManifest</code> (Pydantic). No <code>expected_requirements.yaml</code>
+          — that file is not an input. Look-fors come only from the client text.</li>
         <li><strong>Hash every file (sha256).</strong> Collapse duplicates. The model never sees two copies of the same boot photo as two photos. That is not vision — it is ingest.</li>
         <li><strong>For each unique image,</strong> call Vertex <code>gemini-2.5-flash</code> with:
           the pixels + a prompt that <em>lists this manifest’s requirements</em> +

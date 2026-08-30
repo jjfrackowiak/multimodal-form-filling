@@ -21,7 +21,7 @@ from collections import defaultdict
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from schema import ImageLabel, ManifestRequirement, ParsedManifest
+from schema import ImageLabel, ParsedManifest
 from taxonomy import PARSE_TASK, label_task
 
 IMAGE_EXT = {".jpg", ".jpeg", ".png"}
@@ -94,33 +94,6 @@ def vertex_call(client, contents, schema, *, retries: int = 6):
 
 def parse_manifest_text(client, text: str) -> ParsedManifest:
     return vertex_call(client, [PARSE_TASK, text], ParsedManifest)
-
-
-def load_requirements_yaml(path: Path) -> ParsedManifest:
-    import yaml
-
-    doc = yaml.safe_load(path.read_text())
-    reqs = []
-    for row in doc.get("requirements") or []:
-        constraint = None
-        raw = row.get("constraint")
-        if isinstance(raw, dict):
-            constraint = raw.get("value") or raw.get("kind")
-        elif isinstance(raw, str):
-            constraint = raw
-        reqs.append(
-            ManifestRequirement(
-                id=row["id"],
-                text=row["text"].strip() if isinstance(row.get("text"), str) else str(row.get("text") or ""),
-                source_span=row.get("source_span") or "",
-                expected_count=int(row.get("expected_count") or 1),
-                constraint=constraint,
-            )
-        )
-    return ParsedManifest(
-        expected_total_photos=doc.get("expected_total_photos"),
-        requirements=reqs,
-    )
 
 
 def observations_from(label: ImageLabel) -> dict:
@@ -224,30 +197,18 @@ def label_image(client, path: Path, parsed: ParsedManifest) -> dict:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("images", type=Path, help="folder of jpg/png")
-    parser.add_argument("--manifest", type=Path, help="raw client manifest.txt")
-    parser.add_argument(
-        "--requirements",
-        type=Path,
-        help="already-parsed requirements YAML (editor/L1 output). Wins over --manifest.",
-    )
+    parser.add_argument("--manifest", type=Path, required=True, help="raw client manifest.txt")
     parser.add_argument("--out", type=Path, default=Path("inventory.generated.yaml"))
     args = parser.parse_args()
-    if not args.manifest and not args.requirements:
-        print("need --manifest and/or --requirements", file=sys.stderr)
-        return 2
 
     from google import genai
 
     client = genai.Client(vertexai=True, project=PROJECT, location=LOCATION)
     print(f"Vertex project={PROJECT} location={LOCATION} model={MODEL}", flush=True)
 
-    if args.requirements:
-        parsed = load_requirements_yaml(args.requirements)
-        print(f"loaded {len(parsed.requirements)} requirements from {args.requirements}", flush=True)
-    else:
-        print(f"parse manifest {args.manifest} ...", flush=True)
-        parsed = parse_manifest_text(client, args.manifest.read_text())
-        print(f"parsed {len(parsed.requirements)} requirements", flush=True)
+    print(f"parse manifest {args.manifest} ...", flush=True)
+    parsed = parse_manifest_text(client, args.manifest.read_text())
+    print(f"parsed {len(parsed.requirements)} requirements", flush=True)
 
     folder = args.images.resolve()
     all_files = list_images(folder)
