@@ -70,6 +70,7 @@ known-first-party = [
     "email_service",
     "editor_service",
     "vision_stub",
+    "cv",
 ]
 
 # ---------------------------------------------------------------------------
@@ -86,7 +87,13 @@ explicit_package_bases = true
 namespace_packages = true
 
 [[tool.mypy.overrides]]
-module = "yaml.*"
+module = [
+    "yaml.*",
+    "google.*",
+    "google.cloud.*",
+    "google.genai.*",
+    "PIL.*",
+]
 ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
@@ -118,13 +125,14 @@ root_packages = [
     "email_service",
     "editor_service",
     "vision_stub",
+    "cv",
 ]
 
 [[tool.importlinter.contracts]]
 name = "services depend on packages depend on mff_contracts, never sideways or upward"
 type = "layers"
 layers = [
-    "email_service | editor_service | vision_stub",
+    "email_service | editor_service | vision_stub | cv",
     "mff_vision | mff_docmodel | mff_manifest | mff_applier | mff_store",
     "mff_contracts",
 ]
@@ -150,6 +158,7 @@ forbidden_modules = [
     "email_service",
     "editor_service",
     "vision_stub",
+    "cv",
 ]
 
 [[tool.importlinter.contracts]]

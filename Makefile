@@ -13,7 +13,7 @@ SERVICES := services/email-service services/editor-service services/vision-stub
 COVERAGE_PACKAGES := packages/mff-contracts packages/mff-docmodel packages/mff-manifest \
                       packages/mff-applier packages/mff-store services/email-service \
                       services/editor-service
-UNGATED_PACKAGES := packages/mff-vision services/vision-stub
+UNGATED_PACKAGES := packages/mff-vision services/vision-stub services/cv
 
 sync:
 	uv sync --all-packages

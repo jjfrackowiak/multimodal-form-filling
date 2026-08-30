@@ -10,7 +10,14 @@ See `docs/app-implementation-plan.md`, "The contract to freeze first (`mff-contr
 from __future__ import annotations
 
 from .artifacts import Artifact, DerivativeArtifact, NetNewArtifact
-from .blobs import BlobRef, ImageAnalysis, JobImage, RequirementSpec
+from .blobs import (
+    BlobRef,
+    Finding,
+    ImageAnalysis,
+    JobImage,
+    RequirementHit,
+    RequirementSpec,
+)
 from .compiled import CompiledForm, RenderMap, RunSpan
 from .docmodel import DraftOp, Entry, FormDraft, Node, Section
 from .jobs import (
@@ -42,6 +49,7 @@ __all__ = [
     "DerivativeArtifact",
     "DraftOp",
     "Entry",
+    "Finding",
     "FormDraft",
     "ImageAnalysis",
     "IntakeProblem",
@@ -61,6 +69,7 @@ __all__ = [
     "RequestRepository",
     "RequestResult",
     "Requirement",
+    "RequirementHit",
     "RequirementSpec",
     "ReviewComment",
     "RunSpan",

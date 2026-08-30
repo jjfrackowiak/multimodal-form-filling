@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
-from mff_contracts import BlobRef, ImageAnalysis, JobImage, RequirementSpec
+from mff_contracts import BlobRef, ImageAnalysis, JobImage, RequirementHit, RequirementSpec
 
 
 def test_blob_ref_round_trips_through_json() -> None:
@@ -19,25 +19,23 @@ def test_blob_ref_round_trips_through_json() -> None:
     assert restored == blob
 
 
-def test_image_analysis_depicts_and_shot_from_are_separate_questions() -> None:
-    good = ImageAnalysis(file="a.jpg", depicts="headliner", shot_from="between_front_seats")
-    bad = ImageAnalysis(file="b.jpg", depicts="headliner", shot_from="beside_seat")
-    assert good.depicts == bad.depicts
-    assert good.shot_from != bad.shot_from
+def test_image_analysis_constraint_is_per_hit() -> None:
+    good = ImageAnalysis(
+        file="a.jpg",
+        hits=[RequirementHit(id="R-04", constraint_ok=True)],
+    )
+    bad = ImageAnalysis(
+        file="b.jpg",
+        hits=[RequirementHit(id="R-04", constraint_ok=False)],
+    )
+    assert [h.id for h in good.hits] == [h.id for h in bad.hits] == ["R-04"]
+    assert good.hits[0].constraint_ok is True
+    assert bad.hits[0].constraint_ok is False
 
 
-def test_image_analysis_confidence_defaults_to_one() -> None:
-    assert ImageAnalysis(file="a.jpg", depicts="boot").confidence == 1.0
-
-
-def test_image_analysis_rejects_impossible_confidence() -> None:
-    with pytest.raises(ValidationError):
-        ImageAnalysis(file="a.jpg", depicts="boot", confidence=1.5)
-
-
-def test_image_analysis_is_known_is_false_only_for_unknown() -> None:
-    assert ImageAnalysis(file="a.jpg", depicts="unknown", confidence=0.0).is_known is False
-    assert ImageAnalysis(file="a.jpg", depicts="boot").is_known is True
+def test_image_analysis_empty_hits_is_unknown() -> None:
+    assert ImageAnalysis(file="a.jpg").is_known is False
+    assert ImageAnalysis(file="a.jpg", hits=[RequirementHit(id="R-01")]).is_known is True
 
 
 def test_requirement_spec_is_a_projection_not_a_copy() -> None:

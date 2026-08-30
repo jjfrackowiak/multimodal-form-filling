@@ -31,6 +31,9 @@ fixtures/fleet-vehicle-return/*
 # Local infra config that has no business inside an image
 docker/compose.dev.yaml
 compose.yaml
+mock-firestore-app
+example_images
+/cv/
 
 # Python/uv build & cache artefacts — never ship the host's venv or caches into the image
 .venv
@@ -58,3 +61,5 @@ build
 
 # Node/other tooling that has no place here
 node_modules
+*.HEIC
+*.heic

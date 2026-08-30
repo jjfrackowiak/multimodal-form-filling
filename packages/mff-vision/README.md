@@ -30,14 +30,13 @@ good, bad = await tool.build_inventory(
     [RequirementSpec(id="R-04", text="Two photographs of the headliner.",
                      constraint="camera position: between_front_seats")],
 )
-good.shot_from   # 'between_front_seats'
-bad.shot_from    # 'beside_seat'
+good.hits[0].constraint_ok   # True  — between the seats
+bad.hits[0].constraint_ok    # False — beside the seat
 ```
 
-Both photographs depict the headliner; only one satisfies the manifest's
-positional constraint. If the stand-in collapsed to a single answer, a derivative
-run would pass R-04 for the wrong reason and the fixture would stop testing the
-thing it exists to test.
+Both photographs hit R-04; only one satisfies the pose constraint. If the stand-in
+collapsed to a single answer, a derivative run would pass R-04 for the wrong
+reason and the fixture would stop testing the thing it exists to test.
 
 It also **cannot be wrong**, which makes it useless for measuring vision quality
 and ideal for everything else: the editor, the applier and the evals become fully
@@ -48,13 +47,13 @@ becomes the answer key it is scored against.
 ## Two distinctions the API insists on
 
 **Unidentifiable is not unavailable.** An image the service looked at and could
-not place comes back as `depicts == "unknown"` with `confidence == 0.0` — that is
-evidence, and the editor must decide what it means for a requirement. A service
-that could not be reached raises `VisionUnavailable`, which is infrastructure
-failure and must never be recorded as a finding about the client's photographs.
+not place comes back with empty `hits` — that is evidence, and the editor must
+decide what it means for a requirement. A service that could not be reached
+raises `VisionUnavailable`, which is infrastructure failure and must never be
+recorded as a finding about the client's photographs.
 
-**`depicts` and `shot_from` are different questions.** What a picture is of, and where it
-was taken from. Collapsing them loses R-04.
+**Constraint is per hit, not a global pose field.** Two photos can support the same
+id and disagree on `constraint_ok`. Collapsing that loses R-04.
 
 **Cropping is not part of this interface.** An earlier draft carried it, following req
 13's wording. Nothing in the flow calls it — the editor decides whether a photograph

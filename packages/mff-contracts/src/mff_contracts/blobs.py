@@ -7,6 +7,7 @@ from here.
 
 No `BoundingBox` and no cropping. An earlier draft carried a crop operation; nothing in the
 flow needs it, so it was removed from scope (see the plan, "Cropping is out of scope").
+The service looks for `RequirementSpec.text`, not a frozen `depicts` vocabulary.
 """
 
 from __future__ import annotations
@@ -17,7 +18,14 @@ from pydantic import BaseModel, Field
 
 from .requirements import Constraint
 
-__all__ = ["BlobRef", "ImageAnalysis", "JobImage", "RequirementSpec"]
+__all__ = [
+    "BlobRef",
+    "Finding",
+    "ImageAnalysis",
+    "JobImage",
+    "RequirementHit",
+    "RequirementSpec",
+]
 
 
 class BlobRef(BaseModel):
@@ -47,23 +55,42 @@ class RequirementSpec(BaseModel):
     constraint: Constraint | None = None
 
 
-class ImageAnalysis(BaseModel):
-    """What one photograph actually shows.
+class RequirementHit(BaseModel):
+    """One checklist id this photograph actually supports."""
 
-    `depicts` answers "what is this a picture of". `shot_from` answers "from where", a
-    separate question — merging the two would lose the distinction that decides R-04 in the
-    fleet fixture, where two headliner photographs are told apart only by camera position.
+    id: str
+    constraint_ok: bool | None = None
+    constraint_evidence: str | None = None
+
+
+class Finding(BaseModel):
+    """A visible detail that is not a frozen form field."""
+
+    what: str
+    value: str
+    evidence: str = ""
+
+
+class ImageAnalysis(BaseModel):
+    """What one photograph actually shows, against the requirements it was given.
+
+    `hits` are checklist ids this frame supports. A constraint is per-id
+    (`constraint_ok`), which is how two headliner photos can share R-04 and still
+    disagree on "shot from between the front seats".
+    An image the service looked at and could not place comes back with empty hits —
+    evidence, not an error.
     """
 
     file: str
-    depicts: str  # "headliner", "seat_front", … or "unknown"
-    shot_from: str | None = None  # "between_front_seats" — a SEPARATE question
+    uri: str | None = None
+    hits: list[RequirementHit] = Field(default_factory=list)
     note: str | None = None
-    confidence: float = Field(default=1.0, ge=0.0, le=1.0)
+    findings: list[Finding] = Field(default_factory=list)
+    exact_duplicate_of: str | None = None
 
     @property
     def is_known(self) -> bool:
-        return self.depicts != "unknown"
+        return bool(self.hits)
 
 
 class JobImage(BaseModel):

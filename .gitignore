@@ -12,6 +12,8 @@ __pycache__/
 *.egg-info/
 .pytest_cache/
 .venv/
+# Old CV path leftover (.venv) after the move to services/cv
+/cv/
 venv/
 .venv-fixture/
 .coverage
@@ -21,3 +23,12 @@ venv/
 # Node
 node_modules/
 .claude/worktrees/
+mock-firestore-app.zip
+**/inventory.generated.yaml
+*.HEIC
+
+# Local agent notes — not part of the product
+AGENTS.md
+MISTAKES.md
+
+example_images/

@@ -1,0 +1,59 @@
+# Documentation checklist for this delivery (unseen Aygo damage set).
+# Look-fors: what to extract from the photos. Not a parse of the swear-y shot list —
+# that list is manifest.txt (which images they say they sent).
+
+expected_total_photos: 7
+
+requirements:
+  - id: R-01
+    text: >
+      Front elevation of the vehicle, showing the extent of frontal impact
+      damage.
+    source_span: "zdjecie z przodu auto klient rozjebal w pizdu"
+    expected_count: 1
+
+  - id: R-02
+    text: >
+      Left side of the vehicle, showing whether impact damage continues
+      along that flank.
+    source_span: "lewy bok auta - tez widac jak rozjebal"
+    expected_count: 1
+
+  - id: R-03
+    text: Rear elevation of the vehicle.
+    source_span: "tyl auta"
+    expected_count: 1
+
+  - id: R-04
+    text: >
+      Right side of the vehicle, to record that this flank was spared
+      relative to the left/front.
+    source_span: "prawy bok oszczedzil"
+    expected_count: 1
+
+  - id: R-05
+    text: >
+      Photograph of the damaged front bumper that includes a readable
+      registration plate.
+    source_span: "rozjebal zderzak jak chuj - zdjecie z tablica"
+    expected_count: 1
+    constraint:
+      kind: plate_legible
+      value: registration_plate_visible
+      constraint_source_span: "zdjecie z tablica"
+
+  - id: R-06
+    text: Close-up of the damaged front bumper / impact area.
+    source_span: "zderzak pizduuu zblizenie"
+    expected_count: 1
+
+  - id: R-07
+    text: >
+      Photograph of the front bumper from above, showing that the bumper
+      is shifted / misaligned as a whole.
+    source_span: "zderzak rozjebany z gory - przesuniety zderzak caly"
+    expected_count: 1
+    constraint:
+      kind: camera_position
+      value: from_above
+      constraint_source_span: "zderzak rozjebany z gory"
