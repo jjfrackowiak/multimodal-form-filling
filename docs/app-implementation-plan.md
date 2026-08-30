@@ -421,6 +421,44 @@ what a CV pipeline naturally emits. They are a proposal, not a decision:
    `between_front_seats` and `beside_seat`. Left as free text, the editor has to
    interpret strings it has never seen and R-04 stops being decidable.
 
+## Dependency pinning
+
+**Never depend on `pydantic-ai`.** The meta-package resolves to:
+
+```
+pydantic-ai-slim[openai,anthropic,google,cli,mcp,evals,web,retries,logfire]
+```
+
+which ships the OpenAI *and* Anthropic SDKs, an MCP client and a CLI into every image
+so we can talk to Gemini. Use the slim package with only the extras we actually call:
+
+```toml
+# services/editor-service — the only service that talks to a model
+dependencies = [
+  "pydantic-ai-slim[google,evals]",   # GoogleModel/GoogleProvider + pydantic-evals
+  "ffx-contracts", "ffx-docmodel", "ffx-vision",
+]
+```
+
+Notes for whoever writes these files:
+
+- **`[google]`** brings `google-genai`, which is where `HttpRetryOptions` lives — so the
+  transport-level retry in the plan needs no further extra. The separate `[retries]`
+  extra is for Pydantic AI's *own* tenacity transport; add it only if we adopt that
+  instead.
+- **`[evals]`** is how `pydantic-evals` arrives. It is a real dependency of the eval
+  suites, not a dev convenience, because the structural evaluators import it.
+- **`[logfire]`** stays out by default. Observability is worth having, but it should be
+  a deliberate opt-in per environment rather than weight in every image.
+- **`email-service` and `vision-stub` get no model extras at all.** The orchestrator
+  never calls a model — parsing happens in the editor — and the vision placeholder
+  processes nothing. If either grows a `pydantic-ai` dependency, something has moved to
+  the wrong service.
+
+Image weight is a deployment concern and deployment is not ours, which is exactly why
+this belongs in the plan: we are the ones who decide what goes in the image, and the
+people who pay for it are not in this repo.
+
 ## State & persistence
 
 Req 12 says the artifact lives "outside any single agent run". In-process that's a Python object — but across an HTTP boundary, a retry, a crash, or a second replica, an in-process object is gone. It needs a store, and that store is also what finally gives **D2** (job status after confirmation) something to report.
