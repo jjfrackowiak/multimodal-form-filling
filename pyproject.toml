@@ -27,6 +27,13 @@ dev = [
     # "python-docx must not appear in the editor" rules: those bind package source
     # under packages/ and services/, not this repo-root dev tooling group.
     "python-docx>=1.1",
+    # Structural evals (B2's manifest live eval today; B6/B7's slice evals later) stay on
+    # pydantic-evals even though agents are ADK — see CONTEXT.md, "Rules every branch
+    # inherits". A dev-group dependency, same reasoning as python-docx above: it pins
+    # pydantic-ai-slim, which must never reach a service image, so the banned-api rule on
+    # `pydantic_evals.evaluators.LLMJudge` (below) is what actually keeps it honest, not
+    # keeping the package itself out of dev tooling.
+    "pydantic-evals>=0.1",
 ]
 
 # ---------------------------------------------------------------------------

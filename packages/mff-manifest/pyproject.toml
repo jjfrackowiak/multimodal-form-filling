@@ -1,9 +1,18 @@
 [project]
 name = "mff-manifest"
 version = "0.1.0"
-description = "Empty skeleton (B0). Owned by a later branch: parsing a raw manifest into Requirement[] (reqs 4, 5)."
+description = "B2: free text into Requirement[] (reqs 4, 5) — deterministic pre-split plus one small model call behind the RequirementExtractor Protocol."
 requires-python = ">=3.11"
 dependencies = ["mff-contracts"]
+
+[project.optional-dependencies]
+# ONLY the live eval (tests/live_extractor.py, tests/test_live_eval.py) needs this, and
+# only when MFF_MANIFEST_LIVE_EVAL is set — never installed by `uv sync --all-packages`,
+# never in CI. It is a bare `google-genai` client, not `google.adk`: the eval needs one
+# text-in/JSON-out call, not an agent runtime, and this package still imports no model
+# library of its own — see tests/test_import_boundary.py, which checks src/ only, and the
+# package README for why the live path cannot run in this environment.
+live-eval = ["google-genai>=1.0"]
 
 [build-system]
 requires = ["hatchling"]
