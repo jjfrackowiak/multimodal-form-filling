@@ -1,9 +1,21 @@
-"""mff-applier — empty skeleton (B0).
+"""mff-applier — req 14 (surgical edits, no full regeneration), req 15 (apply the edits).
 
-Owned by a later branch. No logic lives here yet: this package exists so that branch adds
-files rather than a package.
+The one place a validated `SliceReport` becomes changes to an `Artifact`. Pure functions
+over `(Artifact, SliceReport) -> Artifact`-shaped data: no I/O, no model, no async.
 """
 
 from __future__ import annotations
 
-__all__: list[str] = []
+from .apply import apply_slice
+from .models import ApplyResult, Overwrite, Rejection
+from .ordering import key_after, key_before, key_between
+
+__all__ = [
+    "ApplyResult",
+    "Overwrite",
+    "Rejection",
+    "apply_slice",
+    "key_after",
+    "key_before",
+    "key_between",
+]
