@@ -30,5 +30,10 @@ def build_editor_model(settings: Settings) -> Gemini:
     """
     return Gemini(
         model=settings.editor_model_id,
+        client_kwargs={
+            "vertexai": True,
+            "project": settings.google_cloud_project,
+            "location": settings.google_cloud_location,
+        },
         retry_options=types.HttpRetryOptions(attempts=3),
     )

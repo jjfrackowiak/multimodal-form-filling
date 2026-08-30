@@ -1,0 +1,32 @@
+verdict_vocabulary: [pass, fail]
+expected_verdicts:
+  R-01: fail
+  R-02: pass
+  R-03: pass
+  R-04: fail
+  R-05: pass
+  R-06: pass
+  R-07: pass
+  R-08: pass
+  R-09: pass
+  R-10: pass
+expected_verdict_counts: {pass: 8, fail: 2}
+governing_section_ids:
+  R-01: section-1
+  R-02: section-2
+  R-03: section-3
+  R-04: section-4
+  R-05: section-5
+  R-06: section-5
+  R-07: section-6
+  R-08: section-7
+  R-09: section-7
+  R-10: section-8
+checks:
+  - exact_golden_verdicts
+  - one_comment_per_requirement
+  - nonempty_justifications
+  - valid_governing_anchors
+  - fail_suggestions_only
+  - no_draft_ops
+  - no_unverified

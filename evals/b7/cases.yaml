@@ -1,0 +1,10 @@
+name: mff-b7-live-netnew
+cases:
+  - name: fleet-vehicle-return-netnew
+    fixture_root: fixtures/fleet-vehicle-return
+    requirements: expected_requirements.yaml
+    inventory: inventory.yaml
+    client_inputs: input/netnew/WN-7020U
+    form_id: WN-7020U
+    expected_shortfalls: [R-01, R-04]
+    max_duration_seconds: 130
