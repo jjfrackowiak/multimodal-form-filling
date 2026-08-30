@@ -7,11 +7,12 @@ Photos in → `inventory.yaml` out (same shape as
 
 - `depicts` from a closed taxonomy
 - `shot_from` only for headliner (`between_front_seats` | `beside_seat`)
+- `observations` a comment can cite: `odometer_km`, verbatim `warnings`, `registration`, `pose_evidence`, `seat_side`
 - `exact_duplicate_pairs` via **sha256**, not the model
 
-**Model: Vertex Gemini** on project `linen-badge-507111-r6`
-(`all-things-agentic-google`). Org policy **disallows API keys** — use
-Application Default Credentials, not Agent Platform API keys.
+**Model: Vertex Gemini** on `linen-badge-507111-r6`. Shape is Pydantic `ImageLabel` in
+`cv/schema.py`, sent as Vertex `response_schema` (no “return JSON” prompt).
+Org policy **disallows API keys** — ADC only.
 
 The editor calls this later over HTTP. Nothing here lives inside `editor-service`.
 
