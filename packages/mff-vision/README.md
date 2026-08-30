@@ -28,6 +28,7 @@ particular:
 good, bad = await tool.build_inventory(
     [ImageRef(uri="1000040420.jpg"), ImageRef(uri="IMG_20260830_132755 (5).jpg")],
     [RequirementSpec(id="R-04", text="Two photographs of the headliner.",
+                     source_span="Two photographs of the headliner from between the front seats",
                      constraint="camera position: between_front_seats")],
 )
 good.shot_from   # 'between_front_seats'

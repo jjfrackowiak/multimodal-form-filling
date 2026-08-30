@@ -16,6 +16,7 @@ REQS = [
     RequirementSpec(
         id="R-04",
         text="Two photographs of the headliner.",
+        source_span="Two photographs of the headliner from between the front seats",
         constraint="camera position: between_front_seats",
     )
 ]

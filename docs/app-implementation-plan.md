@@ -595,8 +595,9 @@ image, so every slice then reasons from identical image facts and cannot reach d
 conclusions because the service answered differently — and a job's whole submission costs
 one round trip rather than seventeen.
 
-**`RequirementSpec` is a projection, not a copy.** The service receives `id`, `text` and
-`constraint`; it has no business knowing manifest offsets, slice scopes or `applies_to`.
+**`RequirementSpec` is a projection, not a copy.** The service receives `id`, `text`,
+`source_span` (the verbatim client quote) and `constraint`; it has no business knowing
+manifest offsets, slice scopes or `applies_to`.
 
 ### Cropping is out of scope
 

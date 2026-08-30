@@ -41,9 +41,24 @@ def test_image_analysis_is_known_is_false_only_for_unknown() -> None:
 
 
 def test_requirement_spec_is_a_projection_not_a_copy() -> None:
-    """The vision service gets what it can act on — not manifest offsets or slice scopes."""
+    """Vision gets the look-for fields, not editor bookkeeping (ordinal, applies_to)."""
     fields = set(RequirementSpec.model_fields)
-    assert fields == {"id", "text", "constraint"}
+    assert fields == {"id", "text", "source_span", "constraint"}
+    assert "ordinal" not in fields and "applies_to" not in fields
+
+
+def test_requirement_spec_source_span_round_trips() -> None:
+    spec = RequirementSpec(
+        id="R-01",
+        text="Front of the vehicle",
+        source_span="front of the vehicle",
+    )
+    restored = RequirementSpec.model_validate_json(spec.model_dump_json())
+    assert restored.source_span == "front of the vehicle"
+
+
+def test_requirement_spec_source_span_defaults_empty() -> None:
+    assert RequirementSpec(id="R-01", text="Front of the vehicle").source_span == ""
 
 
 def test_job_image_source_is_attachment_or_embedded() -> None:

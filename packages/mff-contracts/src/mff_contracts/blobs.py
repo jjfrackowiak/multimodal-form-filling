@@ -34,12 +34,17 @@ class RequirementSpec(BaseModel):
     """What the vision service is looking for.
 
     A deliberate **projection** of `Requirement`, not a copy. The service receives `id`,
-    `text` and `constraint`; it has no business knowing manifest offsets, slice scopes or
-    `applies_to`.
+    `text`, the verbatim `source_span`, and `constraint`. It has no business knowing
+    manifest offsets (`ordinal` / `source_line`), slice scopes, or `applies_to`.
+
+    `source_span` is the client's own wording. Vision uses it as the look-for when every
+    requirement already has an id and a span, so the raw manifest does not also have to
+    be sent. Empty means "not available; pass the raw manifest if the service needs it".
     """
 
     id: str
     text: str
+    source_span: str = ""  # VERBATIM substring of Manifest.raw
     constraint: str | None = None  # e.g. "camera position: between_front_seats"
 
 

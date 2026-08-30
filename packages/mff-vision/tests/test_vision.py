@@ -20,6 +20,7 @@ REQS = [
     RequirementSpec(
         id="R-04",
         text="Two photographs of the headliner.",
+        source_span="Two photographs of the headliner from between the front seats",
         constraint="camera position: between_front_seats",
     )
 ]
@@ -100,7 +101,7 @@ def test_analysis_rejects_impossible_confidence() -> None:
 
 
 def test_requirement_spec_is_a_projection() -> None:
-    """The service gets what it can act on — not manifest offsets or slice scopes."""
+    """The service gets the look-for fields, not editor bookkeeping."""
     fields = set(RequirementSpec.model_fields)
-    assert fields == {"id", "text", "constraint"}
-    assert "ordinal" not in fields and "source_span" not in fields
+    assert fields == {"id", "text", "source_span", "constraint"}
+    assert "ordinal" not in fields and "applies_to" not in fields
