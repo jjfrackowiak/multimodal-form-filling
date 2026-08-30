@@ -15,6 +15,7 @@ available. See the package README for how to run that.
 from __future__ import annotations
 
 import os
+from unittest import mock
 
 import google.cloud.storage as storage  # no py.typed, but `import a.b as c` needs no ignore
 import pytest
@@ -39,6 +40,12 @@ def clean_emulator_env(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("STORAGE_EMULATOR_HOST", raising=False)
 
 
+def _no_adc() -> DefaultCredentialsError:
+    """The SDK's exception is untyped; build it in one place rather than ignoring
+    no-untyped-call at every call site."""
+    return DefaultCredentialsError()  # type: ignore[no-untyped-call]
+
+
 def test_make_firestore_client_against_emulator_var_needs_no_network(
     clean_emulator_env: None, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -52,11 +59,18 @@ def test_make_firestore_client_against_emulator_var_needs_no_network(
 def test_make_firestore_client_without_emulator_var_uses_real_adc(
     clean_emulator_env: None,
 ) -> None:
-    """No emulator var -> falls through to normal Application Default Credentials
-    discovery, exactly like real Firestore usage. This sandbox has no ADC configured,
-    so the deterministic, offline-safe assertion is that it raises rather than
-    silently talking to something unexpected."""
-    with pytest.raises(DefaultCredentialsError):
+    """No emulator var -> falls through to normal ADC discovery, exactly like real usage.
+
+    Asserted by forcing discovery to fail, not by relying on the machine having no
+    credentials. The original version asserted the latter and so passed only on a
+    machine without ADC -- it broke the moment the repo moved to ADC and a developer
+    ran `gcloud auth application-default login`. A test that depends on the absence of
+    a credential is a test that depends on who is running it.
+    """
+    with (
+        mock.patch("google.auth.default", side_effect=_no_adc()),
+        pytest.raises(DefaultCredentialsError),
+    ):
         make_firestore_client(project="test")
 
 
@@ -69,7 +83,12 @@ def test_make_gcs_client_against_emulator_var_needs_no_network(
 
 
 def test_make_gcs_client_without_emulator_var_uses_real_adc(clean_emulator_env: None) -> None:
-    with pytest.raises(DefaultCredentialsError):
+    """Same reasoning as the Firestore case above: force discovery to fail rather than
+    assuming the machine has no credentials."""
+    with (
+        mock.patch("google.auth.default", side_effect=_no_adc()),
+        pytest.raises(DefaultCredentialsError),
+    ):
         make_gcs_client(project="test")
 
 
