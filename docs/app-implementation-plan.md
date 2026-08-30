@@ -489,6 +489,30 @@ IMAP, asserting that both the attachment and the Polish characters survive. Run 
 before debugging the email service: it separates "our code is wrong" from "the mailbox
 is not up", which are otherwise easy to confuse and expensive to conflate.
 
+### Who receives the results
+
+There is no recipient setting, and there must never be one. **Replies go to the sender of
+the incoming request**, read off its `From` / `Reply-To` headers. The configured mailbox
+is the address clients *write to*; each client gets results back at whatever address they
+wrote from.
+
+That is what lets a person use their ordinary everyday address as a client while the
+service polls a separate, dedicated mailbox it fully owns. The two are never the same
+account, and the poller never touches anyone's personal inbox.
+
+It also means the service will reply to **anyone** who emails it. Two guards, both cheap
+and both belonging to B3:
+
+- **`ALLOWED_SENDERS`** — an allowlist. Left empty the service is an open robot that
+  answers spam and, worse, can bounce-loop with another autoresponder: it replies, the
+  other side auto-replies, and neither stops. An allowlist ends that in one line.
+- **A per-sender rate cap**, for the same reason at lower cost than reasoning about
+  loops.
+
+Standard practice applies too: never auto-reply to a message carrying
+`Auto-Submitted: auto-*` or `List-Id`, or to a null return path. That is the rule that
+keeps two robots from talking to each other forever.
+
 ### What actually needs a real mailbox
 
 Almost nothing. The `MailTransport` Protocol (B4) ships an in-memory fake, so intake
