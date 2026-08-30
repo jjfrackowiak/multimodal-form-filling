@@ -22,7 +22,7 @@ Not in scope for v1: image tooling (req 13) ships as a **stubbed interface only*
 - **Programmatic hand-off** (req 11) is a Pydantic AI documented pattern: agents called in succession from *plain Python*, each run scoped to its own requirement slice, context carried by `message_history=` and shared `deps`/`usage`. There is no graph DSL needed — the "state machine" is our own explicit loop.
 - **Shared state** (req 12) = a `deps` dataclass holding the `Artifact` python object. Tools mutate it in place; it outlives every run.
 - **Gemini**: `GoogleModel(<model-id>, provider=GoogleProvider(api_key=...))`, plus `HttpRetryOptions` for transport-level retry and `UsageLimits` per slice.
-- **Validation/retry** (reqs 16–17): `@agent.output_validator` raising `ModelRetry` handles cheap in-run structural fixes; the **3-attempt cap and the mark-unverified terminal state live in our outer loop**, because req 17 requires a durable terminal outcome, not an exception.
+- **Validation/retry** (reqs 16–17): there are **two validators at two levels**, and only the outer one gates persistence. See *Two validators, two levels* below — it is the thing most likely to be implemented as one.
 - **Evals**: `pydantic-evals` ships with Pydantic AI — `Case`/`Dataset`/`Evaluator`, plus built-in `IsInstance`, `Contains` and **`MaxDuration(seconds=...)`**. `EvaluatorContext` exposes `ctx.duration`, `ctx.metrics` and `ctx.span_tree`, so correctness, latency and token cost all come out of a single run. Agents are `pydantic-ai`; evals are `pydantic-evals`. **`LLMJudge` exists in that library and we do not use it** — see the evals section.
 - **Comments**: `document.add_comment(runs=..., text=..., author=..., initials=...)` and `document.comments` are supported in `python-docx` ≥ 1.2.
 
@@ -96,6 +96,52 @@ earliest requirement, where `ordinal` is the character offset of that requiremen
 `source_span` in the raw manifest. No model output sits anywhere in the ordering path, and
 the justification is honest: the client wrote their requirements in an order, and that
 order is theirs.
+
+### Two validators, two levels
+
+The system validates twice, at different levels, for different reasons. Collapsing them
+into one is the most likely implementation error here, and it fails in both directions:
+one validator cheap enough to run in-process cannot see whether a requirement was
+answered, and one that can costs a whole model run to reject a missing field.
+
+| | **Level 1 — inside the run** | **Level 2 — orchestrator** |
+|---|---|---|
+| Mechanism | `@agent.output_validator` raising `ModelRetry` | per-requirement check on the `SliceReport` |
+| Owned by | `editor-service` | `email-service` |
+| Sees | one output object | the whole report against the requirement set |
+| Catches | malformed shape: missing field, wrong type, `suggestion` absent on a `fail` | requirement unanswered, empty justification, anchor that does not resolve, a comment for an id not in `pending` |
+| Costs | cheap — same run, context already loaded | expensive — **a whole new agent run** |
+| Retries | pydantic-ai's own, within the run | our outer loop, capped at 3 attempts |
+| On exhaustion | raises `UnexpectedModelBehavior` | marks the requirement `unverified` — req 17's durable terminal |
+| Touches shared state | **never** | **this is the gate** |
+
+Neither can do the other's job. Level 1 only ever sees a single output object, so it cannot
+know whether R-07 was answered — it has no requirement set to compare against. Level 2
+should not be spent on *"you forgot a field"*, which the model can fix immediately with the
+error in front of it and without re-reading the artifact.
+
+**What is persisted, and when.** The agent mutates a **session-scoped** artifact through
+its tools, freely and at any point, with no gate — req 12 taken literally. Level 1 may
+bounce its output shape without that artifact ever being written anywhere. Only when
+level 2 passes does anything reach the **shared** artifact:
+
+```
+session artifact    ← tools mutate freely; level 1 may bounce the output shape
+      │
+      ▼ run ends
+ SliceReport        ← level 2 validates, per requirement
+      │
+      ├─ all pass → COMMIT: ops + cursor to shared state, ONE transaction
+      └─ any fail → NOTHING persisted. Session object discarded.
+                    Retry reloads the SAME committed snapshot, carries history,
+                    and `pending` narrows to what is still unresolved.
+```
+
+**On "shared".** Because slices run sequentially, the shared artifact is never
+*concurrently* accessed — it is passed **between** slices in sequence, slice N+1 reading
+what slice N committed. There is no locking and no contention inside a job.
+`expected_version` on `save` exists to catch a **duplicate runner** — the same job picked
+up twice after a crash — not to arbitrate normal operation.
 
 ### The two modes are two agents
 

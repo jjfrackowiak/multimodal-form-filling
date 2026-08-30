@@ -443,7 +443,7 @@ html{scroll-behavior:smooth}
 <li><strong>Programmatic hand-off</strong> (req 11) is a Pydantic AI documented pattern: agents called in succession from <em>plain Python</em>, each run scoped to its own requirement slice, context carried by <code>message_history=</code> and shared <code>deps</code>/<code>usage</code>. There is no graph DSL needed — the "state machine" is our own explicit loop.</li>
 <li><strong>Shared state</strong> (req 12) = a <code>deps</code> dataclass holding the <code>Artifact</code> python object. Tools mutate it in place; it outlives every run.</li>
 <li><strong>Gemini</strong>: <code>GoogleModel(&lt;model-id&gt;, provider=GoogleProvider(api_key=...))</code>, plus <code>HttpRetryOptions</code> for transport-level retry and <code>UsageLimits</code> per slice.</li>
-<li><strong>Validation/retry</strong> (reqs 16–17): <code>@agent.output_validator</code> raising <code>ModelRetry</code> handles cheap in-run structural fixes; the <strong>3-attempt cap and the mark-unverified terminal state live in our outer loop</strong>, because req 17 requires a durable terminal outcome, not an exception.</li>
+<li><strong>Validation/retry</strong> (reqs 16–17): there are <strong>two validators at two levels</strong>, and only the outer one gates persistence. See <em>Two validators, two levels</em> below — it is the thing most likely to be implemented as one.</li>
 <li><strong>Evals</strong>: <code>pydantic-evals</code> ships with Pydantic AI — <code>Case</code>/<code>Dataset</code>/<code>Evaluator</code>, plus built-in <code>IsInstance</code>, <code>Contains</code> and <strong><code>MaxDuration(seconds=...)</code></strong>. <code>EvaluatorContext</code> exposes <code>ctx.duration</code>, <code>ctx.metrics</code> and <code>ctx.span_tree</code>, so correctness, latency and token cost all come out of a single run. Agents are <code>pydantic-ai</code>; evals are <code>pydantic-evals</code>. <strong><code>LLMJudge</code> exists in that library and we do not use it</strong> — see the evals section.</li>
 <li><strong>Comments</strong>: <code>document.add_comment(runs=..., text=..., author=..., initials=...)</code> and <code>document.comments</code> are supported in <code>python-docx</code> ≥ 1.2.</li>
 </ul>
@@ -507,6 +507,85 @@ earliest requirement, where <code>ordinal</code> is the character offset of that
 <code>source_span</code> in the raw manifest. No model output sits anywhere in the ordering path, and
 the justification is honest: the client wrote their requirements in an order, and that
 order is theirs.</p>
+<h3 id="two-validators-two-levels">Two validators, two levels</h3>
+<p>The system validates twice, at different levels, for different reasons. Collapsing them
+into one is the most likely implementation error here, and it fails in both directions:
+one validator cheap enough to run in-process cannot see whether a requirement was
+answered, and one that can costs a whole model run to reject a missing field.</p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th><strong>Level 1 — inside the run</strong></th>
+<th><strong>Level 2 — orchestrator</strong></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Mechanism</td>
+<td><code>@agent.output_validator</code> raising <code>ModelRetry</code></td>
+<td>per-requirement check on the <code>SliceReport</code></td>
+</tr>
+<tr>
+<td>Owned by</td>
+<td><code>editor-service</code></td>
+<td><code>email-service</code></td>
+</tr>
+<tr>
+<td>Sees</td>
+<td>one output object</td>
+<td>the whole report against the requirement set</td>
+</tr>
+<tr>
+<td>Catches</td>
+<td>malformed shape: missing field, wrong type, <code>suggestion</code> absent on a <code>fail</code></td>
+<td>requirement unanswered, empty justification, anchor that does not resolve, a comment for an id not in <code>pending</code></td>
+</tr>
+<tr>
+<td>Costs</td>
+<td>cheap — same run, context already loaded</td>
+<td>expensive — <strong>a whole new agent run</strong></td>
+</tr>
+<tr>
+<td>Retries</td>
+<td>pydantic-ai's own, within the run</td>
+<td>our outer loop, capped at 3 attempts</td>
+</tr>
+<tr>
+<td>On exhaustion</td>
+<td>raises <code>UnexpectedModelBehavior</code></td>
+<td>marks the requirement <code>unverified</code> — req 17's durable terminal</td>
+</tr>
+<tr>
+<td>Touches shared state</td>
+<td><strong>never</strong></td>
+<td><strong>this is the gate</strong></td>
+</tr>
+</tbody>
+</table>
+<p>Neither can do the other's job. Level 1 only ever sees a single output object, so it cannot
+know whether R-07 was answered — it has no requirement set to compare against. Level 2
+should not be spent on <em>"you forgot a field"</em>, which the model can fix immediately with the
+error in front of it and without re-reading the artifact.</p>
+<p><strong>What is persisted, and when.</strong> The agent mutates a <strong>session-scoped</strong> artifact through
+its tools, freely and at any point, with no gate — req 12 taken literally. Level 1 may
+bounce its output shape without that artifact ever being written anywhere. Only when
+level 2 passes does anything reach the <strong>shared</strong> artifact:</p>
+<pre><code>session artifact    ← tools mutate freely; level 1 may bounce the output shape
+      │
+      ▼ run ends
+ SliceReport        ← level 2 validates, per requirement
+      │
+      ├─ all pass → COMMIT: ops + cursor to shared state, ONE transaction
+      └─ any fail → NOTHING persisted. Session object discarded.
+                    Retry reloads the SAME committed snapshot, carries history,
+                    and `pending` narrows to what is still unresolved.
+</code></pre>
+<p><strong>On "shared".</strong> Because slices run sequentially, the shared artifact is never
+<em>concurrently</em> accessed — it is passed <strong>between</strong> slices in sequence, slice N+1 reading
+what slice N committed. There is no locking and no contention inside a job.
+<code>expected_version</code> on <code>save</code> exists to catch a <strong>duplicate runner</strong> — the same job picked
+up twice after a crash — not to arbitrate normal operation.</p>
 <h3 id="the-two-modes-are-two-agents">The two modes are two agents</h3>
 <p>They are not doing the same kind of work, and forcing them through one editing model is
 what produced the contract's worst bugs.</p>
