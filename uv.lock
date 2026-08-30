@@ -277,11 +277,25 @@ name = "email-service"
 version = "0.1.0"
 source = { editable = "services/email-service" }
 dependencies = [
+    { name = "fastapi" },
+    { name = "httpx" },
+    { name = "mff-applier" },
     { name = "mff-contracts" },
+    { name = "mff-docmodel" },
+    { name = "mff-store" },
+    { name = "uvicorn" },
 ]
 
 [package.metadata]
-requires-dist = [{ name = "mff-contracts", editable = "packages/mff-contracts" }]
+requires-dist = [
+    { name = "fastapi", specifier = ">=0.115" },
+    { name = "httpx", specifier = ">=0.27" },
+    { name = "mff-applier", editable = "packages/mff-applier" },
+    { name = "mff-contracts", editable = "packages/mff-contracts" },
+    { name = "mff-docmodel", editable = "packages/mff-docmodel" },
+    { name = "mff-store", editable = "packages/mff-store" },
+    { name = "uvicorn", specifier = ">=0.30" },
+]
 
 [[package]]
 name = "fastapi"
