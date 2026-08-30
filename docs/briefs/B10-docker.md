@@ -38,12 +38,16 @@ it. Coordinate rather than overwrite.
 | Service | Notes |
 |---|---|
 | `email-service` | orchestrator + mail. **No model library.** Needs `mff-docmodel`, so `python-docx`. |
-| `editor-service` | `pydantic-ai-slim[google,evals]`. **No `python-docx`.** |
-| `vision-stub` | already has a Dockerfile; bring it under the shared pattern |
+| `editor-service` | `google-adk` (bare — **never** `[extensions]` or `[all]`, which ship `anthropic` and `openai`). **No `python-docx`.** |
+| `vision-stub` | already has a Dockerfile; bring it under the shared pattern. **Not bound by the ADK decision** — the real vision service is separately owned and may use Pydantic AI. Do not strip a model dependency from it. |
 
 **Those exclusions are load-bearing, not cosmetic.** If `python-docx` ends up in the editor
-or `pydantic-ai` in the email service, something has moved to the wrong service and the
+or `google-adk` in the email service, something has moved to the wrong service and the
 architecture has quietly drifted. Consider asserting it in a test.
+
+One more to assert while you are there: **`anthropic` and `openai` must not be importable
+in the editor image.** They are not in `google-adk`'s base install, but they *are* in its
+`[extensions]` and `[all]` extras, so this catches an extra added carelessly later.
 
 ## Requirements for each image
 
@@ -83,7 +87,7 @@ fails silently once deployed, which is the most common way a mail integration di
 2. `docker compose up -d` yields all services healthy.
 3. `scripts/verify_mailbox.py` passes against the composed GreenMail.
 4. **Image size reported in the PR description**, per service. If the editor image carries
-   `python-docx` or the email image carries `pydantic-ai`, that is a bug, not a size
+   `python-docx` or the email image carries `google-adk`, that is a bug, not a size
    problem.
 5. Every container runs as non-root — assert with `docker inspect`.
 6. No secret in any layer. Check with `docker history --no-trunc`.

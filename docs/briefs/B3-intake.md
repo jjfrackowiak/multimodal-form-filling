@@ -154,7 +154,7 @@ Build your test emails from `fixtures/fleet-vehicle-return/`:
 1. `make check` green, coverage ≥ 85%.
 2. **Every row of the rule matrix has a test**, asserting the `code` and that `detail`
    names the fix.
-3. A test that this package imports no model library — `pydantic-ai` must not appear.
+3. A test that this package imports no model library — `google-adk` must not appear.
 4. `render_confirmation` output contains every requirement id and text from the
    `RequestAccepted` it was handed, and the fixture's ten requirements round-trip.
 5. **The seven-job case**: an email with a 3-form `derivative.zip` and a 4-set

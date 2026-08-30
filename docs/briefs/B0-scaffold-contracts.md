@@ -72,8 +72,8 @@ Transcribe the models from the plan's contract section exactly. They are grouped
 
 ### Non-negotiable
 
-**`mff-contracts` depends on pydantic and nothing else.** Not `pydantic-ai`, not
-`python-docx`, not `httpx`, not `mff-vision`. Two specific traps, both of which were
+**`mff-contracts` depends on pydantic and nothing else.** Not `google-adk`, not
+`google-genai`, not `python-docx`, not `httpx`, not `mff-vision`. Two specific traps, both of which were
 caught in review and will be caught again by CI:
 
 - `ImageAnalysis` and `RequirementSpec` **live here**, not in `mff-vision`; `mff-vision`
@@ -120,7 +120,8 @@ guess costs a whole slice run to discover. Prefer the dumb, obvious implementati
   2. `mff-contracts` imports nothing but `pydantic`.
   3. No module outside `llm/` and `agents/` imports a model library.
   4. **`pydantic_evals.evaluators.LLMJudge` is forbidden anywhere.** Every evaluator in
-     this repo is structural.
+     this repo is structural. Note `pydantic-evals` is a **dev-group** dependency: it
+     pins `pydantic-ai-slim`, which must never reach a service image. Agents are ADK.
 - **pytest**, `asyncio_mode = auto` (already set in `pytest.ini`).
 - Per-package coverage ≥ 85%, measured per package — a global number lets one
   well-tested package hide four untested ones.
@@ -154,8 +155,10 @@ The fixture's evaluator must also still pass:
    `expected_ordinals` in `expected_output/structure.yaml`.
 4. The existing 13 vision tests pass with `ImageAnalysis` imported from contracts.
 5. `check_output.py` still returns 156/156.
-6. An import-linter test that **fails** if someone adds `pydantic-ai` to
-   `mff-contracts` — prove the gate works rather than assuming it.
+6. An import-linter test that **fails** if someone adds `google-adk` to `mff-contracts`
+   — prove the gate works rather than assuming it. `pydantic_ai` stays on the forbidden
+   list too: `pydantic-evals` pins `pydantic-ai-slim`, so the module is importable in the
+   dev environment and only this contract stops it drifting into runtime source.
 
 ## Out of scope — do not write these
 

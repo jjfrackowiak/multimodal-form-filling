@@ -67,8 +67,13 @@ email ─▶ email-service ─┬─ intake, replies      (B3)
 
 **The editor service is the only thing that calls a model.** Everything deterministic —
 compiling documents, persistence, completeness, delivery — is on the other side of that
-line. That is why `python-docx` must not appear in the editor, and `pydantic-ai` must not
+line. That is why `python-docx` must not appear in the editor, and `google-adk` must not
 appear in the email service.
+
+**ADK is the editor's choice, not a repo-wide mandate.** The vision service is owned
+separately (`AGENTS.md`, req 13) and **may use Pydantic AI** — it sits behind an HTTP
+contract, and what runs on the far side is its owner's call. If you find a `pydantic-ai`
+dependency under `services/vision-*`, it is correct, not leftover. Leave it.
 
 ## What B0 left you
 
@@ -170,12 +175,15 @@ uv run python fixtures/fleet-vehicle-return/check_output.py \
 
 **Own your directories, nothing else.** That table is what makes concurrent PRs safe.
 
-**No live model calls in CI.** `TestModel` / `FunctionModel`. Live evals go behind an env
-flag, run manually, baseline recorded in the package README.
+**No live model calls in CI.** `FakeLlm` from `mff-fakes` (B15) — ADK ships no supported
+test double, so we own one. Live evals go behind an env flag, run manually, baseline
+recorded in the package README.
 
 **No LLM-as-judge.** `pydantic_evals.evaluators.LLMJudge` is banned by a ruff rule and
 fails lint. Every evaluator here is structural — the pipeline is non-deterministic, whether
-its output is complete is not.
+its output is complete is not. Evals stay on `pydantic-evals` even though agents are ADK:
+ADK's `AgentEvaluator` scores with ROUGE-1 word overlap, which is the text-similarity
+comparison this plan rejects by name. `pydantic-evals` is a **dev-group** dependency.
 
 **Mutation-test your evaluator.** Break your own golden output in at least three ways and
 show each caught. Three checkers in this repo have already silently asserted nothing,
