@@ -102,15 +102,17 @@ clients.
 flowchart TD
     S["SEED ARTIFACT<br/>parse docx, or scaffold"] --> SL["for each slice — SEQUENTIAL, by ordinal"]
     SL --> RUN["editor runs the slice<br/>mutates a LIVE artifact in-session"]
-    RUN --> V{"validate per requirement<br/>req 16"}
-    V -->|"fail, attempt &lt; 3"| RUN
-    V -->|"fail, attempt = 3"| U["mark unverified — req 17"]
-    V -->|ok| C["COMMIT<br/>ops + cursor, one transaction"]
-    U --> C
+    subgraph EDITOR["inside the editor's run — req 16, req 17"]
+      RUN --> V{"validate per requirement"}
+      V -->|"fail, attempt &lt; 3"| RUN
+      V -->|"fail, attempt = 3"| U["mark unverified"]
+    end
+    V -->|ok| C
+    U --> C["orchestrator COMMITS<br/>ops + cursor, one transaction"]
     C --> M{"more slices?"}
     M -->|yes| SL
-    M -->|no| CK["completeness check<br/>every requirement has a comment"]
-    CK --> CP["COMPILE → .docx + RenderMap"]
+    M -->|no| CK["orchestrator: completeness check<br/>every requirement has a comment"]
+    CK --> CP["orchestrator COMPILES → .docx + RenderMap"]
     CP --> DONE["JobRecord.document"]
 ```
 
@@ -224,7 +226,7 @@ its toolset differ.
 
 ```
 editor-service      PRODUCES     comments, draft ops        — has the model
-orchestrator        VALIDATES    per slice, then per job    — has no model
+orchestrator        VALIDATES    completeness, then renderability — has no model
 orchestrator        COMPILES     → .docx with comments      — deterministic
 orchestrator        DELIVERS     one email per request      — mail adapter
 ```
@@ -235,11 +237,17 @@ stateless by design; compile needs the whole artifact. Keeping it out also keeps
 `python-docx` out of the editor entirely — the orchestrator parses the source into `Node`s
 and hands them over as data.
 
-Validation is orchestrator-side for a sharper reason: **an agent must not judge its own
-output.** Three checks at three moments — per slice (req 16), after the last slice
-(completeness: every requirement carries at least one comment), and during compile (every
-comment anchors to something that still exists). The middle one is inherently cross-slice;
-no single run knows what the others answered.
+**Per-requirement validation (req 16) is inside the editor's run, not the orchestrator.**
+While the comments are still Python objects it is a dict lookup; once they are OOXML
+comment parts it is archaeology, so that is where it belongs. See *Where validation
+happens* below for the full split.
+
+Two things stay orchestrator-side, and neither is a second copy of req 16's rules —
+they ask questions no single slice run can answer. **Completeness**, after the last
+slice: every requirement in the manifest carries at least one comment, checked against
+requirements from *all* slices, which is inherently cross-slice information no run has.
+**Renderability**, during compile: every comment anchors to something that still exists in
+the rendered document.
 
 ### The run lifecycle
 
