@@ -1,0 +1,13 @@
+[project]
+name = "mff-contracts"
+version = "0.1.0"
+description = "Frozen wire contract for multimodal-form-filling. Depends on pydantic and nothing else."
+requires-python = ">=3.11"
+dependencies = ["pydantic>=2.7"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/mff_contracts"]
