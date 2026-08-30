@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from mff_manifest import presplit
-
 from golden import RAW
+
+from mff_manifest import presplit
 
 
 def test_every_chunk_is_a_verbatim_substring_at_its_own_offset() -> None:

@@ -56,10 +56,7 @@ GOLDEN_REQUIREMENTS: list[Requirement] = [
         id="R-04",
         ordinal=56,
         source_line=4,
-        text=(
-            "Two photographs of the headliner. Each must be taken from between the "
-            "front seats."
-        ),
+        text=("Two photographs of the headliner. Each must be taken from between the front seats."),
         source_span="2x podsufitka",
         expected_count=2,
         constraint=Constraint(

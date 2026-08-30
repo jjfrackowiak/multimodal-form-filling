@@ -9,10 +9,10 @@ correctly" apart from "the extractor happened to get them right".
 
 from __future__ import annotations
 
-from mff_manifest import parse_manifest
-
 from fakes import ScriptedExtractor
 from golden import GOLDEN_REQUIREMENTS, RAW, unresolved
+
+from mff_manifest import parse_manifest
 
 
 async def test_golden_parse_matches_expected_requirements_yaml() -> None:

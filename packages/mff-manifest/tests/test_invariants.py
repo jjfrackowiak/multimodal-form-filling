@@ -8,11 +8,10 @@ returns a `Manifest` carrying a bad span, and it never just scores lower.
 from __future__ import annotations
 
 import pytest
-
-from mff_manifest import ManifestParseError, parse_manifest
-
 from fakes import ScriptedExtractor
 from golden import GOLDEN_REQUIREMENTS, RAW, unresolved
+
+from mff_manifest import ManifestParseError, parse_manifest
 
 
 async def test_every_source_span_is_verbatim_in_raw() -> None:

@@ -7,10 +7,10 @@ exactly those two colliding pairs, independent of the full golden fixture test.
 
 from __future__ import annotations
 
-from mff_manifest import parse_manifest
-
 from fakes import ScriptedExtractor
 from golden import GOLDEN_REQUIREMENTS, RAW, unresolved
+
+from mff_manifest import parse_manifest
 
 
 async def test_ids_come_out_r01_through_r10_in_canonical_order() -> None:

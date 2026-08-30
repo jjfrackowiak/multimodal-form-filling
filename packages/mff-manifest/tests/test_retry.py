@@ -4,11 +4,10 @@ stand-in: validate the returned spans, and re-ask on structural failure, capped.
 from __future__ import annotations
 
 import pytest
-
-from mff_manifest import DEFAULT_MAX_ATTEMPTS, ManifestParseError, parse_manifest
-
 from fakes import ScriptedExtractor
 from golden import GOLDEN_REQUIREMENTS, RAW, unresolved
+
+from mff_manifest import DEFAULT_MAX_ATTEMPTS, ManifestParseError, parse_manifest
 
 
 async def test_recovers_on_the_second_attempt() -> None:
