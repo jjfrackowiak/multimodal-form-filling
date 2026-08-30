@@ -107,33 +107,90 @@ The email layer never talks to Gemini.
 ### Orchestration layer
 
 The `email-service` is not only a mail gateway — it is the **orchestrator**. It owns the
-job, plans the slices, fans them out to editor instances running in parallel, collects
-and validates what comes back, and applies the results to one document.
+job, plans the slices, and drives a **background runner** that works through them one at
+a time, each seeing the document as the previous slice left it.
 
 ```mermaid
 flowchart TD
-    P["PARSE_MANIFEST → Requirement[]"] --> FORM["for each form — SEQUENTIAL<br/>filtered by Requirement.applies_to"]
-    FORM --> PLAN["PLAN SLICES<br/>disjoint requirement sets"]
-    PLAN --> SEED["SEED ARTIFACT<br/>parse docx, or generate scaffold"]
-    SEED --> F1["editor instance<br/>slice A"]
-    SEED --> F2["editor instance<br/>slice B"]
-    SEED --> F3["editor instance<br/>slice C"]
-    F1 --> COL["collect SliceReports"]
-    F2 --> COL
-    F3 --> COL
-    COL --> V{"validate each report<br/>req 16"}
-    V -->|"fail, attempt &lt; 3"| PLAN
+    ACC["202 Accepted<br/>requirements returned for the confirmation reply"] --> BG["background runner starts"]
+    BG --> FORM["for each form — sequential"]
+    FORM --> SEED["SEED ARTIFACT<br/>parse docx, or generate scaffold"]
+    SEED --> SLICE["for each slice — SEQUENTIAL, IN ORDER"]
+    SLICE --> RUN["editor instance runs the slice<br/>reads the CURRENT artifact"]
+    RUN --> V{"validate per requirement<br/>req 16"}
+    V -->|"fail, attempt &lt; 3"| RUN
     V -->|"fail, attempt = 3"| U["mark unverified<br/>req 17"]
-    V -->|ok| AP["APPLY SERIALLY<br/>in slice order · conflict detection"]
+    V -->|ok| AP["APPLY + COMMIT<br/>atomic write to shared state"]
     U --> AP
-    AP --> RND["RENDER_DOCX + comments"]
-    RND --> MORE{"more forms?"}
-    MORE -->|yes| FORM
-    MORE -->|no| DEL["delivery reply<br/>one document per form — req 10"]
+    AP --> MORES{"more slices?"}
+    MORES -->|yes| SLICE
+    MORES -->|no| RND["RENDER_DOCX + comments"]
+    RND --> MOREF{"more forms?"}
+    MOREF -->|yes| FORM
+    MOREF -->|no| DEL["delivery reply — req 10"]
 ```
 
-**Reasoning happens in parallel; writing happens in one place, in one order.** That
-split is the whole design, and each half earns its keep for a different reason.
+### Why sequential, not parallel
+
+An earlier draft fanned slices out in parallel, each working from a frozen seed snapshot.
+It was faster and it was wrong, for a reason that only shows up once requirements start
+interacting.
+
+**Requirements are not independent.** A later requirement may need to reference content
+an earlier one produced — a summary that cites the sections above it, a total that
+depends on entries added elsewhere, a cross-reference to a clause another requirement
+introduced. Under fan-out every instance sees the *same* seed and none can see any
+other's work, so that class of requirement is not merely hard, it is **unrepresentable**.
+
+Sequential execution makes it ordinary: **slice N reads the artifact as slices 1…N−1
+committed it.** Nothing special is required to support interdependence; it falls out of
+the ordering.
+
+Three further simplifications come with it, and they are not small:
+
+- **No cross-slice conflict resolution.** Two slices can still touch the same line, but
+  the second one *sees* the first's edit. That is an informed decision rather than a
+  blind collision, so there is no merge to arbitrate.
+- **Ordering is execution order.** The parallel design needed proposals sorted by slice id
+  to keep output deterministic despite arbitrary completion order. Sequential execution
+  has one order and it is the real one.
+- **D3 detection gets sharper.** Instead of "two proposals arrived for one line", the
+  signal becomes "slice N overwrote a line that slice M wrote for a different
+  requirement" — which is much closer to what a contradictory pair of requirements
+  actually looks like.
+
+**Slice order therefore carries meaning.** Under fan-out it was a determinism device;
+now it is a semantic decision, and the planner owns it. Document order is the sensible
+default — requirements that govern later sections run later — with anything explicitly
+dependent ordered after what it depends on.
+
+**The cost is wall-clock.** A form is now the sum of its slices rather than the slowest,
+so end-to-end runs longer. That is the correct trade: a fast system that cannot express
+a requirement is not faster, it is unfinished. The runner is a background task precisely
+so this latency never reaches the client — they have their confirmation reply within
+seconds and the documents when they are ready.
+
+### The editor stays a worker
+
+`editor-service` still owns no job state and exposes essentially one operation:
+
+```
+POST /slices:run   SliceRequest → SliceReport
+```
+
+The only change is that `SliceRequest.artifact` now carries the *current* artifact rather
+than a fixed per-job seed. Stateless, and testable with no job lifecycle around it.
+
+**Tools are scoped per run.** A slice runner is handed a toolset bounded to its own
+requirements and the regions they govern; a proposal targeting a line outside that scope
+is rejected deterministically, never by asking the prompt nicely.
+
+### A note on the name
+
+A service doing mail I/O *and* orchestration is doing two jobs and the name mentions one.
+Internally it splits `orchestrator/`, `runner/` and `mail/`, so the day the runner wants
+to be its own deployable — which is the natural next step if jobs get long — the seam is
+already there.
 
 ### Forms are processed one at a time
 
@@ -159,9 +216,9 @@ The loop resolves it without adding a dimension anywhere:
   and the fixture all keep the shape they already have.
 
 The cost is wall-clock: a three-form job takes roughly three times a one-form job, since
-only the inner fan-out is concurrent. That is the right trade for now — the parallelism
-that matters is across requirements, where a single form's slices are the actual work,
-and form-level concurrency can be added later without changing any of these types.
+every form is a full sequential pass. That is the right trade for now: the runner works
+in the background, so wall-clock is not the client's problem, and form-level concurrency
+can be added later without changing any of these types.
 
 ### Why the writes are serialised
 
@@ -243,9 +300,9 @@ requirements and the regions they govern. A proposal targeting a line outside th
 is rejected by the applier deterministically — slice isolation is enforced by the tool
 layer and the applier, never by asking the prompt nicely.
 
-**Concurrency is bounded.** A semaphore caps simultaneous slices; `UsageLimits` caps each
-one. Unbounded fan-out on a 40-requirement manifest is how you discover your Gemini rate
-limit in production.
+**One slice runs at a time**, so there is no concurrency to bound and no rate limit to
+trip. `UsageLimits` still caps each individual run — see D5 for the job-level ceiling that
+is still missing.
 
 ### A note on the name
 
@@ -258,8 +315,8 @@ or grow a second front door, the seam is already there.
 
 Mostly no, and the orchestration change makes that clearer. They diverge at **SEED
 ARTIFACT** and nowhere else: derivative parses the client's `.docx`, net-new generates a
-scaffold. Slice planning, fan-out, validation, retry, apply, render and delivery are
-shared.
+scaffold. Slice planning, the sequential runner, validation, retry, apply, render and
+delivery are all shared.
 
 Both modes still have regions; they differ only in who decides them. Derivative has an
 agent classify the client's existing content. Net-new has the generator declare them as
@@ -764,11 +821,14 @@ Three useful consequences fall out:
 Slice history grows, and the artifact snapshot is large. The budget is enforced rather
 than hoped for:
 
-- **Every attempt sees the identical artifact snapshot.** This is an invariant, not an
-  optimisation. If the artifact could shift between attempts, a retry would produce
-  different edits for reasons unrelated to the validator error — reopening exactly the
-  non-determinism the two rules above just closed. The snapshot is taken once, when the
-  slice is dispatched, and every attempt of that slice works from it.
+- **Every attempt of a given slice sees the identical artifact snapshot.** An invariant,
+  not an optimisation: if the artifact could shift between attempts, a retry would produce
+  different edits for reasons unrelated to the validator error, reopening the
+  non-determinism the two rules above just closed. The snapshot is taken once when the
+  slice starts and held for all three attempts.
+
+  Note the scope carefully. The artifact **does** advance *between* slices — that is the
+  entire point of running them in order. It is frozen only *within* one slice's retries.
 - It therefore travels **by reference, never re-serialised into the transcript.**
   Replaying an unchanged document through the history is pure waste.
 - History is capped at the system prompt plus the last two exchanges. Older tool
@@ -909,7 +969,7 @@ class SliceRequest(BaseModel):   # orchestrator → one editor instance
     job_id: str; slice_id: str; mode: Mode
     requirements: list[Requirement]   # this slice only
     pending: list[str]                # requirement ids still to answer — NARROWS on retry
-    artifact: Artifact                # READ-ONLY snapshot
+    artifact: Artifact                # READ-ONLY, and CURRENT — includes prior slices
     editable_line_ids: list[str]      # the scope bound; anything else is rejected
     history: list[ModelMessage]       # prior attempts, bounded; empty on attempt 1
     validator_error: str | None       # why the last attempt failed
@@ -947,12 +1007,12 @@ Directory ownership is **disjoint per branch** — that is what keeps 7 concurre
 
 | ID | Branch | Owns | Deliverable |
 |----|--------|------|-------------|
-| **B14** | `feat/applier` | `packages/mff-applier/**` | The serial applier: order proposals by **slice id, not arrival**; detect two slices targeting one `line_id`; reject any edit outside its slice's `editable_line_ids`; enforce locked regions. Pure functions over `SliceReport[]` → `Artifact`. No I/O, no model, fully deterministic — the easiest thing in the repo to test exhaustively, and the one most worth testing. |
+| **B14** | `feat/applier` | `packages/mff-applier/**` | Applies one validated `SliceReport` to the artifact and commits: reject any edit outside its slice's `editable_line_ids`, enforce locked regions, and **flag when a slice overwrites a line another requirement wrote** (the D3 signal). Pure functions over `(Artifact, SliceReport) → Artifact`. No I/O, no model, fully deterministic — the easiest thing here to test exhaustively and the most worth testing, since every mode's correctness funnels through it. |
 | **B1** | `feat/docmodel` | `packages/mff-docmodel/**` | `.docx → Artifact` (stable line ids incl. table cells), `apply_edits()` surgical line replace with **locked-region enforcement** (raises on a locked target), `attach_comments()` via `python-docx` `add_comment`, `Artifact → .docx`. No AI. Round-trip tests on fixture docs. |
 | **B2** | `feat/manifest` | `packages/mff-manifest/**` | Free text → `Requirement[]` (req 5): deterministic pre-split + one small Gemini extraction agent, stable ids, `source_span` provenance, `slices()` grouping strategy. Tested with `FunctionModel` — no live API in CI. |
 | **B3** | `feat/intake` | `services/email-service/src/**/{intake,replies}.py` | Req 6/7/8: MIME parse, attachment extraction, mode inference (derivative needs supplied forms — req 3), `IntakeVerdict` rules, and both reply templates — the valid one **quotes the `Requirement[]` returned in the 202** (req 7 *Recommended*) — it must never parse the manifest itself. |
 | **B4** | `feat/mail-transport` | `services/email-service/src/**/transport/**` | `MailTransport` Protocol + IMAP poller (IDLE/poll, seen-state, idempotency by Message-ID) + SMTP sender with threaded replies (`In-Reply-To`/`References`), **plus an in-memory fake** every other branch tests against. |
-| **B5** | `feat/orchestrator` | `services/email-service/src/**/orchestrator/**` | Slice planning, **bounded-concurrency fan-out**, fan-in, **per-requirement** validation (req 16), accepted answers frozen, 3-attempt cap with history and error fed back, then `unverified` for whatever is still pending (req 17). Owns the job lifecycle. Dispatches through a `SliceRunner` Protocol, so it is tested end-to-end with a fake runner and no editor service running at all. |
+| **B5** | `feat/orchestrator` | `services/email-service/src/**/{orchestrator,runner}/**` | Slice planning **including order, which is now semantic**, the background runner walking forms and slices sequentially, **per-requirement** validation (req 16), accepted answers frozen, 3-attempt cap with history and error fed back, then `unverified` for whatever is still pending (req 17). Owns the job lifecycle. Dispatches through a `SliceRunner` Protocol, so it is tested end-to-end with a fake runner and no editor service running at all. |
 | **B8** | `feat/llm-config` | `services/editor-service/src/**/llm/**`, `settings.py` | `GoogleModel` + `GoogleProvider` wiring, pinned model id in settings, `HttpRetryOptions`, per-slice `UsageLimits`, shared `RunUsage` accounting, structured logging. One `build_agent()` factory both flows call. |
 | **B10** | `feat/docker` | `docker/**`, `compose.yaml` | Multi-stage Dockerfile per service (non-root, uv-installed deps, healthcheck), compose bringing up both services + `mailpit` for a local mailbox. No GCP, no Terraform. |
 
@@ -1019,9 +1079,11 @@ Everything else is scored with a threshold. Mixing the two is how eval suites en
 | L4 | net-new slice run | B7 | **20 s** | structural spec violations = 0; reference-resolution 1.0 |
 | A6 | artifact `save` → `load` round-trip | B12 | **300 ms** | version conflict detected; GCS blob pointer resolves |
 | A7 | job complete → results email sent | B13 | **20 s** | exactly one send per `job_id`; unverified listed; threaded on the original |
-| A8 | apply 5 `SliceReport`s serially | B14 | **400 ms** | deterministic byte-for-byte across arrival orders |
-| E1 | full derivative job, **per form** (10 reqs) | B9 | **35 s** | slowest slice + apply. A 3-form job is ~3x: forms are sequential |
-| E2 | full net-new job (10 reqs) | B9 | **45 s** | end-to-end on the fleet fixture |
+| A8 | apply one `SliceReport` and commit | B14 | **150 ms** | scope violations rejected; overwrite of another requirement's line flagged |
+| E1 | full derivative job, **per form** (10 reqs) | B9 | **100 s** | sum of slices, not the slowest — sequential by design. A 3-form job is ~3x |
+| E2 | full net-new job (10 reqs) | B9 | **130 s** | end-to-end on the fleet fixture |
+
+E1 and E2 are deliberately generous: slices run in sequence so a form costs the *sum* of its slices. The client never waits on this — the confirmation reply goes out in seconds and the runner works in the background.
 
 Treat these as **calibration targets, not measurements** — B0 lands the harness, and the first branch to run each stage records the real baseline in its PR. If a budget turns out to be wrong, the PR moves the number and says why; what's not allowed is shipping without one.
 
@@ -1089,7 +1151,7 @@ being reasonable — because "open" without one quietly becomes "forgotten".
 |---|---|---|---|
 | **D1** | PDF and scanned input | A client sends anything but `.docx` | Deferred |
 | **D2** | Job status mid-run | Largely answered by B13; only on-demand status remains | Mostly closed |
-| **D3** | Contradictory requirements | Line-level conflicts now detectable at fan-in; the semantic case is still nobody's | Open, **no owner** |
+| **D3** | Contradictory requirements | The applier flags a slice overwriting another requirement's line; the semantic case is still nobody's | Open, **no owner** |
 | **D4** | **Prompt injection** | **Before `ALLOWED_SENDERS` is widened beyond the demo** | Accepted for demo |
 | **D5** | **Per-job cost ceiling** | **Before any manifest arrives that we did not write** | Accepted for demo |
 
@@ -1109,18 +1171,20 @@ all flip to `pass` should fail its spec regardless of what the model was persuad
 ### D5 — per-job cost ceiling
 
 `UsageLimits` caps a slice; nothing caps a job. A manifest that parses into 200
-requirements, times three attempts, times parallel fan-out, is a bill rather than an
-error — and the parser is itself a model, so a strange manifest can inflate the
+requirements, times three attempts, run to completion in the background, is a bill rather
+than an error — and the parser is itself a model, so a strange manifest can inflate the
 requirement count without anyone having written 200 requirements.
 
 Acceptable for the demo because every manifest is one we wrote. The fix is a job-level
-token and request budget, checked before dispatch and enforced across the fan-out, plus a
-hard cap on requirement count from the parser.
+token and request budget, checked before each slice is dispatched and abandoning the job
+when exhausted, plus a hard cap on requirement count from the parser.
 
 ### D3 — the semantic half
 
-Fan-in made line-level conflicts detectable: every proposal coexists before anything is
-written, so two slices targeting one `line_id` is now visible. Two requirements that
+Sequential execution makes line-level conflicts detectable and sharper than fan-in would
+have: the applier can flag *"slice N overwrote a line slice M wrote for requirement R"*,
+which is much closer to what a contradictory pair actually looks like than "two proposals
+arrived for one line". Two requirements that
 contradict each other in *meaning* while touching different lines remain invisible, and
 no branch owns finding them. The fixture already contains a mild instance — the
 `Pod maską` ambiguity — which is why it is recorded as a judgement call in

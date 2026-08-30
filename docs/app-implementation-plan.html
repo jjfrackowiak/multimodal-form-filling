@@ -475,47 +475,50 @@ flowchart TD
 <pre class="mermaid">
 %%{init:{"theme":"base","themeVariables":{"fontFamily":"JetBrains Mono, ui-monospace, monospace","fontSize":"13px","primaryColor":"#ffffff","primaryTextColor":"#16191d","primaryBorderColor":"#155e63","lineColor":"#5f6b78","tertiaryColor":"#f6f7f8"}}}%%
 flowchart TD
-    P["PARSE_MANIFEST"] --> FORM["for each form — SEQUENTIAL<br/>filtered by applies_to"]
-    FORM --> PLAN["PLAN SLICES<br/>disjoint requirement sets"]
-    PLAN --> SEED["SEED ARTIFACT<br/>parse docx, or generate scaffold"]
-    SEED --> F1["editor instance<br/>slice A"]
-    SEED --> F2["editor instance<br/>slice B"]
-    SEED --> F3["editor instance<br/>slice C"]
-    F1 --> COL["collect SliceReports"]
-    F2 --> COL
-    F3 --> COL
-    COL --> V{"validate each<br/>req 16"}
-    V -->|"fail, attempt &lt; 3"| PLAN
+    ACC["202 Accepted — requirements returned"] --> BG["background runner starts"]
+    BG --> FORM["for each form — sequential"]
+    FORM --> SEED["SEED ARTIFACT<br/>parse docx, or generate scaffold"]
+    SEED --> SLICE["for each slice — SEQUENTIAL, IN ORDER"]
+    SLICE --> RUN["editor instance runs the slice<br/>reads the CURRENT artifact"]
+    RUN --> V{"validate per requirement<br/>req 16"}
+    V -->|"fail, attempt &lt; 3"| RUN
     V -->|"fail, attempt = 3"| U["mark unverified<br/>req 17"]
-    V -->|ok| AP["APPLY SERIALLY<br/>slice order · conflict detection"]
+    V -->|ok| AP["APPLY + COMMIT<br/>atomic write"]
     U --> AP
-    AP --> RND["RENDER_DOCX + comments"]
-    RND --> MORE{"more forms?"}
-    MORE -->|yes| FORM
-    MORE -->|no| DEL["delivery reply<br/>one document per form"]
+    AP --> MORES{"more slices?"}
+    MORES -->|yes| SLICE
+    MORES -->|no| RND["RENDER_DOCX + comments"]
+    RND --> MOREF{"more forms?"}
+    MOREF -->|yes| FORM
+    MOREF -->|no| DEL["delivery reply — req 10"]
 </pre>
         </div>
         <figcaption>Fig. 2 — reasoning fans out; writing funnels back into one ordered place.</figcaption>
       </figure>
 
+      <h3>Why sequential, not parallel</h3>
+      <p>An earlier draft fanned slices out in parallel, each working from a frozen seed snapshot. It was faster and it was wrong, for a reason that only appears once requirements start interacting.</p>
+      <div class="callout">
+        <span class="tag">Requirements are not independent</span>
+        <p>A later requirement may need to reference content an earlier one produced — a summary citing the sections above it, a total depending on entries added elsewhere, a cross-reference to a clause another requirement introduced. Under fan-out every instance sees the <em>same</em> seed and none can see another's work, so that class of requirement is not merely hard, it is <strong>unrepresentable</strong>.</p>
+        <p>Sequential execution makes it ordinary: <strong>slice N reads the artifact as slices 1…N−1 committed it.</strong> Nothing special is required; interdependence falls out of the ordering.</p>
+      </div>
+      <p>Three further simplifications come with it. <strong>No cross-slice conflict resolution</strong> — two slices can still touch the same line, but the second one <em>sees</em> the first's edit, so it is an informed decision rather than a blind collision. <strong>Ordering is execution order</strong>, where the parallel design needed proposals sorted by slice id to stay deterministic despite arbitrary completion order. And <strong>D3 detection gets sharper</strong>: the signal becomes "slice N overwrote a line slice M wrote for a different requirement", far closer to what a contradictory pair actually looks like.</p>
+      <p><strong>Slice order therefore carries meaning.</strong> Under fan-out it was a determinism device; now it is a semantic decision the planner owns. Document order is the sensible default, with anything explicitly dependent ordered after what it depends on.</p>
+      <p><strong>The cost is wall-clock</strong> — a form is the sum of its slices rather than the slowest. That is the correct trade: a fast system that cannot express a requirement is not faster, it is unfinished. The runner is a background task precisely so this never reaches the client, who has their confirmation within seconds.</p>
+
       <h3>Forms are processed one at a time</h3>
-      <p>Req 2 allows a request to carry several forms. <strong>They are handled in a sequential loop, one form at a time.</strong> Parallelism exists only <em>within</em> a form, across its requirement slices.</p>
+      <p>Req 2 allows several forms per request. They are handled in an outer sequential loop, <strong>one <code>Artifact</code> per form</strong>, with <code>Requirement.applies_to</code> as the filter — a field that already exists, so no new dimension is needed anywhere.</p>
       <div class="callout">
         <span class="tag">This is what makes the contract coherent</span>
-        <p>An earlier draft had <code>JobRequest.forms</code> as a list while <code>Artifact</code> carried a single <code>doc_id</code> and <code>ReviewComment</code> had no form dimension at all — a shape that cannot express req 10's "one comment per requirement <em>per form</em>". Freezing that into <code>mff-contracts</code> would have had every Layer-1 branch build single-document and discover it at B9.</p>
+        <p>An earlier draft had <code>JobRequest.forms</code> as a list while <code>Artifact</code> carried a single <code>doc_id</code> and <code>ReviewComment</code> had no form dimension at all — a shape that cannot express req 10's "one comment per requirement <em>per form</em>". Freezing that would have had every Layer-1 branch build single-document and discover it at B9.</p>
       </div>
-      <p>The loop resolves it without adding a dimension anywhere. <strong>One <code>Artifact</code> per form</strong> — <code>doc_id</code> identifies it and comments live inside their own artifact, so form scope is structural rather than a field that must be set correctly everywhere. <strong><code>Requirement.applies_to</code> is the filter</strong>, and it already exists. Everything downstream keeps the shape it has.</p>
-      <p>The cost is wall-clock: a three-form job takes roughly three times a one-form job. That is the right trade for now — the parallelism that matters is across requirements, and form-level concurrency can be added later without changing any of these types.</p>
 
-      <h3>Why the writes are serialised</h3>
-      <p>Every editor instance receives a <strong>read-only snapshot</strong> of the artifact plus its own slice, and returns a <code>SliceReport</code> of <em>proposed</em> edits and comments. No instance writes to the document, or to the store.</p>
-      <p>That removes the hard problem rather than solving it. The alternative — N agents mutating one artifact under optimistic concurrency — produces version conflicts under exactly the load the parallelism was introduced to handle, and a retry storm where each loser re-runs a model call that already cost money.</p>
-      <div class="callout">
-        <span class="tag">Two properties worth more than the contention they avoid</span>
-        <p><strong>The output is deterministic in application order.</strong> Proposals are applied in <strong>slice order, never completion order</strong>. Whichever instance finishes first, the document is byte-identical. Apply on arrival and it quietly changes between runs on the same input — which would make the golden fixture meaningless.</p>
-        <p><strong>Conflicts become visible.</strong> The applier holds every proposal before writing anything, so two slices targeting the same <code>line_id</code> is a detectable event rather than a silent last-write-wins.</p>
-      </div>
-      <p>That second point is a real gain against concern <strong>D3</strong>. Contradictory requirements were previously invisible by construction — each agent saw only its own slice and nothing compared them. Fan-in gives the one moment where all proposals coexist, which is the only place a cross-slice contradiction <em>can</em> be caught. It does not solve D3 — two requirements can contradict in meaning while touching different lines — but it converts the line-level case from undetectable to detectable.</p>
+      <h3>The editor stays a worker</h3>
+      <p><code>editor-service</code> owns no job state and exposes essentially one operation:</p>
+      <pre class="code">POST /slices:run    SliceRequest → SliceReport</pre>
+      <p>The only change is that <code>SliceRequest.artifact</code> now carries the <em>current</em> artifact rather than a fixed per-job seed. <strong>Tools are scoped per run</strong> — a proposal targeting a line outside the slice's scope is rejected deterministically, never by asking the prompt nicely. And with one slice running at a time there is no concurrency to bound and no rate limit to trip.</p>
+
       <h3>Where validation sits</h3>
       <p>Req 12 is satisfied literally, not reinterpreted: <strong>inside a run the agent has a live Python <code>Artifact</code> object and mutates it freely at any point</strong>, including between tool calls. Nothing is gated during reasoning — the agent can experiment, revise its own work and change its mind. The gate is at the <strong>exit</strong>, not the write.</p>
       <pre class="code">in-session   Artifact object   <span class="c">← agent mutates freely, no gate (req 12)</span>
@@ -541,7 +544,7 @@ apply        one atomic write to shared state</pre>
       <div class="callout">
         <span class="tag">The guarantee is structural, not hoped for</span>
         <p>A requirement's verdict is decided once and cannot change, however many attempts the slice needs. Each attempt is also cheaper than the last, and <code>unverified</code> becomes precise — only the still-pending ids are marked, rather than a whole slice because one requirement in it was stubborn.</p>
-        <p><strong>Every attempt sees the identical artifact snapshot.</strong> An invariant, not an optimisation: if the artifact could shift between attempts, a retry would produce different edits for reasons unrelated to the validator error, reopening exactly the non-determinism these rules close.</p>
+        <p><strong>Every attempt of a given slice sees the identical snapshot.</strong> An invariant, not an optimisation: a shifting artifact would produce different edits for reasons unrelated to the validator error. Note the scope — the artifact <em>does</em> advance between slices, which is the entire point. It is frozen only within one slice's retries.</p>
       </div>
 
       <h3>The editor becomes a worker</h3>
@@ -786,7 +789,7 @@ Podsufitka trzeba spomiędzy forteli zrobić</pre>
           <div class="card">
             <div class="card-top"><span class="card-id">B14</span><span class="card-br">feat/applier</span></div>
             <div class="owns">packages/mff-applier</div>
-            <p>The serial applier: order by <strong>slice id, not arrival</strong>; detect two slices targeting one line; reject edits outside scope; enforce locked regions. Pure functions, no I/O, no model — the easiest thing here to test exhaustively and the most worth it.</p>
+            <p>Applies one validated <code>SliceReport</code> and commits: reject edits outside the slice's scope, enforce locked regions, and <strong>flag when a slice overwrites a line another requirement wrote</strong> — the D3 signal. Pure functions, no I/O, no model; the easiest thing here to test exhaustively and the most worth it.</p>
           </div>
           <div class="card">
             <div class="card-top"><span class="card-id">B1</span><span class="card-br">feat/docmodel</span></div>
@@ -811,7 +814,7 @@ Podsufitka trzeba spomiędzy forteli zrobić</pre>
           <div class="card">
             <div class="card-top"><span class="card-id">B5</span><span class="card-br">feat/orchestrator</span></div>
             <div class="owns">email-service/orchestrator</div>
-            <p>Slice planning, bounded-concurrency fan-out, fan-in, the report validator, the three-attempt cap and the unverified terminal. Owns the job lifecycle; dispatches through a <code>SliceRunner</code> protocol, so it tests end-to-end with no editor running.</p>
+            <p>Slice planning <strong>including order, now semantic</strong>, the background runner walking forms and slices sequentially, per-requirement validation with settled answers frozen, the three-attempt cap and the unverified terminal. Owns the job lifecycle; dispatches through a <code>SliceRunner</code> protocol, so it tests end-to-end with no editor running.</p>
           </div>
           <div class="card">
             <div class="card-top"><span class="card-id">B8</span><span class="card-br">feat/llm-config</span></div>
@@ -912,9 +915,9 @@ Podsufitka trzeba spomiędzy forteli zrobić</pre>
             <tr><td class="id">L4</td><td>net-new slice run</td><td class="num">B7</td><td class="num">20 s</td><td>structural violations = 0; reference resolution 1.0</td></tr>
             <tr><td class="id">A6</td><td>artifact save → load round-trip</td><td class="num">B12</td><td class="num">300 ms</td><td>version conflict detected; blob pointer resolves</td></tr>
             <tr><td class="id">A7</td><td>job complete → results email sent</td><td class="num">B13</td><td class="num">20 s</td><td>one send per job_id; unverified listed; threaded</td></tr>
-            <tr><td class="id">A8</td><td>apply 5 slice reports serially</td><td class="num">B14</td><td class="num">400 ms</td><td>byte-identical across arrival orders</td></tr>
+            <tr><td class="id">A8</td><td>apply one slice report and commit</td><td class="num">B14</td><td class="num">150 ms</td><td>scope violations rejected; cross-requirement overwrite flagged</td></tr>
             <tr><td class="id">E1</td><td>full derivative job</td><td class="num">B9</td><td class="num">35 s</td><td>end-to-end on the fleet fixture</td></tr>
-            <tr><td class="id">E2</td><td>full net-new job</td><td class="num">B9</td><td class="num">45 s</td><td>end-to-end on the fleet fixture</td></tr>
+            <tr><td class="id">E2</td><td>full net-new job</td><td class="num">B9</td><td class="num">130 s</td><td>end-to-end on the fleet fixture</td></tr>
           </tbody>
         </table>
       </div>
