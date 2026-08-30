@@ -90,7 +90,23 @@ fails silently once deployed, which is the most common way a mail integration di
    `python-docx` or the email image carries `google-adk`, that is a bug, not a size
    problem.
 5. Every container runs as non-root — assert with `docker inspect`.
-6. No secret in any layer. Check with `docker history --no-trunc`.
+6. No secret in any layer. Check with `docker history --no-trunc`. **This got easier:**
+   the editor now authenticates with ADC, so there is no Gemini key to leak in the first
+   place. Locally, mount the developer's credentials read-only rather than copying them:
+
+   ```yaml
+   volumes:
+     - ${HOME}/.config/gcloud/application_default_credentials.json:/adc.json:ro
+   environment:
+     GOOGLE_APPLICATION_CREDENTIALS: /adc.json
+     GOOGLE_GENAI_USE_ENTERPRISE: "true"
+     GOOGLE_CLOUD_PROJECT: ${GOOGLE_CLOUD_PROJECT}
+   ```
+
+   In Cloud Run the mount and both `GOOGLE_APPLICATION_CREDENTIALS` lines come **out** —
+   the metadata server serves the service account and there is no file at all. Never
+   `COPY` a credential into a layer; the mailbox App Password is still the only real
+   secret left in the compose file.
 7. A container restart does not lose an in-flight job — with B12's store, state is external
    and this should just work. Verify rather than assume.
 8. `.dockerignore` verified: the built context excludes `fixtures/`, and image size shows

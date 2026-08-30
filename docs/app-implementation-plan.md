@@ -943,6 +943,15 @@ the failure this causes, and it looks exactly like "no mail arrived".
 variable or a mounted secret at runtime. An image with a working password inside it is a
 credential leak wearing a Dockerfile.
 
+**The model credential is not injected either — there isn't one.** The editor authenticates
+by **Application Default Credentials**, the same mechanism `mff-store` already uses for
+Firestore and GCS, so the repo has one auth story rather than two. ADC resolves
+`GOOGLE_APPLICATION_CREDENTIALS`, then the gcloud login file, then the metadata server, and
+no code of ours branches on which won. Locally that is a read-only mount of the developer's
+`application_default_credentials.json`; in Cloud Run it is workload identity with **no file
+to mount, rotate or leak**. `GOOGLE_GENAI_USE_ENTERPRISE=true` routes `google-genai` through
+Vertex. After this change the mailbox App Password is the only real secret in the system.
+
 ### Getting a mailbox without a phone number
 
 Gmail's App Passwords require 2-Step Verification, and enabling that on a *new*

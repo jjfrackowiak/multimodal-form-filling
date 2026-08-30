@@ -26,7 +26,7 @@ ownership table exists to prevent.
 
 **Layer 1 — ten branches, but not ten-wide. See the dependency note below.**
 
-| | Branch | Owns | Needs a key? |
+| | Branch | Owns | Needs cloud auth? |
 |---|---|---|---|
 | [B14](B14-applier.md) | `feat/applier` | `mff-applier` — pure functions | no |
 | [B1](B1-docmodel.md) | `feat/docmodel` | `mff-docmodel` — docx ⇄ our types | no |
