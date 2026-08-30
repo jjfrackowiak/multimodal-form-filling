@@ -1,12 +1,20 @@
-!.env.example
-*.egg-info/
-*.pyc
+# Order matters: a negation must follow the pattern it excepts, so this file
+# must never be sorted. (It was, once, which silently un-tracked .env.example.)
 .DS_Store
+
+# Secrets
 .env
 .env.*
-.pytest_cache/
-.venv-fixture/
-.venv/
+!.env.example
+
+# Python
 __pycache__/
-node_modules/
+*.pyc
+*.egg-info/
+.pytest_cache/
+.venv/
 venv/
+.venv-fixture/
+
+# Node
+node_modules/
