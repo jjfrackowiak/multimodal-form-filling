@@ -67,6 +67,7 @@ known-first-party = [
     "mff_manifest",
     "mff_applier",
     "mff_store",
+    "mff_fakes",
     "email_service",
     "editor_service",
     "vision_stub",
@@ -122,6 +123,7 @@ root_packages = [
     "mff_manifest",
     "mff_applier",
     "mff_store",
+    "mff_fakes",
     "email_service",
     "editor_service",
     "vision_stub",
@@ -133,7 +135,7 @@ name = "services depend on packages depend on mff_contracts, never sideways or u
 type = "layers"
 layers = [
     "email_service | editor_service | vision_stub | cv",
-    "mff_vision | mff_docmodel | mff_manifest | mff_applier | mff_store",
+    "mff_vision | mff_docmodel | mff_manifest | mff_applier | mff_store | mff_fakes",
     "mff_contracts",
 ]
 
@@ -155,6 +157,7 @@ forbidden_modules = [
     "mff_manifest",
     "mff_applier",
     "mff_store",
+    "mff_fakes",
     "email_service",
     "editor_service",
     "vision_stub",
@@ -175,6 +178,15 @@ source_modules = [
     "editor_service",
     "vision_stub",
 ]
+# `mff_fakes` is deliberately NOT in `source_modules` above: its one job (the ADK test
+# double, B15) is to subclass `google.adk.models.BaseLlm` directly, so it must import
+# `google.adk` and `google.genai.types` to exist at all. It is the same kind of
+# blessed, singular exception as the vision service below -- excluded from this
+# contract's source list rather than given an `ignore_imports` entry, matching this
+# repo's own precedent for "the one package whose entire purpose is the forbidden
+# import." It stays safe because it is a dev-group-only dependency (see its
+# pyproject.toml): no service image, and therefore no runtime import graph, ever
+# contains it.
 # `google` covers both `google.adk` (the agent framework) and `google.genai` (the model
 # SDK underneath it). `pydantic_ai` stays on this list even though we no longer use it:
 # `pydantic-evals` pins `pydantic-ai-slim`, so the module is importable in the dev
