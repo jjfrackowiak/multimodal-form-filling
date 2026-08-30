@@ -344,8 +344,7 @@ footer{
   *{animation:none!important;transition:none!important;scroll-behavior:auto!important}
 }
 html{scroll-behavior:smooth}
-</style>
-<style>
+</style><style>
   html{color-scheme:light dark}
   body{margin:0}
   img{max-width:100%}
@@ -469,48 +468,57 @@ flowchart TD
         <p>Parse once, return it in the 202, store it, never re-derive. It also keeps every model credential inside one service — the email layer never talks to Gemini.</p>
       </div>
 
-      <h3>Editor layer</h3>
+      <h3>Orchestration layer</h3>
+      <p>The <code>email-service</code> is not only a mail gateway — it is the <strong>orchestrator</strong>. It owns the job, plans the slices, fans them out to editor instances running in parallel, collects and validates what comes back, and applies the results to one document.</p>
       <figure class="wide">
         <div class="plate">
 <pre class="mermaid">
 %%{init:{"theme":"base","themeVariables":{"fontFamily":"JetBrains Mono, ui-monospace, monospace","fontSize":"13px","primaryColor":"#ffffff","primaryTextColor":"#16191d","primaryBorderColor":"#155e63","lineColor":"#5f6b78","tertiaryColor":"#f6f7f8"}}}%%
 flowchart TD
-    A["PARSE_MANIFEST<br/>at admission"] --> M{"mode?"}
-    M -->|derivative| P["PARSE_DOCX<br/>the client's document"]
-    M -->|net-new| G["GENERATE_SCAFFOLD<br/>a section per requirement"]
-    P --> C["CLASSIFY_REGIONS<br/>an agent decides"]
-    D["DECLARE_REGIONS<br/>the generator marks its own"]
-    G --> D
-    C --> S["for slice in manifest.slices()"]
-    D --> S
-    S --> R["runner.run(slice, deps)"]
-    R --> V{"validate report<br/>req 16"}
-    V -->|"fail, attempt &lt; 3"| R
-    V -->|"fail, attempt = 3"| U["mark unanswered<br/>requirements unverified<br/>req 17"]
-    V -->|ok| N{"more slices?"}
-    U --> N
-    N -->|yes| S
-    N -->|no| E1["APPLY_EDITS"]
-    E1 --> E2["ATTACH_COMMENTS"] --> E3["RENDER_DOCX"] --> E4["JobResult"]
+    P["PARSE_MANIFEST"] --> PLAN["PLAN SLICES<br/>disjoint requirement sets"]
+    PLAN --> SEED["SEED ARTIFACT<br/>parse docx, or generate scaffold"]
+    SEED --> F1["editor instance<br/>slice A"]
+    SEED --> F2["editor instance<br/>slice B"]
+    SEED --> F3["editor instance<br/>slice C"]
+    F1 --> COL["collect SliceReports"]
+    F2 --> COL
+    F3 --> COL
+    COL --> V{"validate each<br/>req 16"}
+    V -->|"fail, attempt &lt; 3"| PLAN
+    V -->|"fail, attempt = 3"| U["mark unverified<br/>req 17"]
+    V -->|ok| AP["APPLY SERIALLY<br/>slice order · conflict detection"]
+    U --> AP
+    AP --> RND["RENDER_DOCX + comments"]
+    RND --> DEL["delivery reply — req 10"]
 </pre>
         </div>
-        <figcaption>Fig. 2 — the state machine. The modes fork once, at the top, and share everything after.</figcaption>
+        <figcaption>Fig. 2 — reasoning fans out; writing funnels back into one ordered place.</figcaption>
       </figure>
-      <p>The slice loop <em>is</em> the programmatic hand-off (req 11) — plain Python, not a framework abstraction. On a failed attempt the validator's error text is fed back into the next run.</p>
-      <h3>Are the two modes actually different?</h3>
-      <p>Mostly no — and it pays to be precise about the part that is, because it decides where the code splits.</p>
-      <p><strong>They diverge in exactly one place: how the artifact is seeded.</strong> Derivative parses the client's <code>.docx</code>. Net-new has no document, so <strong>it has to generate one</strong> — a scaffold with a section per requirement, built from <code>Requirement[]</code> plus the client's inputs. Everything downstream of that — the slice loop, validation, the retry cap, edit application, comments, rendering — is shared byte for byte.</p>
-      <p><strong>Both modes have regions.</strong> They differ only in who decides them. In derivative an agent classifies the client's existing content. In net-new the generator declares them as it emits the scaffold: headings and field labels come out locked, content slots come out editable. Same mechanism, different author.</p>
+
+      <h3>Why the writes are serialised</h3>
+      <p>Every editor instance receives a <strong>read-only snapshot</strong> of the artifact plus its own slice, and returns a <code>SliceReport</code> of <em>proposed</em> edits and comments. No instance writes to the document, or to the store.</p>
+      <p>That removes the hard problem rather than solving it. The alternative — N agents mutating one artifact under optimistic concurrency — produces version conflicts under exactly the load the parallelism was introduced to handle, and a retry storm where each loser re-runs a model call that already cost money.</p>
+      <div class="callout">
+        <span class="tag">Two properties worth more than the contention they avoid</span>
+        <p><strong>The output is deterministic in application order.</strong> Proposals are applied in <strong>slice order, never completion order</strong>. Whichever instance finishes first, the document is byte-identical. Apply on arrival and it quietly changes between runs on the same input — which would make the golden fixture meaningless.</p>
+        <p><strong>Conflicts become visible.</strong> The applier holds every proposal before writing anything, so two slices targeting the same <code>line_id</code> is a detectable event rather than a silent last-write-wins.</p>
+      </div>
+      <p>That second point is a real gain against concern <strong>D3</strong>. Contradictory requirements were previously invisible by construction — each agent saw only its own slice and nothing compared them. Fan-in gives the one moment where all proposals coexist, which is the only place a cross-slice contradiction <em>can</em> be caught. It does not solve D3 — two requirements can contradict in meaning while touching different lines — but it converts the line-level case from undetectable to detectable.</p>
+      <p>Req 12 still holds: each run gets a live <code>Artifact</code> it may mutate freely at any point. It is a snapshot, and the orchestrator merges the resulting edit list.</p>
+
+      <h3>The editor becomes a worker</h3>
+      <p><code>editor-service</code> no longer owns a state machine or a loop. It exposes essentially one operation:</p>
+      <pre class="code">POST /slices:run    SliceRequest → SliceReport</pre>
+      <p>Stateless, horizontally scalable, testable with no job lifecycle around it. The lifecycle — retries, the three-attempt cap, the unverified terminal, apply, render, deliver — belongs to the orchestrator, which is where <code>JobRecord</code> already lives.</p>
+      <p><strong>Tools are scoped per instance.</strong> A slice runner is handed a toolset bounded to its own requirements and the regions they govern. A proposal targeting a line outside that scope is rejected by the applier deterministically — slice isolation is enforced by the tool layer and the applier, never by asking the prompt nicely.</p>
+      <p><strong>Concurrency is bounded.</strong> A semaphore caps simultaneous slices and <code>UsageLimits</code> caps each one. Unbounded fan-out on a 40-requirement manifest is how you discover your rate limit in production.</p>
+      <p><em>On the name:</em> a service doing mail I/O <strong>and</strong> orchestration is doing two jobs and the name mentions one. Internally it splits <code>orchestrator/</code> from <code>mail/</code> — transport as adapter, orchestration as core — so the seam is there the day it wants to be its own service.</p>
+
+      <h3>Do the two modes still differ?</h3>
+      <p>Mostly no, and this change makes it clearer. They diverge at <strong>SEED ARTIFACT</strong> and nowhere else: derivative parses the client's <code>.docx</code>, net-new generates a scaffold. Planning, fan-out, validation, retry, apply, render and delivery are shared.</p>
       <div class="callout">
         <span class="tag">So why keep two runners?</span>
-        <p>Not for structural reasons — for <strong>authority</strong>. A derivative run <strong>may not write</strong>; a net-new run <strong>must</strong>. That is the entire product distinction: a client sending a form for validation wants to be told it is wrong, not handed a silently corrected version.</p>
-        <p>You <em>could</em> collapse net-new into "derivative over an empty document where everything is editable and every requirement starts failing" — <code>realised</code> is then just <code>pass</code>, authored by us. It is elegant, and it is a trap: it puts writing on the common path, and every pressure from there runs the wrong way.</p>
-      </div>
-      <p><strong>Consequence for the plan:</strong> the scaffold generator is a real component, not the hand-wave "blank template" this plan carried earlier. It is the one genuinely new thing net-new needs, and it belongs to B7.</p>
-      <div class="chips">
-        <span class="chip pass">pass</span>
-        <span class="chip fail">fail — carries a suggestion</span>
-        <span class="chip unver">unverified — retries exhausted</span>
+        <p>Not structure — <strong>authority</strong>. A derivative run <strong>may not write</strong>; a net-new run <strong>must</strong>. A client sending a form for validation wants to be told it is wrong, not handed a silently corrected version. Locked regions are the enforcement; separate runners keep that enforcement meaningful.</p>
       </div>
     </section>
 
@@ -674,6 +682,18 @@ Podsufitka trzeba spomiędzy forteli zrobić</pre>
     line: int               <span class="c"># 1-indexed line it appears on</span>
     start: int; end: int    <span class="c"># manifest_raw[start:end] == quote</span>
 
+<span class="k">class</span> SliceRequest(BaseModel):   <span class="c"># orchestrator → one instance</span>
+    slice_id: str
+    requirements: list[Requirement]  <span class="c"># this slice only</span>
+    artifact: Artifact               <span class="c"># READ-ONLY snapshot</span>
+    editable_line_ids: list[str]     <span class="c"># scope bound; else rejected</span>
+
+<span class="k">class</span> SliceReport(BaseModel):    <span class="c"># instance → orchestrator</span>
+    slice_id: str; attempt: int
+    edits: list[Edit]                <span class="c"># PROPOSED, not applied</span>
+    comments: list[ReviewComment]
+    unanswered: list[str]
+
 <span class="k">class</span> JobAccepted(BaseModel):  <span class="c"># the 202 — req 7 quotes exactly this</span>
     job_id: str
     requirements: list[Requirement]   <span class="c"># parsed once, here</span>
@@ -702,7 +722,7 @@ Podsufitka trzeba spomiędzy forteli zrobić</pre>
     <section id="branches">
       <h2>Parallel branch tasks</h2>
       <div class="h2-rule"></div>
-      <p>Directory ownership is <strong>disjoint per branch</strong> — that is what keeps concurrent PRs from colliding. Layers are honest about dependencies: peak parallelism is nine-wide, not fourteen.</p>
+      <p>Directory ownership is <strong>disjoint per branch</strong> — that is what keeps concurrent PRs from colliding. Layers are honest about dependencies: peak parallelism is ten-wide, not fifteen.</p>
 
       <div class="layer">
         <div class="layer-head">
@@ -722,9 +742,14 @@ Podsufitka trzeba spomiędzy forteli zrobić</pre>
         <div class="layer-head">
           <span class="layer-n">Layer 1</span>
           <span class="layer-t">Fully parallel — all branch from B0</span>
-          <span class="layer-w">9 PRs</span>
+          <span class="layer-w">10 PRs</span>
         </div>
         <div class="cards">
+          <div class="card">
+            <div class="card-top"><span class="card-id">B14</span><span class="card-br">feat/applier</span></div>
+            <div class="owns">packages/ffx-applier</div>
+            <p>The serial applier: order by <strong>slice id, not arrival</strong>; detect two slices targeting one line; reject edits outside scope; enforce locked regions. Pure functions, no I/O, no model — the easiest thing here to test exhaustively and the most worth it.</p>
+          </div>
           <div class="card">
             <div class="card-top"><span class="card-id">B1</span><span class="card-br">feat/docmodel</span></div>
             <div class="owns">packages/ffx-docmodel</div>
@@ -746,9 +771,9 @@ Podsufitka trzeba spomiędzy forteli zrobić</pre>
             <p><code>MailTransport</code> protocol, IMAP poller with Message-ID idempotency, SMTP sender with correct threading headers, plus the in-memory fake every other branch tests against.</p>
           </div>
           <div class="card">
-            <div class="card-top"><span class="card-id">B5</span><span class="card-br">feat/editor-machine</span></div>
-            <div class="owns">editor-service/machine, validation</div>
-            <p>The slice loop, <code>EditorDeps</code>, the report validator, the three-attempt cap and the unverified terminal. Agent-agnostic behind a <code>SliceRunner</code> protocol.</p>
+            <div class="card-top"><span class="card-id">B5</span><span class="card-br">feat/orchestrator</span></div>
+            <div class="owns">email-service/orchestrator</div>
+            <p>Slice planning, bounded-concurrency fan-out, fan-in, the report validator, the three-attempt cap and the unverified terminal. Owns the job lifecycle; dispatches through a <code>SliceRunner</code> protocol, so it tests end-to-end with no editor running.</p>
           </div>
           <div class="card">
             <div class="card-top"><span class="card-id">B8</span><span class="card-br">feat/llm-config</span></div>
@@ -849,8 +874,9 @@ Podsufitka trzeba spomiędzy forteli zrobić</pre>
             <tr><td class="id">L4</td><td>net-new slice run</td><td class="num">B7</td><td class="num">20 s</td><td>structural violations = 0; reference resolution 1.0</td></tr>
             <tr><td class="id">A6</td><td>artifact save → load round-trip</td><td class="num">B12</td><td class="num">300 ms</td><td>version conflict detected; blob pointer resolves</td></tr>
             <tr><td class="id">A7</td><td>job complete → results email sent</td><td class="num">B13</td><td class="num">20 s</td><td>one send per job_id; unverified listed; threaded</td></tr>
-            <tr><td class="id">E1</td><td>full derivative job</td><td class="num">B9</td><td class="num">90 s</td><td>end-to-end on the fleet fixture</td></tr>
-            <tr><td class="id">E2</td><td>full net-new job</td><td class="num">B9</td><td class="num">120 s</td><td>end-to-end on the fleet fixture</td></tr>
+            <tr><td class="id">A8</td><td>apply 5 slice reports serially</td><td class="num">B14</td><td class="num">400 ms</td><td>byte-identical across arrival orders</td></tr>
+            <tr><td class="id">E1</td><td>full derivative job</td><td class="num">B9</td><td class="num">35 s</td><td>end-to-end on the fleet fixture</td></tr>
+            <tr><td class="id">E2</td><td>full net-new job</td><td class="num">B9</td><td class="num">45 s</td><td>end-to-end on the fleet fixture</td></tr>
           </tbody>
         </table>
       </div>

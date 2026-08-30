@@ -104,59 +104,109 @@ once, return it, store it, never re-derive.
 Keeping the parse in the editor also keeps **all model credentials in one service**.
 The email layer never talks to Gemini.
 
-### Editor layer (`editor-service`, `POST /jobs`)
+### Orchestration layer
+
+The `email-service` is not only a mail gateway — it is the **orchestrator**. It owns the
+job, plans the slices, fans them out to editor instances running in parallel, collects
+and validates what comes back, and applies the results to one document.
 
 ```mermaid
 flowchart TD
-    A["PARSE_MANIFEST<br/>at admission — result returned in the 202"] --> M{"mode?"}
-    M -->|derivative| P["PARSE_DOCX<br/>the client's document"]
-    M -->|net-new| G["GENERATE_SCAFFOLD<br/>a section per requirement"]
-    P --> C["CLASSIFY_REGIONS<br/>an agent decides locked/editable"]
-    G --> D["DECLARE_REGIONS<br/>the generator marks its own skeleton locked"]
-    C --> S["for slice in manifest.slices()"]
-    D --> S
-    S --> R["runner.run(slice, deps=EditorDeps(artifact, slice))"]
-    R --> V{"validate report<br/>req 16"}
-    V -->|"fail, attempt &lt; 3"| R
-    V -->|"fail, attempt = 3"| U["mark unanswered<br/>requirements unverified<br/>req 17"]
-    V -->|ok| N{"more slices?"}
-    U --> N
-    N -->|yes| S
-    N -->|no| E1["APPLY_EDITS"]
-    E1 --> E2["ATTACH_COMMENTS"] --> E3["RENDER_DOCX"] --> E4["JobResult"]
+    P["PARSE_MANIFEST → Requirement[]"] --> PLAN["PLAN SLICES<br/>disjoint requirement sets"]
+    PLAN --> SEED["SEED ARTIFACT<br/>parse docx, or generate scaffold"]
+    SEED --> F1["editor instance<br/>slice A"]
+    SEED --> F2["editor instance<br/>slice B"]
+    SEED --> F3["editor instance<br/>slice C"]
+    F1 --> COL["collect SliceReports"]
+    F2 --> COL
+    F3 --> COL
+    COL --> V{"validate each report<br/>req 16"}
+    V -->|"fail, attempt &lt; 3"| PLAN
+    V -->|"fail, attempt = 3"| U["mark unverified<br/>req 17"]
+    V -->|ok| AP["APPLY SERIALLY<br/>in slice order · conflict detection"]
+    U --> AP
+    AP --> RND["RENDER_DOCX + comments"]
+    RND --> DEL["delivery reply — req 10"]
 ```
 
-### Are the two modes actually different?
+**Reasoning happens in parallel; writing happens in one place, in one order.** That
+split is the whole design, and each half earns its keep for a different reason.
 
-Mostly no — and it is worth being precise about the part that is, because it drives
-where the code splits.
+### Why the writes are serialised
 
-**They diverge in exactly one place: how the artifact is seeded.** Derivative parses
-the client's `.docx`. Net-new has no document, so **it has to generate one** — a
-scaffold with a section per requirement, built from `Requirement[]` plus the client's
-inputs. Everything downstream of that — the slice loop, validation, the retry cap,
-edit application, comments, rendering — is shared, byte for byte.
+Every editor instance receives a **read-only snapshot** of the artifact plus its own
+slice, and returns a `SliceReport` of *proposed* edits and comments. No instance writes
+to the document, or to the store.
 
-**Both modes have regions.** They differ only in who decides them. In derivative an
-agent classifies the client's existing content. In net-new the generator declares them
-as it emits the scaffold: headings and field labels come out locked, the content slots
-come out editable. Same mechanism, different author.
+That removes the hard problem rather than solving it. The alternative — N agents
+mutating one shared artifact under optimistic concurrency — means version conflicts
+under exactly the load the parallelism was introduced to handle, and a retry storm as
+each loser re-runs a model call that already cost money.
 
-**So why keep two runners at all?** Not for structural reasons — for *authority*.
-A derivative run **may not write**; a net-new run **must**. That is the whole product
-distinction: a client sending a form for validation wants to be told it is wrong, not
-to receive a silently corrected version. Locked regions are the enforcement, and
-keeping the runners separate is what stops the derivative agent from drifting into
-"helpfully" editing the document until every requirement passes.
+Two properties follow that are worth more than the contention they avoid:
 
-Formally you *could* collapse net-new into "derivative over an empty document where
-everything is editable and every requirement starts failing" — `realised` is then just
-`pass, authored by us`. It is elegant and it is a trap: it puts writing on the common
-path, and the pressure from there is all in the wrong direction.
+- **The output is deterministic in application order.** Proposals are applied in **slice
+  order, never completion order**. Whichever instance finishes first, the resulting
+  document is byte-identical. Apply on arrival instead and the document quietly changes
+  between runs on the same input, which would make the golden fixture meaningless.
+- **Conflicts become visible.** The applier holds *every* proposal before it writes
+  anything, so two slices targeting the same `line_id` is a detectable event rather than
+  a silent last-write-wins.
 
-**Consequence for the plan:** the scaffold generator is a real component, not the
-hand-wave "blank/template doc" this plan carried earlier. It is the one genuinely new
-thing net-new needs, and it belongs to B7.
+That second one is a real gain against concern **D3**. Contradictory requirements were
+previously invisible by construction — each agent saw only its own slice and nothing
+compared them. Fan-in gives us the one moment where all proposals coexist, which is the
+only place a cross-slice contradiction *can* be caught. It does not solve D3 (two
+requirements can conflict in meaning while touching different lines) but it converts the
+line-level case from undetectable to detectable.
+
+Req 12 still holds: each run gets a live `Artifact` object it may mutate freely at any
+point. It is a snapshot, and the orchestrator merges the resulting edit list.
+
+### The editor becomes a worker
+
+`editor-service` no longer owns a state machine or a loop. It exposes essentially one
+operation:
+
+```
+POST /slices:run   SliceRequest → SliceReport
+```
+
+Stateless, horizontally scalable, and testable without any job lifecycle around it.
+The lifecycle — retries, the three-attempt cap, the unverified terminal, apply, render,
+deliver — belongs to the orchestrator, which is also where `JobRecord` already lives.
+
+**Tools are scoped per instance.** A slice runner is handed a toolset bounded to its own
+requirements and the regions they govern. A proposal targeting a line outside that scope
+is rejected by the applier deterministically — slice isolation is enforced by the tool
+layer and the applier, never by asking the prompt nicely.
+
+**Concurrency is bounded.** A semaphore caps simultaneous slices; `UsageLimits` caps each
+one. Unbounded fan-out on a 40-requirement manifest is how you discover your Gemini rate
+limit in production.
+
+### A note on the name
+
+A service that does mail I/O *and* orchestration is doing two jobs, and the name only
+mentions one. Internally it splits `orchestrator/` from `mail/`, with the mail transport
+as an adapter and orchestration as the core — so the day it wants to be its own service,
+or grow a second front door, the seam is already there.
+
+### Do the two modes still differ?
+
+Mostly no, and the orchestration change makes that clearer. They diverge at **SEED
+ARTIFACT** and nowhere else: derivative parses the client's `.docx`, net-new generates a
+scaffold. Slice planning, fan-out, validation, retry, apply, render and delivery are
+shared.
+
+Both modes still have regions; they differ only in who decides them. Derivative has an
+agent classify the client's existing content. Net-new has the generator declare them as
+it emits — structure locked, slots editable.
+
+The runners stay separate for one reason, and it is not structural: **authority**. A
+derivative run may not write; a net-new run must. A client sending a form for validation
+wants to be told it is wrong, not handed a silently corrected version. Locked regions are
+the enforcement; separate runners keep the enforcement meaningful.
 
 ## How the manifest becomes requirements
 
@@ -393,8 +443,8 @@ docker/
 | `packages/ffx-contracts` | **FROZEN** shared models — the seam that makes parallelism safe |
 | `packages/ffx-docmodel` | docx ⇄ line-addressable `Artifact`, regions, comment writer |
 | `packages/ffx-manifest` | free-text manifest → discrete `Requirement[]` |
-| `services/email-service` | FastAPI + IMAP poller + SMTP sender |
-| `services/editor-service` | FastAPI + state machine + Pydantic AI agents (Gemini) |
+| `services/email-service` | Orchestrator + mail adapter: IMAP poller, SMTP sender |
+| `services/editor-service` | FastAPI worker: `POST /slices:run`, Pydantic AI agents (Gemini) |
 | `fixtures/fleet-vehicle-return` | the illustrative example, as golden test data |
 | `docker/` | one Dockerfile per service + compose for local dev |
 
@@ -453,6 +503,18 @@ class Mode(StrEnum): DERIVATIVE = "derivative"; NET_NEW = "net_new"
 class JobRequest(BaseModel):   # email-service → editor-service
     job_id: str; mode: Mode; manifest_raw: str
     forms: list[FormPayload]; client_inputs: dict[str, Any]
+class SliceRequest(BaseModel):   # orchestrator → one editor instance
+    job_id: str; slice_id: str; mode: Mode
+    requirements: list[Requirement]   # this slice only
+    artifact: Artifact                # READ-ONLY snapshot
+    editable_line_ids: list[str]      # the scope bound; anything else is rejected
+
+class SliceReport(BaseModel):    # editor instance → orchestrator
+    slice_id: str; attempt: int
+    edits: list[Edit]                 # PROPOSED; the orchestrator applies them
+    comments: list[ReviewComment]
+    unanswered: list[str]             # requirement ids this run could not decide
+
 class JobAccepted(BaseModel):  # 202 response — what the confirmation reply quotes
     job_id: str
     requirements: list[Requirement]   # parsed once, here; req 7 sends exactly this
@@ -475,15 +537,16 @@ Directory ownership is **disjoint per branch** — that is what keeps 7 concurre
 
 **B0 · scaffold + contracts** — `pyproject.toml`, `packages/ffx-contracts/**`, `Makefile`, CI workflow (ruff + mypy + pytest), empty package/service skeletons so later branches only add files. Ships the frozen models above with full unit tests on the validators (`suggestion` required when `verdict=="fail"`, etc.).
 
-### Layer 1 — 9 PRs in parallel, all branch from B0
+### Layer 1 — 10 PRs in parallel, all branch from B0
 
 | ID | Branch | Owns | Deliverable |
 |----|--------|------|-------------|
+| **B14** | `feat/applier` | `packages/ffx-applier/**` | The serial applier: order proposals by **slice id, not arrival**; detect two slices targeting one `line_id`; reject any edit outside its slice's `editable_line_ids`; enforce locked regions. Pure functions over `SliceReport[]` → `Artifact`. No I/O, no model, fully deterministic — the easiest thing in the repo to test exhaustively, and the one most worth testing. |
 | **B1** | `feat/docmodel` | `packages/ffx-docmodel/**` | `.docx → Artifact` (stable line ids incl. table cells), `apply_edits()` surgical line replace with **locked-region enforcement** (raises on a locked target), `attach_comments()` via `python-docx` `add_comment`, `Artifact → .docx`. No AI. Round-trip tests on fixture docs. |
 | **B2** | `feat/manifest` | `packages/ffx-manifest/**` | Free text → `Requirement[]` (req 5): deterministic pre-split + one small Gemini extraction agent, stable ids, `source_span` provenance, `slices()` grouping strategy. Tested with `FunctionModel` — no live API in CI. |
 | **B3** | `feat/intake` | `services/email-service/src/**/{intake,replies}.py` | Req 6/7/8: MIME parse, attachment extraction, mode inference (derivative needs supplied forms — req 3), `IntakeVerdict` rules, and both reply templates — the valid one **quotes the `Requirement[]` returned in the 202** (req 7 *Recommended*) — it must never parse the manifest itself. |
 | **B4** | `feat/mail-transport` | `services/email-service/src/**/transport/**` | `MailTransport` Protocol + IMAP poller (IDLE/poll, seen-state, idempotency by Message-ID) + SMTP sender with threaded replies (`In-Reply-To`/`References`), **plus an in-memory fake** every other branch tests against. |
-| **B5** | `feat/editor-machine` | `services/editor-service/src/**/{machine,slicing,validation}.py` | The state machine + programmatic hand-off loop: slice iteration, `EditorDeps`, the `SliceReport` validator (every requirement answered / justified / reference resolves — req 16), 3-attempt cap with the error fed back, then `unverified` (req 17). Agent-agnostic: takes a `SliceRunner` Protocol so B6/B7 plug in. Tested with `TestModel`. |
+| **B5** | `feat/orchestrator` | `services/email-service/src/**/orchestrator/**` | Slice planning, **bounded-concurrency fan-out**, fan-in, the `SliceReport` validator (req 16), 3-attempt cap with the error fed back, then `unverified` (req 17). Owns the job lifecycle. Dispatches through a `SliceRunner` Protocol, so it is tested end-to-end with a fake runner and no editor service running at all. |
 | **B8** | `feat/llm-config` | `services/editor-service/src/**/llm/**`, `settings.py` | `GoogleModel` + `GoogleProvider` wiring, pinned model id in settings, `HttpRetryOptions`, per-slice `UsageLimits`, shared `RunUsage` accounting, structured logging. One `build_agent()` factory both flows call. |
 | **B10** | `feat/docker` | `docker/**`, `compose.yaml` | Multi-stage Dockerfile per service (non-root, uv-installed deps, healthcheck), compose bringing up both services + `mailpit` for a local mailbox. No GCP, no Terraform. |
 
@@ -546,12 +609,13 @@ Everything else is scored with a threshold. Mixing the two is how eval suites en
 | A5 | IMAP arrival → confirmation reply sent | B3+B4 | **30 s** | poll interval dominates; no double-send on redelivery |
 | L1 | manifest → `Requirement[]` | B2 | **8 s** | recall ≥ 0.95, **precision 1.0** (zero invented reqs), every `source_span` verbatim in raw |
 | L2 | `CLASSIFY_REGIONS` (1 form) | B6 | **15 s** | accuracy ≥ 0.90, **zero false-editable** on client-identity regions |
-| L3 | one slice run (5 reqs) | B5+B6 | **20 s** | invariants 1.0; verdict set matches golden exactly |
+| L3 | one slice run (5 reqs) | B6 | **20 s** | invariants 1.0; verdict set matches golden exactly |
 | L4 | net-new slice run | B7 | **20 s** | structural spec violations = 0; reference-resolution 1.0 |
 | A6 | artifact `save` → `load` round-trip | B12 | **300 ms** | version conflict detected; GCS blob pointer resolves |
 | A7 | job complete → results email sent | B13 | **20 s** | exactly one send per `job_id`; unverified listed; threaded on the original |
-| E1 | full derivative job (10 reqs, 1 form) | B9 | **90 s** | end-to-end on the fleet fixture |
-| E2 | full net-new job (10 reqs) | B9 | **120 s** | end-to-end on the fleet fixture |
+| A8 | apply 5 `SliceReport`s serially | B14 | **400 ms** | deterministic byte-for-byte across arrival orders |
+| E1 | full derivative job (10 reqs, 1 form) | B9 | **35 s** | slowest slice + apply, not the sum |
+| E2 | full net-new job (10 reqs) | B9 | **45 s** | end-to-end on the fleet fixture |
 
 Treat these as **calibration targets, not measurements** — B0 lands the harness, and the first branch to run each stage records the real baseline in its PR. If a budget turns out to be wrong, the PR moves the number and says why; what's not allowed is shipping without one.
 
@@ -612,4 +676,4 @@ Each Sonnet agent gets a brief containing, verbatim:
 
 ## Open, carried forward
 
-D1 (PDF/OCR input), D2 (job status after confirmation — largely answered now that B13 exists: the client is told on completion *and* on failure; what remains is status **on demand**, mid-run), D3 (cross-requirement conflicts, invisible to per-slice runs). None blocks v1.
+D1 (PDF/OCR input), D2 (job status after confirmation — largely answered now that B13 exists: the client is told on completion *and* on failure; what remains is status **on demand**, mid-run), D3 (cross-requirement conflicts — the line-level case is now **detectable** at fan-in, since every proposal coexists before anything is written; the semantic case, where two requirements contradict while touching different lines, is still open). None blocks v1.
