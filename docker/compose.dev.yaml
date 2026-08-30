@@ -35,3 +35,41 @@ services:
       timeout: 3s
       retries: 5
       start_period: 10s
+
+  # B12 state store. Both are switched on purely by an env var
+  # (FIRESTORE_EMULATOR_HOST / STORAGE_EMULATOR_HOST) — see packages/mff-store — so
+  # nothing outside this file needs to know these are emulators rather than GCP.
+  #
+  #   docker compose -f docker/compose.dev.yaml up -d firestore gcs
+  #   FIRESTORE_EMULATOR_HOST=localhost:8090 STORAGE_EMULATOR_HOST=http://localhost:4443 \
+  #       python scripts/verify_stack.py
+  firestore:
+    image: google/cloud-sdk:emulators
+    container_name: mff-firestore
+    command: gcloud emulators firestore start --host-port=0.0.0.0:8090
+    ports:
+      - "8090:8090"
+    healthcheck:
+      test: ["CMD-SHELL", "timeout 2 bash -c '</dev/tcp/127.0.0.1/8090' || exit 1"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+
+  gcs:
+    image: fsouza/fake-gcs-server:1.52.2
+    container_name: mff-gcs
+    # -backend memory: ephemeral by design, matching the emulator-for-dev-and-CI
+    # role here — nobody should be relying on what is in it surviving a restart.
+    # `-port` is the HTTPS port (default 4443); with -scheme http the port that
+    # actually matters is `-port-http` (default 8000) — set explicitly so it lines
+    # up with the published port below and STORAGE_EMULATOR_HOST everywhere else.
+    command: -scheme http -port-http 4443 -backend memory
+    ports:
+      - "4443:4443"
+    healthcheck:
+      test: ["CMD-SHELL", "timeout 2 bash -c '</dev/tcp/127.0.0.1/4443' || exit 1"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 10s

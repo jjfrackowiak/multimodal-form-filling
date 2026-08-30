@@ -33,7 +33,7 @@ from .jobs import (
     RequestResult,
 )
 from .repositories import ArtifactRepository, BlobStore, JobRepository, RequestRepository
-from .requirements import Manifest, Requirement, SlicePlan
+from .requirements import Constraint, Manifest, Requirement, SlicePlan
 from .review import Anchor, ReviewComment
 from .slices import SliceReport, SliceRequest
 
@@ -45,6 +45,7 @@ __all__ = [
     "BlobStore",
     "ClientInputs",
     "CompiledForm",
+    "Constraint",
     "DerivativeArtifact",
     "DraftOp",
     "Entry",

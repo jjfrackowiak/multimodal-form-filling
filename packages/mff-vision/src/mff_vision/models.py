@@ -19,10 +19,10 @@ Because the real implementation is remote, the contract is shaped for a network 
 async, images named by URI so the service fetches them itself, and one round trip per
 job rather than per image.
 
-`ImageAnalysis` and `RequirementSpec` are wire types shared with the editor and are
-defined in `mff_contracts`, not here — this module re-exports them so nothing downstream
-notices. `ImageRef` and `VisionTool` stay local: they are this client's concern, not the
-frozen contract's.
+`ImageAnalysis`, `RequirementSpec` and `Constraint` are wire types shared with the editor
+and are defined in `mff_contracts`, not here — this module re-exports them so nothing
+downstream notices. `ImageRef` and `VisionTool` stay local: they are this client's
+concern, not the frozen contract's.
 """
 
 from __future__ import annotations
@@ -31,9 +31,10 @@ from typing import Protocol, runtime_checkable
 
 from pydantic import BaseModel
 
-from mff_contracts import ImageAnalysis, RequirementSpec
+from mff_contracts import Constraint, ImageAnalysis, RequirementSpec
 
 __all__ = [
+    "Constraint",
     "ImageAnalysis",
     "ImageRef",
     "RequirementSpec",

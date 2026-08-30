@@ -17,14 +17,88 @@ Decisions locked with the user:
 
 Not in scope for v1: image tooling (req 13) ships as a **stubbed interface only** — the real understanding service comes later, and cropping is dropped from the interface entirely; OCR/PDF input (D1); job status polling (D2); cross-requirement conflict detection (D3).
 
-## Framework grounding (verified against current docs)
+## Framework grounding (verified against current ADK docs)
 
-- **Programmatic hand-off** (req 11) is a Pydantic AI documented pattern: agents called in succession from *plain Python*, each run scoped to its own requirement slice, context carried by `message_history=` and shared `deps`/`usage`. There is no graph DSL needed — the "state machine" is our own explicit loop.
-- **Shared state** (req 12) = a `deps` dataclass holding the `Artifact` python object. Tools mutate it in place; it outlives every run.
-- **Gemini**: `GoogleModel(<model-id>, provider=GoogleProvider(api_key=...))`, plus `HttpRetryOptions` for transport-level retry and `UsageLimits` per slice.
-- **Validation/retry** (reqs 16–17): completeness is validated **inside the editor's run**, while the comments are still Python objects, and the retry loop lives there too — so `ModelRetry` is used natively and no retry state crosses the wire. The orchestrator's only check is at compile: does this render to Word? See *Where validation happens*.
-- **Evals**: `pydantic-evals` ships with Pydantic AI — `Case`/`Dataset`/`Evaluator`, plus built-in `IsInstance`, `Contains` and **`MaxDuration(seconds=...)`**. `EvaluatorContext` exposes `ctx.duration`, `ctx.metrics` and `ctx.span_tree`, so correctness, latency and token cost all come out of a single run. Agents are `pydantic-ai`; evals are `pydantic-evals`. **`LLMJudge` exists in that library and we do not use it** — see the evals section.
-- **Comments**: `document.add_comment(runs=..., text=..., author=..., initials=...)` and `document.comments` are supported in `python-docx` ≥ 1.2.
+**The agent framework is Google ADK (`google-adk`), on Gemini.** Pydantic stays exactly
+where it was: every contract, every tool argument, every structured output and every
+validator is a pydantic model. ADK replaces the *agent runtime* only — `mff-contracts`
+does not change by one line.
+
+- **Programmatic hand-off** (req 11): agents are called in succession from *plain Python*.
+  Each slice is one `Runner.run_async(...)` turn against a **per-job ADK session**, so
+  slice N reads what slices 1…N−1 committed. We use no `SequentialAgent`, no `LoopAgent`
+  and no graph DSL — the "state machine" is our own explicit loop, which is what makes the
+  ordering auditable.
+- **Shared state** (req 12) = an `EditorDeps` dataclass holding the live `Artifact`. Tools
+  are built by a factory closing over it and mutate it in place. ADK's `session.state` is a
+  JSON-shaped dict committed per event and is **not** where the artifact lives — see
+  *Where the artifact lives* below.
+- **Gemini**: `Gemini(model=settings.model_id, retry_options=types.HttpRetryOptions(...))`
+  from `google.adk.models`. The model id is pinned in settings, never an alias.
+- **Structured output alongside tools is supported.** Both our agents need it — derivative
+  emits `ReviewComment[]` while calling the vision tool, net-new emits a report while
+  calling `set`/`append`/`delete`. Where a model cannot do both in one request, ADK's
+  `_OutputSchemaRequestProcessor` transparently injects a `set_model_response` tool
+  carrying the schema and **leaves the real tools in place**; where it can, the schema goes
+  straight onto the request. `output_schema` takes a plain pydantic `BaseModel`.
+- **Validation/retry** (reqs 16–17): completeness is validated **inside the editor's run**,
+  while the comments are still Python objects, and the retry loop lives there too, so no
+  retry state crosses the wire. ADK has no `ModelRetry` equivalent and we do not want one —
+  the loop is ours, written out explicitly, which is what rule 2 below already required.
+  The orchestrator's only check is at compile: does this render to Word? See *Where
+  validation happens*.
+- **Evals**: `pydantic-evals` — `Case`/`Dataset`/`Evaluator`, plus built-in `IsInstance`,
+  `Contains` and **`MaxDuration(seconds=...)`**. `EvaluatorContext` exposes `ctx.duration`
+  and `ctx.metrics`, so correctness, latency and token cost come out of a single run.
+  Keeping it while moving agents to ADK is a deliberate call with a cost — see *Why evals
+  stay on pydantic-evals*. **`LLMJudge` exists in that library and we do not use it.**
+- **Comments**: `document.add_comment(runs=..., text=..., author=..., initials=...)` and
+  `document.comments` are supported in `python-docx` ≥ 1.2.
+
+### The mapping, once, for every branch
+
+Nine agents will each hit the same translation. It is written down here so they do not each
+invent their own.
+
+| Concern | Was (Pydantic AI) | Is (ADK) |
+|---|---|---|
+| Agent | `Agent(output_type=…, instructions=…, toolsets=…)` | `LlmAgent(name=…, model=…, instruction=…, output_schema=…, tools=[…])` |
+| Running one turn | `await agent.run(prompt, deps=…, message_history=…)` | `async for event in runner.run_async(user_id=…, session_id=…, new_message=…)` |
+| Structured output | `output_type=SliceReport` | `output_schema=SliceReport` — same pydantic model |
+| Carrying context forward | `message_history=` | the **same `session_id`**; ADK appends events itself |
+| Shared mutable state | `deps` reached via `RunContext` | `EditorDeps` closed over by the tool factory; `ToolContext` for scalars |
+| Tool definition | `@agent.tool` / `toolsets=` | plain functions in `tools=[…]`; a `tool_context: ToolContext` param is injected and hidden from the model |
+| Retry on validation failure | `ModelRetry` from an output validator | our own `for attempt in range(1, 4)` loop, re-running the session with the error as the next turn |
+| Model wiring | `GoogleModel(id, provider=GoogleProvider(...))` | `Gemini(model=id, retry_options=types.HttpRetryOptions(...))` |
+| Per-run cost cap | `UsageLimits` / `RunUsage` | a `UsagePlugin` on the `App`, reading `LlmResponse.usage_metadata` |
+| Test double | `TestModel` / `FunctionModel` | `FakeLlm(BaseLlm)` from `mff-fakes`, passed as `model=` |
+| Prompt assembly | `instructions=` | `instruction=`, which also supports `{state_key}` templating from session state |
+| Evals | `pydantic-evals` | `pydantic-evals` — unchanged |
+
+Two things ADK gives us that the old plan hand-rolled, and which we still decline: its
+`SessionService` persistence (B12 owns job state, and two persistence layers is one too
+many) and its `ArtifactService` (our `Artifact` is a live line-addressable object, not a
+blob). Both are noted so a branch does not "discover" them and quietly re-plumb the system.
+
+### Where the artifact lives
+
+ADK's `session.state` is a JSON-shaped dict, committed as a `state_delta` on every event.
+The `Artifact` is a large, live, line-addressable Python object that tools mutate between
+model calls. **Putting it in `session.state` would serialise the whole document on every
+tool call**, and req 12 asks for the opposite.
+
+So:
+
+- The `Artifact` lives in `EditorDeps`, held by the run loop for the life of the slice.
+- Mutation tools are produced by a factory that closes over that `EditorDeps`. They mutate
+  in place and append a `DraftOp` to the log, exactly as before.
+- `session.state` carries **only scalars the instruction template interpolates** —
+  `slice_id`, `form_id`, requirement count. Small, serialisable, boring.
+- None of this crosses a service boundary: `SliceRequest` in, `SliceReport` out, both
+  unchanged.
+
+Req 12 is therefore satisfied literally, and the framework's grain is respected rather than
+fought.
 
 ## Architecture
 
@@ -153,9 +227,10 @@ dict lookup on a `list[ReviewComment]` and archaeology once the same information
 comment parts.
 
 It is deterministic Python — a pydantic validator, not the model grading itself. On
-failure it raises `ModelRetry`, and the agent tries again with its own previous output and
-the error in front of it. After three attempts the stragglers are marked `unverified`
-(req 17) and the run returns normally.
+failure the run loop puts the validator's error back into the **same ADK session** as the
+next turn, so the agent tries again with its own previous output and the error in front of
+it. After three attempts the stragglers are marked `unverified` (req 17) and the run
+returns normally.
 
 **Renderability — at the top layer, in the orchestrator, during compile.** Can this
 artifact actually become a Word document? Does every comment anchor map to a real run?
@@ -183,10 +258,10 @@ payload in the system), and retry state on the wire. Three fields exist only to 
 `pending` to narrow the ask, `history` to preserve context, `validator_error` to explain
 the failure.
 
-`history` is the telling one. It had to be `list[dict[str, Any]]` purely to keep
-`pydantic-ai` out of the frozen package. Move the loop in-run and that problem does not
-need solving: `ModelRetry` handles it natively, inside the one service that already
-depends on pydantic-ai.
+`history` is the telling one. It had to be `list[dict[str, Any]]` purely to keep the agent
+framework out of the frozen package. Move the loop in-run and that problem does not need
+solving: the history *is* the ADK session, which never leaves the process and never has to
+be given a wire type at all.
 
 The orchestrator keeps sequencing, persistence, and the end-of-job checks — completeness
 across all slices, then compile. What it loses is visibility into intermediate attempts,
@@ -217,8 +292,9 @@ seat entries and that count comes from the requirement, so the slice must create
 scaffold could not have sized without parsing requirements itself.
 
 Both modes share manifest parsing, slice planning and ordering, the runner, per-requirement
-validation, monotonic retry, the `unverified` terminal, and delivery. Only the agent and
-its toolset differ.
+validation, monotonic retry, the `unverified` terminal, and delivery. Only the `LlmAgent`
+and its `tools=[…]` list differ — the derivative agent is constructed with no mutation tool
+in that list at all, which is what makes "it cannot edit the body" structural.
 
 ### Where compile and validation live
 
@@ -610,6 +686,28 @@ This is a deliberate narrowing of req 13, recorded rather than assumed. If a rea
 appears — a requirement about a detail too small to judge at full frame — it comes back as
 a scoped addition with a caller attached.
 
+### The vision service is exempt from the ADK decision
+
+**ADK is our choice for the editor. It is not a repo-wide mandate, and specifically not a
+constraint on the vision service.** That service is owned separately (`AGENTS.md`: Michal
+owns image/CV tooling and req 13) and **may use Pydantic AI** — or anything else. It sits
+behind an HTTP contract (`POST /v1/inventory`, `RequirementSpec` in, `ImageAnalysis` out),
+and what happens on the far side of that boundary is its owner's call. That is the entire
+point of having made it a service rather than a library.
+
+Two consequences, recorded here because they are exactly the kind of thing a later branch
+"cleans up" by accident:
+
+- **If `services/vision-*` carries a `pydantic-ai` dependency, that is correct, not
+  leftover.** Do not remove it while migrating anything else, and do not file it as drift.
+- **The import-linter contract banning model libraries lists `vision_stub` in its source
+  modules.** When the real service lands and imports a model library, it gets an
+  `ignore_imports` exemption or comes out of `source_modules` — it does not get rewritten
+  to match the editor.
+
+`mff-vision` — the *client* package on our side — stays clean. It speaks HTTP and imports
+no model library at all, and nothing about the far side changes that.
+
 ### Why the stand-in is a lookup, not a constant
 
 `InventoryVisionTool` answers from the fixture's labelled inventory, keyed by filename, so
@@ -644,41 +742,82 @@ R-04 stops being decidable.
 
 ## Dependency pinning
 
-**Never depend on `pydantic-ai`.** The meta-package resolves to:
+**Depend on bare `google-adk`. Never on an extra we have not read.** The base install is
+25 packages and contains no provider SDK but `google-genai`, which is the one we want. The
+weight is all in the extras, and two of them are traps:
 
-```
-pydantic-ai-slim[openai,anthropic,google,cli,mcp,evals,web,retries,logfire]
-```
-
-which ships the OpenAI *and* Anthropic SDKs, an MCP client and a CLI into every image
-so we can talk to Gemini. Use the slim package with only the extras we actually call:
+| Extra | What it drags in | Verdict |
+|---|---|---|
+| *(none)* | `google-genai`, fastapi, starlette, uvicorn, httpx, opentelemetry, authlib | **what we use** |
+| `[extensions]` | **`anthropic`, `openai`**, litellm, crewai, langgraph, llama-index, lxml | never |
+| `[all]` | all of the above plus ~30 `google-cloud-*` packages | never |
+| `[eval]` | pandas, pyarrow, nltk, rouge-score, `google-cloud-aiplatform[evaluation]`, openpyxl, xlrd | never — see below |
+| `[gcp]` | `google-cloud-storage`, `-firestore`, agent-engines, GCP OTel exporters | B12's call, not the editor's |
+| `[db]` | sqlalchemy — only for ADK's `DatabaseSessionService`, which we do not use | no |
 
 ```toml
 # services/editor-service — the only service that talks to a model
 dependencies = [
-  "pydantic-ai-slim[google,evals]",   # GoogleModel/GoogleProvider + pydantic-evals
+  "google-adk>=2.8",                  # LlmAgent, Runner, Gemini; google-genai comes with it
   "mff-contracts", "mff-docmodel", "mff-vision",
 ]
 ```
 
 Notes for whoever writes these files:
 
-- **`[google]`** brings `google-genai`, which is where `HttpRetryOptions` lives — so the
-  transport-level retry in the plan needs no further extra. The separate `[retries]`
-  extra is for Pydantic AI's *own* tenacity transport; add it only if we adopt that
-  instead.
-- **`[evals]`** is how `pydantic-evals` arrives. It is a real dependency of the eval
-  suites, not a dev convenience, because the structural evaluators import it.
-- **`[logfire]`** stays out by default. Observability is worth having, but it should be
-  a deliberate opt-in per environment rather than weight in every image.
-- **`email-service` and `vision-stub` get no model extras at all.** The orchestrator
-  never calls a model — parsing happens in the editor — and the vision placeholder
-  processes nothing. If either grows a `pydantic-ai` dependency, something has moved to
-  the wrong service.
+- **`google-genai` is a base dependency of `google-adk`**, which is where
+  `types.HttpRetryOptions` lives — so transport-level retry needs no extra at all.
+- **`pydantic-evals` is a dev-group dependency, never a runtime one.** It pins
+  `pydantic-ai-slim`, and that must not reach a service image. See below.
+- **Observability stays opt-in.** ADK carries `opentelemetry-api`/`-sdk` in its base, but
+  the GCP exporters live in `[gcp]` and stay out until someone is actually collecting.
+- **`email-service` gets no agent framework at all.** The orchestrator never calls a model
+  — parsing happens in the editor. If it grows a `google-adk` dependency, something has
+  moved to the wrong service.
+- **`vision-stub` gets none either, but the real vision service is not ours and may use
+  whatever it likes — including Pydantic AI.** See below; do not "tidy" that dependency
+  away.
+
+The old plan spent this section arguing against the `pydantic-ai` meta-package for shipping
+the OpenAI and Anthropic SDKs into every image. **The same trap exists here under a
+different name** — `google-adk[extensions]` and `google-adk[all]` both carry `anthropic`
+and `openai`. B8's dependency test, which asserts neither is importable, is therefore
+retained verbatim: it was written against the old trap and catches the new one unchanged.
 
 Image weight is a deployment concern and deployment is not ours, which is exactly why
 this belongs in the plan: we are the ones who decide what goes in the image, and the
 people who pay for it are not in this repo.
+
+### Why evals stay on `pydantic-evals`
+
+Moving the agents to ADK does not move the evals, and this is a decision with a real cost
+rather than a free ride.
+
+**The cost:** `pydantic-evals` pins `pydantic-ai-slim` exactly. Keeping it means the
+`pydantic_ai` module remains importable in the **dev environment**. It is quarantined two
+ways — it lives in the `dev` dependency group so it never enters a service image, and
+import-linter still bans `pydantic_ai` from all runtime source, so a drift back into
+`agents/` fails CI rather than review.
+
+**Why we pay it:** ADK's own harness is the wrong instrument for this system, in the exact
+way the evals section already spells out. `AgentEvaluator` scores text responses with
+**ROUGE-1 word overlap** and matches tool trajectories — that is a text-similarity
+comparison, which this plan rejects by name because it fails on harmless wording
+differences in a justification while happily passing a document with the wrong verdicts.
+Our scorer is a violation count against a structural spec, threshold zero. On top of that
+`google-adk[eval]` costs pandas, pyarrow, nltk and `google-cloud-aiplatform[evaluation]` to
+get there.
+
+`pydantic-evals` has no opinion about who produced the output. A `Case` calls a task
+function; that function now drives an ADK `Runner` instead of a pydantic-ai `Agent`, and
+`Dataset`, `Evaluator`, `IsInstance`, `Contains` and `MaxDuration` are untouched. **The
+one thing lost** is `EvaluatorContext.span_tree`, which populated from pydantic-ai's own
+instrumentation; token counts now come from ADK's `usage_metadata` and are passed into the
+case as explicit metrics instead.
+
+If that dev-only `pydantic-ai-slim` pin ever becomes a problem, the fallback is a custom
+ADK metric registered on `DEFAULT_METRIC_EVALUATOR_REGISTRY` — structural, not ROUGE. It is
+strictly more work for the same numbers, so it is a contingency, not a plan.
 
 ## The mailbox
 
@@ -881,10 +1020,10 @@ set.
 All of this happens **inside the editor's run**, so none of it appears in the slice
 contract. Two rules together fix it:
 
-**1. The retry is a continuation.** The agent's own `message_history` carries forward with
-the validator's error as the new turn — pydantic-ai's documented pattern, and native here
-because the loop never leaves the process. The agent sees its previous output and what was
-wrong with it rather than starting cold.
+**1. The retry is a continuation.** The attempt runs against the **same ADK session**, with
+the validator's error appended as the next user turn. ADK accumulates the session's events
+itself, so the agent sees its previous output and what was wrong with it rather than
+starting cold, and we never construct a message history by hand.
 
 **2. A settled answer is never revisited.** Validation runs per requirement. Anything that
 passes is accepted and frozen; the next attempt is asked only about what is still
@@ -972,8 +1111,9 @@ docker/
 | `packages/mff-contracts` | **FROZEN** shared models — the seam that makes parallelism safe |
 | `packages/mff-docmodel` | docx ⇄ line-addressable `Artifact`, regions, comment writer |
 | `packages/mff-manifest` | free-text manifest → discrete `Requirement[]` |
+| `packages/mff-fakes` | `FakeLlm` — the ADK test double every model-touching branch uses |
 | `services/email-service` | Orchestrator + mail adapter: IMAP poller, SMTP sender |
-| `services/editor-service` | FastAPI worker: `POST /slices:run`, Pydantic AI agents (Gemini) |
+| `services/editor-service` | FastAPI worker: `POST /slices:run`, ADK agents (Gemini) |
 | `fixtures/fleet-vehicle-return` | the illustrative example, as golden test data |
 | `docker/` | one Dockerfile per service + compose for local dev |
 
@@ -981,7 +1121,8 @@ docker/
 
 Everything is written against these. **No branch may edit this package** — a change request
 goes back through the layer-0 owner. It depends on **nothing but pydantic**: no
-`pydantic-ai`, no service clients, enforced by import-linter.
+`google-adk`, no `google-genai`, no service clients, enforced by import-linter. Note that
+this survived the move off Pydantic AI untouched — that is the seam doing its job.
 
 ### Manifest and requirements — reqs 4, 5, 11
 
@@ -1300,18 +1441,32 @@ Directory ownership is **disjoint per branch** — that is what keeps 7 concurre
 
 **B0 · scaffold + contracts** — `pyproject.toml`, `packages/mff-contracts/**`, `Makefile`, CI workflow (ruff + mypy + pytest), empty package/service skeletons so later branches only add files. Ships the frozen models above with full unit tests on the validators (`suggestion` required when `verdict=="fail"`, etc.).
 
+### Layer 0.5 — one small PR, blocks every branch that touches a model
+
+**B15 · `feat/fakes`** — `packages/mff-fakes/**`. Pydantic AI shipped `TestModel` and
+`FunctionModel` as public API; **ADK ships no supported test double**, so we write one. A
+`FakeLlm(BaseLlm)` that yields scripted `LlmResponse`s, records every `LlmRequest` for
+assertion, and is passed straight into `LlmAgent(model=…)` — ADK's `canonical_model`
+returns a `BaseLlm` instance as-is, so no registry work is needed.
+
+This is ~60 lines and one test file, and it exists as its own PR for one reason: **B2, B6,
+B7 and B8 all need it.** Four private copies of the same fake is precisely the drift the
+ownership table exists to prevent. It also adds `mff_fakes` to `known-first-party` and to
+import-linter's `root_packages`, which is why it cannot be folded into a branch that owns
+neither.
+
 ### Layer 1 — 10 PRs in parallel, all branch from B0
 
 | ID | Branch | Owns | Deliverable |
 |----|--------|------|-------------|
 | **B14** | `feat/applier` | `packages/mff-applier/**` | Applies one validated `SliceReport`: reject ops outside the slice's `scope_ids`, apply `DraftOp`s to the draft, and **flag when an op overwrites content another requirement produced** (the D3 signal). Pure functions over `(Artifact, SliceReport) → Artifact`. No I/O, no model, fully deterministic — the easiest thing here to test exhaustively and the most worth it, since every mode's correctness funnels through it. |
 | **B1** | `feat/docmodel` | `packages/mff-docmodel/**` | `.docx → list[Node]` (stable ids incl. table cells), **compile** `FormDraft → .docx` and `DerivativeArtifact → .docx` both producing a `RenderMap`, `attach_comments()` via `python-docx` `add_comment` using that map. No AI, no mutation of a client document. Round-trip tests, plus the byte-identical-body assertion for derivative. |
-| **B2** | `feat/manifest` | `packages/mff-manifest/**` | Free text → `Requirement[]` (req 5): deterministic pre-split + one small Gemini extraction agent, stable ids, `source_span` provenance, `slices()` grouping strategy. Tested with `FunctionModel` — no live API in CI. |
+| **B2** | `feat/manifest` | `packages/mff-manifest/**` | Free text → `Requirement[]` (req 5): deterministic pre-split + one small Gemini extraction pass, stable ids, `source_span` provenance, `slices()` grouping strategy. **The package imports no agent framework** — it calls a `RequirementExtractor` Protocol the editor service supplies. Tested with `FakeLlm` — no live API in CI. |
 | **B3** | `feat/intake` | `services/email-service/src/**/{intake,replies}.py` | Req 6/7/8: MIME parse, attachment extraction, mode inference (derivative needs supplied forms — req 3), `IntakeVerdict` rules, and both reply templates — the valid one **quotes the `Requirement[]` returned in the 202** (req 7 *Recommended*) — it must never parse the manifest itself. |
 | **B4** | `feat/mail-transport` | `services/email-service/src/**/transport/**` | `MailTransport` Protocol + IMAP poller (IDLE/poll, seen-state, idempotency by Message-ID) + SMTP sender with threaded replies (`In-Reply-To`/`References`), **plus an in-memory fake** every other branch tests against. |
 | **B5** | `feat/orchestrator` | `services/email-service/src/**/{orchestrator,runner}/**` | Slice planning (plain chunking, six at a time), the background runner walking forms and slices sequentially, persistence with the cursor written atomically, the end-of-job completeness check across all slices, and the delivery barrier. **Retry and per-requirement validation are NOT here** — the editor owns those and returns an always-valid report. Dispatches through a `SliceRunner` Protocol, so it tests end-to-end with a fake runner and no editor service running. |
-| **B8** | `feat/llm-config` | `services/editor-service/src/**/llm/**`, `settings.py` | `GoogleModel` + `GoogleProvider` wiring, pinned model id in settings, `HttpRetryOptions`, per-slice `UsageLimits`, shared `RunUsage` accounting, structured logging. One `build_agent()` factory both flows call. |
-| **B10** | `feat/docker` | `docker/**`, `compose.yaml` | Multi-stage Dockerfile per service (non-root, uv-installed deps, healthcheck), compose bringing up both services + `mailpit` for a local mailbox. No GCP, no Terraform. |
+| **B8** | `feat/llm-config` | `services/editor-service/src/**/llm/**`, `settings.py` | ADK `Gemini` + `Runner` + `App` wiring, pinned model id in settings, `types.HttpRetryOptions`, a `UsagePlugin` for per-slice cost accounting, structured logging. One `build_agent()` factory and one `run_slice()` retry loop that both flows call. |
+| **B10** | `feat/docker` | `docker/**`, `compose.yaml` | Multi-stage Dockerfile per service (non-root, uv-installed deps, healthcheck), compose bringing up both services + GreenMail for a local mailbox. Asserts `google-adk` is in the editor image and absent from the others. No GCP, no Terraform. |
 
 | **B12** | `feat/state-store` | `packages/mff-store/**` | `ArtifactRepository` + `JobRepository`: the in-memory adapter every other branch tests against, and the Firestore + GCS adapter for GCP. Versioned writes, per-slice checkpointing, no credentials needed for the in-memory path. |
 
@@ -1333,13 +1488,13 @@ Directory ownership is **disjoint per branch** — that is what keeps 7 concurre
 
 **Every branch ships an eval suite. A PR without one does not merge.** "It works" is not a claim any subagent gets to make on its own recognisance — each stage must produce a number.
 
-We use **`pydantic-evals`** (ships with Pydantic AI, same ecosystem): `Case` / `Dataset` / `Evaluator`, the built-in `IsInstance` and `Contains`, and — directly answering the latency requirement — **`MaxDuration(seconds=...)`** as a first-class assertion. **`LLMJudge` is available in that library and is banned here**; a branch importing it fails lint, not review. `EvaluatorContext` exposes `ctx.duration`, `ctx.metrics` and `ctx.span_tree`, so correctness, latency and token cost come out of one run.
+We use **`pydantic-evals`**, kept deliberately when the agents moved to ADK — the reasoning and its cost are in *Why evals stay on `pydantic-evals`* above, and it is a **dev-group dependency that never enters a service image**. `Case` / `Dataset` / `Evaluator`, the built-in `IsInstance` and `Contains`, and — directly answering the latency requirement — **`MaxDuration(seconds=...)`** as a first-class assertion. **`LLMJudge` is available in that library and is banned here**; a branch importing it fails lint, not review. `EvaluatorContext` exposes `ctx.duration` and `ctx.metrics`, so correctness and latency come out of one run; token cost is read from ADK's `usage_metadata` and passed in as an explicit metric.
 
 ### Two tiers
 
 **Tier A — deterministic components** (no model anywhere): docmodel, intake rules, transport, contracts, the store. Golden assertions plus a wall-clock budget. Runs in CI on every push.
 
-**Tier B — pipeline evals**: the system under test calls a live model, so it costs money and runs nightly or on demand rather than on every push. CI substitutes `TestModel`.
+**Tier B — pipeline evals**: the system under test calls a live model, so it costs money and runs nightly or on demand rather than on every push. CI substitutes `FakeLlm`.
 
 **The scorer is structural in both tiers.** No LLM-as-judge anywhere. The pipeline is non-deterministic; whether its output is complete is not:
 
@@ -1393,7 +1548,7 @@ packages/mff-manifest/evals/
   cases.yaml          the dataset — inputs + expected, reviewable in a PR diff
   structure.yaml      the structural spec this stage's output must satisfy
   evaluators.py       custom Evaluator subclasses; assert the spec, never judge
-  test_evals.py       Tier A: runs under pytest in CI with TestModel
+  test_evals.py       Tier A: runs under pytest in CI with FakeLlm
   README.md           recorded baseline: violations, p95, tokens, model id, date
 ```
 
@@ -1410,7 +1565,12 @@ Seven agents writing in parallel is exactly how a codebase turns to mud. The def
 - **import-linter** contracts pinning the dependency direction: `services → packages → mff-contracts`, never sideways, never upward. This is the single most valuable gate here — it's what stops B6 from reaching into B4's internals at 2am.
 - **`mff-contracts` has no third-party dependency but `pydantic`.** It's the seam; it stays boring.
 - **Per-package coverage ≥ 85%**, measured per package, not globally — a global number lets one well-tested package hide four untested ones.
-- **No model call outside `llm/` and `agents/`.** Enforced by import-linter.
+- **No model call outside `llm/` and `agents/`.** Enforced by import-linter. The forbidden
+  list is `google` (covering both `google.adk` and `google.genai`), plus `pydantic_ai`,
+  `anthropic`, `openai`, `vertexai` and `litellm`. `pydantic_ai` stays on it precisely
+  *because* we no longer use it: `pydantic-evals` pins `pydantic-ai-slim`, so the module is
+  importable in the dev environment and only this contract stops it drifting back into
+  runtime source.
 - **`pydantic_evals.evaluators.LLMJudge` is forbidden** — enforced by ruff's
   `flake8-tidy-imports.banned-api`, **not** import-linter. Import-linter can only forbid a
   *module*, so expressing this there bans the whole of `pydantic_evals`, taking `Case`,
@@ -1437,7 +1597,7 @@ Each Sonnet agent gets a brief containing, verbatim:
 1. **Requirement ids from the PDF it must satisfy** (e.g. B1 → reqs 14, 15; B5 → reqs 11, 12, 16, 17).
 2. **The exact directories it owns** and the instruction that touching anything else — especially `mff-contracts` — is out of bounds; raise it in the PR description instead.
 3. **The frozen contract signatures** it consumes and produces.
-4. **Test requirements**: unit tests in its own package; no live Gemini calls in CI (`TestModel`/`FunctionModel` only); `make check` green.
+4. **Test requirements**: unit tests in its own package; no live Gemini calls in CI (`FakeLlm` only); `make check` green.
 5. **Eval requirements**: the `evals/` dir for its stage, the invariant assertions at 1.0, and the **recorded baseline** (score, p95 latency, tokens, model id, date) pasted into the PR description. A branch that cannot state its numbers is not done.
 6. **PR discipline**: branch from `main` after B0, one PR, description lists requirement ids covered and any contract change it wants.
 
@@ -1445,7 +1605,7 @@ Each Sonnet agent gets a brief containing, verbatim:
 
 - `make check` — ruff, mypy, pytest across the workspace; no network.
 - `packages/mff-docmodel`: round-trip a fixture docx, assert line ids stable, assert a locked-region edit raises, open the output in Word and confirm comments land in the review pane.
-- `services/editor-service`: `TestModel`-driven machine tests — force a validator failure three times and assert the requirement comes back `unverified` rather than raising.
+- `services/editor-service`: `FakeLlm`-driven machine tests — force a validator failure three times and assert the requirement comes back `unverified` rather than raising.
 - `services/editor-service`: one **live** Gemini smoke test behind an env flag, run manually, not in CI.
 - End-to-end (B9): `docker compose up`, drop the fleet-vehicle-return email into mailpit, assert (a) confirmation reply contains the parsed requirement list, (b) the returned .docx has one comment per requirement, (c) net-new mode produces a document from client inputs alone.
 
@@ -1477,7 +1637,7 @@ all flip to `pass` should fail its spec regardless of what the model was persuad
 
 ### D5 — per-job cost ceiling
 
-`UsageLimits` caps a slice; nothing caps a job. A manifest that parses into 200
+The `UsagePlugin` caps a slice; nothing caps a job. A manifest that parses into 200
 requirements, times three attempts, run to completion in the background, is a bill rather
 than an error — and the parser is itself a model, so a strange manifest can inflate the
 requirement count without anyone having written 200 requirements.

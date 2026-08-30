@@ -1,9 +1,17 @@
 [project]
 name = "mff-store"
 version = "0.1.0"
-description = "Empty skeleton (B0). Owned by a later branch: implementations of the ArtifactRepository, JobRepository, RequestRepository and BlobStore protocols."
+description = "B12: ArtifactRepository, JobRepository, RequestRepository and BlobStore — in-memory and Firestore/GCS adapters."
 requires-python = ">=3.11"
-dependencies = ["mff-contracts"]
+dependencies = [
+    "mff-contracts",
+    # Pinned exactly, not >=: emulator wiring (STORAGE_EMULATOR_HOST resolution order,
+    # AsyncClient credential handling against the Firestore emulator) is version-
+    # sensitive per the brief — verify against the version actually pinned before
+    # bumping, rather than trusting either the old or the new behaviour.
+    "google-cloud-firestore==2.29.0",
+    "google-cloud-storage==3.13.1",
+]
 
 [build-system]
 requires = ["hatchling"]

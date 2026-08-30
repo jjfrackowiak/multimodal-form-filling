@@ -29,11 +29,12 @@ class InMemoryArtifactRepository:
         self._store: dict[str, tuple[Artifact, JobCursor, int]] = {}
 
     async def save(self, artifact: Artifact, cursor: JobCursor, *, expected_version: int) -> int:
-        current = self._store["j-1"][2] if "j-1" in self._store else 0
+        job_id = artifact.job_id
+        current = self._store[job_id][2] if job_id in self._store else 0
         if current != expected_version:
             raise ValueError("version conflict")
         new_version = current + 1
-        self._store["j-1"] = (artifact, cursor, new_version)
+        self._store[job_id] = (artifact, cursor, new_version)
         return new_version
 
     async def load(self, job_id: str) -> tuple[Artifact, JobCursor, int]:
@@ -97,7 +98,7 @@ def test_fakes_satisfy_the_repository_protocols() -> None:
 
 async def test_artifact_repository_round_trips_with_optimistic_locking() -> None:
     repo = InMemoryArtifactRepository()
-    artifact = DerivativeArtifact(form_id="form-1", source=SOURCE)
+    artifact = DerivativeArtifact(job_id="j-1", form_id="form-1", source=SOURCE)
     version = await repo.save(artifact, JobCursor(slice_index=0), expected_version=0)
     assert version == 1
     loaded_artifact, loaded_cursor, loaded_version = await repo.load("j-1")

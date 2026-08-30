@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 class Requirement(BaseModel):
@@ -11,6 +11,18 @@ class Requirement(BaseModel):
     source_span: str = ""
     expected_count: int = Field(default=1, ge=1)
     constraint: str | None = None
+
+    @field_validator("constraint", mode="before")
+    @classmethod
+    def _constraint_value(cls, v: object) -> str | None:
+        """Accept a string or the editor's structured Constraint; store the value."""
+        if v is None or isinstance(v, str):
+            return v
+        if isinstance(v, dict):
+            raw = v.get("value") or v.get("kind")
+            return str(raw) if raw else None
+        raw = getattr(v, "value", None) or getattr(v, "kind", None)
+        return str(raw) if raw else None
 
 
 class ParsedChecklist(BaseModel):

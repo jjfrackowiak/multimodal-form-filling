@@ -16,6 +16,8 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
+from .requirements import Constraint
+
 __all__ = [
     "BlobRef",
     "Finding",
@@ -43,12 +45,14 @@ class RequirementSpec(BaseModel):
 
     A deliberate **projection** of `Requirement`, not a copy. The service receives `id`,
     `text` and `constraint`; it has no business knowing manifest offsets, slice scopes or
-    `applies_to`.
+    `applies_to`. `constraint` carries the same structured `Constraint` as `Requirement`
+    rather than a re-flattened string, so the service and the editor agree on one shape
+    for `kind`/`value` instead of each having to parse or invent an encoding.
     """
 
     id: str
     text: str
-    constraint: str | None = None  # e.g. "camera position: between_front_seats"
+    constraint: Constraint | None = None
 
 
 class RequirementHit(BaseModel):

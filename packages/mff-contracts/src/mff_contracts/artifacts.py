@@ -20,6 +20,7 @@ __all__ = ["Artifact", "DerivativeArtifact", "NetNewArtifact"]
 
 class DerivativeArtifact(BaseModel):
     schema_version: int = Field(default=1, ge=1)
+    job_id: str  # which job this artifact is stored for — form_id alone is not unique
     form_id: str
     source: BlobRef  # immutable
     nodes: list[Node] = Field(default_factory=list)
@@ -28,6 +29,7 @@ class DerivativeArtifact(BaseModel):
 
 class NetNewArtifact(BaseModel):
     schema_version: int = Field(default=1, ge=1)
+    job_id: str  # which job this artifact is stored for — form_id alone is not unique
     form_id: str
     draft: FormDraft
     comments: list[ReviewComment] = Field(default_factory=list)

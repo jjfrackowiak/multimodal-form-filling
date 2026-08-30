@@ -1,8 +1,3 @@
-<!doctype html>
-<html lang="en">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Form Validation Build Plan</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -359,22 +354,14 @@ html{scroll-behavior:smooth}
     border-left:3px solid var(--accent);color:var(--muted);max-width:var(--col)}
   main blockquote p{margin:0}
   main table{border-collapse:collapse;width:100%;display:block;overflow-x:auto}
-</style><style>
-  html{color-scheme:light dark}
-  body{margin:0}
-  img{max-width:100%}
-  [hidden]{display:none!important}
 </style>
-</head>
-<body>
-
 
 <div class="shell">
   <aside class="rail">
     <p class="rail-label">Contents</p>
     <nav id="toc">
       <a href="#context">Context</a>
-      <a href="#framework-grounding-verified-against-current-docs">Framework grounding (verified against current docs)</a>
+      <a href="#framework-grounding-verified-against-current-adk-docs">Framework grounding (verified against current ADK docs)</a>
       <a href="#architecture">Architecture</a>
       <a href="#what-an-email-looks-like">What an email looks like</a>
       <a href="#how-the-manifest-becomes-requirements">How the manifest becomes requirements</a>
@@ -439,15 +426,138 @@ html{scroll-behavior:smooth}
 </tbody>
 </table>
 <p>Not in scope for v1: image tooling (req 13) ships as a <strong>stubbed interface only</strong> — the real understanding service comes later, and cropping is dropped from the interface entirely; OCR/PDF input (D1); job status polling (D2); cross-requirement conflict detection (D3).</p>
-<h2 id="framework-grounding-verified-against-current-docs">Framework grounding (verified against current docs)</h2>
+<h2 id="framework-grounding-verified-against-current-adk-docs">Framework grounding (verified against current ADK docs)</h2>
+<p><strong>The agent framework is Google ADK (<code>google-adk</code>), on Gemini.</strong> Pydantic stays exactly
+where it was: every contract, every tool argument, every structured output and every
+validator is a pydantic model. ADK replaces the <em>agent runtime</em> only — <code>mff-contracts</code>
+does not change by one line.</p>
 <ul>
-<li><strong>Programmatic hand-off</strong> (req 11) is a Pydantic AI documented pattern: agents called in succession from <em>plain Python</em>, each run scoped to its own requirement slice, context carried by <code>message_history=</code> and shared <code>deps</code>/<code>usage</code>. There is no graph DSL needed — the "state machine" is our own explicit loop.</li>
-<li><strong>Shared state</strong> (req 12) = a <code>deps</code> dataclass holding the <code>Artifact</code> python object. Tools mutate it in place; it outlives every run.</li>
-<li><strong>Gemini</strong>: <code>GoogleModel(&lt;model-id&gt;, provider=GoogleProvider(api_key=...))</code>, plus <code>HttpRetryOptions</code> for transport-level retry and <code>UsageLimits</code> per slice.</li>
-<li><strong>Validation/retry</strong> (reqs 16–17): completeness is validated <strong>inside the editor's run</strong>, while the comments are still Python objects, and the retry loop lives there too — so <code>ModelRetry</code> is used natively and no retry state crosses the wire. The orchestrator's only check is at compile: does this render to Word? See <em>Where validation happens</em>.</li>
-<li><strong>Evals</strong>: <code>pydantic-evals</code> ships with Pydantic AI — <code>Case</code>/<code>Dataset</code>/<code>Evaluator</code>, plus built-in <code>IsInstance</code>, <code>Contains</code> and <strong><code>MaxDuration(seconds=...)</code></strong>. <code>EvaluatorContext</code> exposes <code>ctx.duration</code>, <code>ctx.metrics</code> and <code>ctx.span_tree</code>, so correctness, latency and token cost all come out of a single run. Agents are <code>pydantic-ai</code>; evals are <code>pydantic-evals</code>. <strong><code>LLMJudge</code> exists in that library and we do not use it</strong> — see the evals section.</li>
-<li><strong>Comments</strong>: <code>document.add_comment(runs=..., text=..., author=..., initials=...)</code> and <code>document.comments</code> are supported in <code>python-docx</code> ≥ 1.2.</li>
+<li><strong>Programmatic hand-off</strong> (req 11): agents are called in succession from <em>plain Python</em>.
+  Each slice is one <code>Runner.run_async(...)</code> turn against a <strong>per-job ADK session</strong>, so
+  slice N reads what slices 1…N−1 committed. We use no <code>SequentialAgent</code>, no <code>LoopAgent</code>
+  and no graph DSL — the "state machine" is our own explicit loop, which is what makes the
+  ordering auditable.</li>
+<li><strong>Shared state</strong> (req 12) = an <code>EditorDeps</code> dataclass holding the live <code>Artifact</code>. Tools
+  are built by a factory closing over it and mutate it in place. ADK's <code>session.state</code> is a
+  JSON-shaped dict committed per event and is <strong>not</strong> where the artifact lives — see
+  <em>Where the artifact lives</em> below.</li>
+<li><strong>Gemini</strong>: <code>Gemini(model=settings.model_id, retry_options=types.HttpRetryOptions(...))</code>
+  from <code>google.adk.models</code>. The model id is pinned in settings, never an alias.</li>
+<li><strong>Structured output alongside tools is supported.</strong> Both our agents need it — derivative
+  emits <code>ReviewComment[]</code> while calling the vision tool, net-new emits a report while
+  calling <code>set</code>/<code>append</code>/<code>delete</code>. Where a model cannot do both in one request, ADK's
+  <code>_OutputSchemaRequestProcessor</code> transparently injects a <code>set_model_response</code> tool
+  carrying the schema and <strong>leaves the real tools in place</strong>; where it can, the schema goes
+  straight onto the request. <code>output_schema</code> takes a plain pydantic <code>BaseModel</code>.</li>
+<li><strong>Validation/retry</strong> (reqs 16–17): completeness is validated <strong>inside the editor's run</strong>,
+  while the comments are still Python objects, and the retry loop lives there too, so no
+  retry state crosses the wire. ADK has no <code>ModelRetry</code> equivalent and we do not want one —
+  the loop is ours, written out explicitly, which is what rule 2 below already required.
+  The orchestrator's only check is at compile: does this render to Word? See <em>Where
+  validation happens</em>.</li>
+<li><strong>Evals</strong>: <code>pydantic-evals</code> — <code>Case</code>/<code>Dataset</code>/<code>Evaluator</code>, plus built-in <code>IsInstance</code>,
+  <code>Contains</code> and <strong><code>MaxDuration(seconds=...)</code></strong>. <code>EvaluatorContext</code> exposes <code>ctx.duration</code>
+  and <code>ctx.metrics</code>, so correctness, latency and token cost come out of a single run.
+  Keeping it while moving agents to ADK is a deliberate call with a cost — see <em>Why evals
+  stay on pydantic-evals</em>. <strong><code>LLMJudge</code> exists in that library and we do not use it.</strong></li>
+<li><strong>Comments</strong>: <code>document.add_comment(runs=..., text=..., author=..., initials=...)</code> and
+  <code>document.comments</code> are supported in <code>python-docx</code> ≥ 1.2.</li>
 </ul>
+<h3 id="the-mapping-once-for-every-branch">The mapping, once, for every branch</h3>
+<p>Nine agents will each hit the same translation. It is written down here so they do not each
+invent their own.</p>
+<table>
+<thead>
+<tr>
+<th>Concern</th>
+<th>Was (Pydantic AI)</th>
+<th>Is (ADK)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Agent</td>
+<td><code>Agent(output_type=…, instructions=…, toolsets=…)</code></td>
+<td><code>LlmAgent(name=…, model=…, instruction=…, output_schema=…, tools=[…])</code></td>
+</tr>
+<tr>
+<td>Running one turn</td>
+<td><code>await agent.run(prompt, deps=…, message_history=…)</code></td>
+<td><code>async for event in runner.run_async(user_id=…, session_id=…, new_message=…)</code></td>
+</tr>
+<tr>
+<td>Structured output</td>
+<td><code>output_type=SliceReport</code></td>
+<td><code>output_schema=SliceReport</code> — same pydantic model</td>
+</tr>
+<tr>
+<td>Carrying context forward</td>
+<td><code>message_history=</code></td>
+<td>the <strong>same <code>session_id</code></strong>; ADK appends events itself</td>
+</tr>
+<tr>
+<td>Shared mutable state</td>
+<td><code>deps</code> reached via <code>RunContext</code></td>
+<td><code>EditorDeps</code> closed over by the tool factory; <code>ToolContext</code> for scalars</td>
+</tr>
+<tr>
+<td>Tool definition</td>
+<td><code>@agent.tool</code> / <code>toolsets=</code></td>
+<td>plain functions in <code>tools=[…]</code>; a <code>tool_context: ToolContext</code> param is injected and hidden from the model</td>
+</tr>
+<tr>
+<td>Retry on validation failure</td>
+<td><code>ModelRetry</code> from an output validator</td>
+<td>our own <code>for attempt in range(1, 4)</code> loop, re-running the session with the error as the next turn</td>
+</tr>
+<tr>
+<td>Model wiring</td>
+<td><code>GoogleModel(id, provider=GoogleProvider(...))</code></td>
+<td><code>Gemini(model=id, retry_options=types.HttpRetryOptions(...))</code></td>
+</tr>
+<tr>
+<td>Per-run cost cap</td>
+<td><code>UsageLimits</code> / <code>RunUsage</code></td>
+<td>a <code>UsagePlugin</code> on the <code>App</code>, reading <code>LlmResponse.usage_metadata</code></td>
+</tr>
+<tr>
+<td>Test double</td>
+<td><code>TestModel</code> / <code>FunctionModel</code></td>
+<td><code>FakeLlm(BaseLlm)</code> from <code>mff-fakes</code>, passed as <code>model=</code></td>
+</tr>
+<tr>
+<td>Prompt assembly</td>
+<td><code>instructions=</code></td>
+<td><code>instruction=</code>, which also supports <code>{state_key}</code> templating from session state</td>
+</tr>
+<tr>
+<td>Evals</td>
+<td><code>pydantic-evals</code></td>
+<td><code>pydantic-evals</code> — unchanged</td>
+</tr>
+</tbody>
+</table>
+<p>Two things ADK gives us that the old plan hand-rolled, and which we still decline: its
+<code>SessionService</code> persistence (B12 owns job state, and two persistence layers is one too
+many) and its <code>ArtifactService</code> (our <code>Artifact</code> is a live line-addressable object, not a
+blob). Both are noted so a branch does not "discover" them and quietly re-plumb the system.</p>
+<h3 id="where-the-artifact-lives">Where the artifact lives</h3>
+<p>ADK's <code>session.state</code> is a JSON-shaped dict, committed as a <code>state_delta</code> on every event.
+The <code>Artifact</code> is a large, live, line-addressable Python object that tools mutate between
+model calls. <strong>Putting it in <code>session.state</code> would serialise the whole document on every
+tool call</strong>, and req 12 asks for the opposite.</p>
+<p>So:</p>
+<ul>
+<li>The <code>Artifact</code> lives in <code>EditorDeps</code>, held by the run loop for the life of the slice.</li>
+<li>Mutation tools are produced by a factory that closes over that <code>EditorDeps</code>. They mutate
+  in place and append a <code>DraftOp</code> to the log, exactly as before.</li>
+<li><code>session.state</code> carries <strong>only scalars the instruction template interpolates</strong> —
+  <code>slice_id</code>, <code>form_id</code>, requirement count. Small, serialisable, boring.</li>
+<li>None of this crosses a service boundary: <code>SliceRequest</code> in, <code>SliceReport</code> out, both
+  unchanged.</li>
+</ul>
+<p>Req 12 is therefore satisfied literally, and the framework's grain is respected rather than
+fought.</p>
 <h2 id="architecture">Architecture</h2>
 <h3 id="request-job-slice">Request, Job, Slice</h3>
 <pre><code>Request                     one client email — the body is the manifest
@@ -549,9 +659,10 @@ are still Python objects</strong>, which is the whole reason it belongs here: co
 dict lookup on a <code>list[ReviewComment]</code> and archaeology once the same information is OOXML
 comment parts.</p>
 <p>It is deterministic Python — a pydantic validator, not the model grading itself. On
-failure it raises <code>ModelRetry</code>, and the agent tries again with its own previous output and
-the error in front of it. After three attempts the stragglers are marked <code>unverified</code>
-(req 17) and the run returns normally.</p>
+failure the run loop puts the validator's error back into the <strong>same ADK session</strong> as the
+next turn, so the agent tries again with its own previous output and the error in front of
+it. After three attempts the stragglers are marked <code>unverified</code> (req 17) and the run
+returns normally.</p>
 <p><strong>Renderability — at the top layer, in the orchestrator, during compile.</strong> Can this
 artifact actually become a Word document? Does every comment anchor map to a real run?
 That is a different question entirely, and it can only be answered where the rendering
@@ -572,10 +683,10 @@ stubborn slice, <strong>the artifact re-sent with every one</strong> (nodes or d
 payload in the system), and retry state on the wire. Three fields exist only to carry it:
 <code>pending</code> to narrow the ask, <code>history</code> to preserve context, <code>validator_error</code> to explain
 the failure.</p>
-<p><code>history</code> is the telling one. It had to be <code>list[dict[str, Any]]</code> purely to keep
-<code>pydantic-ai</code> out of the frozen package. Move the loop in-run and that problem does not
-need solving: <code>ModelRetry</code> handles it natively, inside the one service that already
-depends on pydantic-ai.</p>
+<p><code>history</code> is the telling one. It had to be <code>list[dict[str, Any]]</code> purely to keep the agent
+framework out of the frozen package. Move the loop in-run and that problem does not need
+solving: the history <em>is</em> the ADK session, which never leaves the process and never has to
+be given a wire type at all.</p>
 <p>The orchestrator keeps sequencing, persistence, and the end-of-job checks — completeness
 across all slices, then compile. What it loses is visibility into intermediate attempts,
 so <code>SliceReport.attempts_used</code> carries that back for telemetry: a prompt that routinely
@@ -599,8 +710,9 @@ three operations — <code>set</code>, <code>append</code>, <code>delete</code>.
 seat entries and that count comes from the requirement, so the slice must create slots the
 scaffold could not have sized without parsing requirements itself.</p>
 <p>Both modes share manifest parsing, slice planning and ordering, the runner, per-requirement
-validation, monotonic retry, the <code>unverified</code> terminal, and delivery. Only the agent and
-its toolset differ.</p>
+validation, monotonic retry, the <code>unverified</code> terminal, and delivery. Only the <code>LlmAgent</code>
+and its <code>tools=[…]</code> list differ — the derivative agent is constructed with no mutation tool
+in that list at all, which is what makes "it cannot edit the body" structural.</p>
 <h3 id="where-compile-and-validation-live">Where compile and validation live</h3>
 <blockquote>
 <p>The editor service is the only thing that calls a model. Everything deterministic lives
@@ -913,6 +1025,25 @@ all maintained for a capability with no caller.</p>
 <p>This is a deliberate narrowing of req 13, recorded rather than assumed. If a real need
 appears — a requirement about a detail too small to judge at full frame — it comes back as
 a scoped addition with a caller attached.</p>
+<h3 id="the-vision-service-is-exempt-from-the-adk-decision">The vision service is exempt from the ADK decision</h3>
+<p><strong>ADK is our choice for the editor. It is not a repo-wide mandate, and specifically not a
+constraint on the vision service.</strong> That service is owned separately (<code>AGENTS.md</code>: Michal
+owns image/CV tooling and req 13) and <strong>may use Pydantic AI</strong> — or anything else. It sits
+behind an HTTP contract (<code>POST /v1/inventory</code>, <code>RequirementSpec</code> in, <code>ImageAnalysis</code> out),
+and what happens on the far side of that boundary is its owner's call. That is the entire
+point of having made it a service rather than a library.</p>
+<p>Two consequences, recorded here because they are exactly the kind of thing a later branch
+"cleans up" by accident:</p>
+<ul>
+<li><strong>If <code>services/vision-*</code> carries a <code>pydantic-ai</code> dependency, that is correct, not
+  leftover.</strong> Do not remove it while migrating anything else, and do not file it as drift.</li>
+<li><strong>The import-linter contract banning model libraries lists <code>vision_stub</code> in its source
+  modules.</strong> When the real service lands and imports a model library, it gets an
+  <code>ignore_imports</code> exemption or comes out of <code>source_modules</code> — it does not get rewritten
+  to match the editor.</li>
+</ul>
+<p><code>mff-vision</code> — the <em>client</em> package on our side — stays clean. It speaks HTTP and imports
+no model library at all, and nothing about the far side changes that.</p>
 <h3 id="why-the-stand-in-is-a-lookup-not-a-constant">Why the stand-in is a lookup, not a constant</h3>
 <p><code>InventoryVisionTool</code> answers from the fixture's labelled inventory, keyed by filename, so
 each image gets its own correct label. The two headliner photographs return <strong>different
@@ -938,35 +1069,104 @@ naturally emits, so they are a proposal rather than a decision. In particular: <
 <code>beside_seat</code>. Left as free text, the editor must interpret strings it has never seen and
 R-04 stops being decidable.</p>
 <h2 id="dependency-pinning">Dependency pinning</h2>
-<p><strong>Never depend on <code>pydantic-ai</code>.</strong> The meta-package resolves to:</p>
-<pre><code>pydantic-ai-slim[openai,anthropic,google,cli,mcp,evals,web,retries,logfire]
-</code></pre>
-<p>which ships the OpenAI <em>and</em> Anthropic SDKs, an MCP client and a CLI into every image
-so we can talk to Gemini. Use the slim package with only the extras we actually call:</p>
+<p><strong>Depend on bare <code>google-adk</code>. Never on an extra we have not read.</strong> The base install is
+25 packages and contains no provider SDK but <code>google-genai</code>, which is the one we want. The
+weight is all in the extras, and two of them are traps:</p>
+<table>
+<thead>
+<tr>
+<th>Extra</th>
+<th>What it drags in</th>
+<th>Verdict</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><em>(none)</em></td>
+<td><code>google-genai</code>, fastapi, starlette, uvicorn, httpx, opentelemetry, authlib</td>
+<td><strong>what we use</strong></td>
+</tr>
+<tr>
+<td><code>[extensions]</code></td>
+<td><strong><code>anthropic</code>, <code>openai</code></strong>, litellm, crewai, langgraph, llama-index, lxml</td>
+<td>never</td>
+</tr>
+<tr>
+<td><code>[all]</code></td>
+<td>all of the above plus ~30 <code>google-cloud-*</code> packages</td>
+<td>never</td>
+</tr>
+<tr>
+<td><code>[eval]</code></td>
+<td>pandas, pyarrow, nltk, rouge-score, <code>google-cloud-aiplatform[evaluation]</code>, openpyxl, xlrd</td>
+<td>never — see below</td>
+</tr>
+<tr>
+<td><code>[gcp]</code></td>
+<td><code>google-cloud-storage</code>, <code>-firestore</code>, agent-engines, GCP OTel exporters</td>
+<td>B12's call, not the editor's</td>
+</tr>
+<tr>
+<td><code>[db]</code></td>
+<td>sqlalchemy — only for ADK's <code>DatabaseSessionService</code>, which we do not use</td>
+<td>no</td>
+</tr>
+</tbody>
+</table>
 <pre><code class="language-toml"># services/editor-service — the only service that talks to a model
 dependencies = [
-  &quot;pydantic-ai-slim[google,evals]&quot;,   # GoogleModel/GoogleProvider + pydantic-evals
+  &quot;google-adk&gt;=2.8&quot;,                  # LlmAgent, Runner, Gemini; google-genai comes with it
   &quot;mff-contracts&quot;, &quot;mff-docmodel&quot;, &quot;mff-vision&quot;,
 ]
 </code></pre>
 <p>Notes for whoever writes these files:</p>
 <ul>
-<li><strong><code>[google]</code></strong> brings <code>google-genai</code>, which is where <code>HttpRetryOptions</code> lives — so the
-  transport-level retry in the plan needs no further extra. The separate <code>[retries]</code>
-  extra is for Pydantic AI's <em>own</em> tenacity transport; add it only if we adopt that
-  instead.</li>
-<li><strong><code>[evals]</code></strong> is how <code>pydantic-evals</code> arrives. It is a real dependency of the eval
-  suites, not a dev convenience, because the structural evaluators import it.</li>
-<li><strong><code>[logfire]</code></strong> stays out by default. Observability is worth having, but it should be
-  a deliberate opt-in per environment rather than weight in every image.</li>
-<li><strong><code>email-service</code> and <code>vision-stub</code> get no model extras at all.</strong> The orchestrator
-  never calls a model — parsing happens in the editor — and the vision placeholder
-  processes nothing. If either grows a <code>pydantic-ai</code> dependency, something has moved to
-  the wrong service.</li>
+<li><strong><code>google-genai</code> is a base dependency of <code>google-adk</code></strong>, which is where
+  <code>types.HttpRetryOptions</code> lives — so transport-level retry needs no extra at all.</li>
+<li><strong><code>pydantic-evals</code> is a dev-group dependency, never a runtime one.</strong> It pins
+  <code>pydantic-ai-slim</code>, and that must not reach a service image. See below.</li>
+<li><strong>Observability stays opt-in.</strong> ADK carries <code>opentelemetry-api</code>/<code>-sdk</code> in its base, but
+  the GCP exporters live in <code>[gcp]</code> and stay out until someone is actually collecting.</li>
+<li><strong><code>email-service</code> gets no agent framework at all.</strong> The orchestrator never calls a model
+  — parsing happens in the editor. If it grows a <code>google-adk</code> dependency, something has
+  moved to the wrong service.</li>
+<li><strong><code>vision-stub</code> gets none either, but the real vision service is not ours and may use
+  whatever it likes — including Pydantic AI.</strong> See below; do not "tidy" that dependency
+  away.</li>
 </ul>
+<p>The old plan spent this section arguing against the <code>pydantic-ai</code> meta-package for shipping
+the OpenAI and Anthropic SDKs into every image. <strong>The same trap exists here under a
+different name</strong> — <code>google-adk[extensions]</code> and <code>google-adk[all]</code> both carry <code>anthropic</code>
+and <code>openai</code>. B8's dependency test, which asserts neither is importable, is therefore
+retained verbatim: it was written against the old trap and catches the new one unchanged.</p>
 <p>Image weight is a deployment concern and deployment is not ours, which is exactly why
 this belongs in the plan: we are the ones who decide what goes in the image, and the
 people who pay for it are not in this repo.</p>
+<h3 id="why-evals-stay-on-pydantic-evals">Why evals stay on <code>pydantic-evals</code></h3>
+<p>Moving the agents to ADK does not move the evals, and this is a decision with a real cost
+rather than a free ride.</p>
+<p><strong>The cost:</strong> <code>pydantic-evals</code> pins <code>pydantic-ai-slim</code> exactly. Keeping it means the
+<code>pydantic_ai</code> module remains importable in the <strong>dev environment</strong>. It is quarantined two
+ways — it lives in the <code>dev</code> dependency group so it never enters a service image, and
+import-linter still bans <code>pydantic_ai</code> from all runtime source, so a drift back into
+<code>agents/</code> fails CI rather than review.</p>
+<p><strong>Why we pay it:</strong> ADK's own harness is the wrong instrument for this system, in the exact
+way the evals section already spells out. <code>AgentEvaluator</code> scores text responses with
+<strong>ROUGE-1 word overlap</strong> and matches tool trajectories — that is a text-similarity
+comparison, which this plan rejects by name because it fails on harmless wording
+differences in a justification while happily passing a document with the wrong verdicts.
+Our scorer is a violation count against a structural spec, threshold zero. On top of that
+<code>google-adk[eval]</code> costs pandas, pyarrow, nltk and <code>google-cloud-aiplatform[evaluation]</code> to
+get there.</p>
+<p><code>pydantic-evals</code> has no opinion about who produced the output. A <code>Case</code> calls a task
+function; that function now drives an ADK <code>Runner</code> instead of a pydantic-ai <code>Agent</code>, and
+<code>Dataset</code>, <code>Evaluator</code>, <code>IsInstance</code>, <code>Contains</code> and <code>MaxDuration</code> are untouched. <strong>The
+one thing lost</strong> is <code>EvaluatorContext.span_tree</code>, which populated from pydantic-ai's own
+instrumentation; token counts now come from ADK's <code>usage_metadata</code> and are passed into the
+case as explicit metrics instead.</p>
+<p>If that dev-only <code>pydantic-ai-slim</code> pin ever becomes a problem, the fallback is a custom
+ADK metric registered on <code>DEFAULT_METRIC_EVALUATOR_REGISTRY</code> — structural, not ROUGE. It is
+strictly more work for the same numbers, so it is a contingency, not a plan.</p>
 <h2 id="the-mailbox">The mailbox</h2>
 <h3 id="locally-greenmail-not-mailpit">Locally — GreenMail, not Mailpit</h3>
 <p>An earlier draft of this plan said Mailpit. That was wrong: <strong>Mailpit is SMTP-only for
@@ -1173,10 +1373,10 @@ and which would make E1 flaky by construction since the fixture asserts an exact
 set.</p>
 <p>All of this happens <strong>inside the editor's run</strong>, so none of it appears in the slice
 contract. Two rules together fix it:</p>
-<p><strong>1. The retry is a continuation.</strong> The agent's own <code>message_history</code> carries forward with
-the validator's error as the new turn — pydantic-ai's documented pattern, and native here
-because the loop never leaves the process. The agent sees its previous output and what was
-wrong with it rather than starting cold.</p>
+<p><strong>1. The retry is a continuation.</strong> The attempt runs against the <strong>same ADK session</strong>, with
+the validator's error appended as the next user turn. ADK accumulates the session's events
+itself, so the agent sees its previous output and what was wrong with it rather than
+starting cold, and we never construct a message history by hand.</p>
 <p><strong>2. A settled answer is never revisited.</strong> Validation runs per requirement. Anything that
 passes is accepted and frozen; the next attempt is asked only about what is still
 outstanding, and an answer returned for an already-settled requirement is discarded.</p>
@@ -1259,12 +1459,16 @@ docker/
 <td>free-text manifest → discrete <code>Requirement[]</code></td>
 </tr>
 <tr>
+<td><code>packages/mff-fakes</code></td>
+<td><code>FakeLlm</code> — the ADK test double every model-touching branch uses</td>
+</tr>
+<tr>
 <td><code>services/email-service</code></td>
 <td>Orchestrator + mail adapter: IMAP poller, SMTP sender</td>
 </tr>
 <tr>
 <td><code>services/editor-service</code></td>
-<td>FastAPI worker: <code>POST /slices:run</code>, Pydantic AI agents (Gemini)</td>
+<td>FastAPI worker: <code>POST /slices:run</code>, ADK agents (Gemini)</td>
 </tr>
 <tr>
 <td><code>fixtures/fleet-vehicle-return</code></td>
@@ -1279,7 +1483,8 @@ docker/
 <h2 id="the-contract-to-freeze-first-mff-contracts">The contract to freeze first (<code>mff-contracts</code>)</h2>
 <p>Everything is written against these. <strong>No branch may edit this package</strong> — a change request
 goes back through the layer-0 owner. It depends on <strong>nothing but pydantic</strong>: no
-<code>pydantic-ai</code>, no service clients, enforced by import-linter.</p>
+<code>google-adk</code>, no <code>google-genai</code>, no service clients, enforced by import-linter. Note that
+this survived the move off Pydantic AI untouched — that is the seam doing its job.</p>
 <h3 id="manifest-and-requirements-reqs-4-5-11">Manifest and requirements — reqs 4, 5, 11</h3>
 <pre><code class="language-python">class Requirement(BaseModel):
     id: str                 # &quot;R-03&quot;, assigned AFTER canonical sort so ids read in order
@@ -1594,6 +1799,17 @@ class BlobStore(Protocol):
 <p>Directory ownership is <strong>disjoint per branch</strong> — that is what keeps 7 concurrent PRs from conflicting.</p>
 <h3 id="layer-0-blocking-one-pr-must-merge-before-anything-else">Layer 0 — blocking, one PR, must merge before anything else</h3>
 <p><strong>B0 · scaffold + contracts</strong> — <code>pyproject.toml</code>, <code>packages/mff-contracts/**</code>, <code>Makefile</code>, CI workflow (ruff + mypy + pytest), empty package/service skeletons so later branches only add files. Ships the frozen models above with full unit tests on the validators (<code>suggestion</code> required when <code>verdict=="fail"</code>, etc.).</p>
+<h3 id="layer-05-one-small-pr-blocks-every-branch-that-touches-a-model">Layer 0.5 — one small PR, blocks every branch that touches a model</h3>
+<p><strong>B15 · <code>feat/fakes</code></strong> — <code>packages/mff-fakes/**</code>. Pydantic AI shipped <code>TestModel</code> and
+<code>FunctionModel</code> as public API; <strong>ADK ships no supported test double</strong>, so we write one. A
+<code>FakeLlm(BaseLlm)</code> that yields scripted <code>LlmResponse</code>s, records every <code>LlmRequest</code> for
+assertion, and is passed straight into <code>LlmAgent(model=…)</code> — ADK's <code>canonical_model</code>
+returns a <code>BaseLlm</code> instance as-is, so no registry work is needed.</p>
+<p>This is ~60 lines and one test file, and it exists as its own PR for one reason: <strong>B2, B6,
+B7 and B8 all need it.</strong> Four private copies of the same fake is precisely the drift the
+ownership table exists to prevent. It also adds <code>mff_fakes</code> to <code>known-first-party</code> and to
+import-linter's <code>root_packages</code>, which is why it cannot be folded into a branch that owns
+neither.</p>
 <h3 id="layer-1-10-prs-in-parallel-all-branch-from-b0">Layer 1 — 10 PRs in parallel, all branch from B0</h3>
 <table>
 <thead>
@@ -1621,7 +1837,7 @@ class BlobStore(Protocol):
 <td><strong>B2</strong></td>
 <td><code>feat/manifest</code></td>
 <td><code>packages/mff-manifest/**</code></td>
-<td>Free text → <code>Requirement[]</code> (req 5): deterministic pre-split + one small Gemini extraction agent, stable ids, <code>source_span</code> provenance, <code>slices()</code> grouping strategy. Tested with <code>FunctionModel</code> — no live API in CI.</td>
+<td>Free text → <code>Requirement[]</code> (req 5): deterministic pre-split + one small Gemini extraction pass, stable ids, <code>source_span</code> provenance, <code>slices()</code> grouping strategy. <strong>The package imports no agent framework</strong> — it calls a <code>RequirementExtractor</code> Protocol the editor service supplies. Tested with <code>FakeLlm</code> — no live API in CI.</td>
 </tr>
 <tr>
 <td><strong>B3</strong></td>
@@ -1645,13 +1861,13 @@ class BlobStore(Protocol):
 <td><strong>B8</strong></td>
 <td><code>feat/llm-config</code></td>
 <td><code>services/editor-service/src/**/llm/**</code>, <code>settings.py</code></td>
-<td><code>GoogleModel</code> + <code>GoogleProvider</code> wiring, pinned model id in settings, <code>HttpRetryOptions</code>, per-slice <code>UsageLimits</code>, shared <code>RunUsage</code> accounting, structured logging. One <code>build_agent()</code> factory both flows call.</td>
+<td>ADK <code>Gemini</code> + <code>Runner</code> + <code>App</code> wiring, pinned model id in settings, <code>types.HttpRetryOptions</code>, a <code>UsagePlugin</code> for per-slice cost accounting, structured logging. One <code>build_agent()</code> factory and one <code>run_slice()</code> retry loop that both flows call.</td>
 </tr>
 <tr>
 <td><strong>B10</strong></td>
 <td><code>feat/docker</code></td>
 <td><code>docker/**</code>, <code>compose.yaml</code></td>
-<td>Multi-stage Dockerfile per service (non-root, uv-installed deps, healthcheck), compose bringing up both services + <code>mailpit</code> for a local mailbox. No GCP, no Terraform.</td>
+<td>Multi-stage Dockerfile per service (non-root, uv-installed deps, healthcheck), compose bringing up both services + GreenMail for a local mailbox. Asserts <code>google-adk</code> is in the editor image and absent from the others. No GCP, no Terraform.</td>
 </tr>
 </tbody>
 </table>
@@ -1692,10 +1908,10 @@ class BlobStore(Protocol):
 <p><strong>B9 · fleet-vehicle-return example + e2e</strong> — <code>fixtures/fleet-vehicle-return/**</code> (manifest free-text, a supplied Word form for derivative, client inputs for net-new, golden expected comments) and an end-to-end test that drives a real email through the fake transport into both modes. This is the demo.</p>
 <h2 id="evals-latency-budgets">Evals &amp; latency budgets</h2>
 <p><strong>Every branch ships an eval suite. A PR without one does not merge.</strong> "It works" is not a claim any subagent gets to make on its own recognisance — each stage must produce a number.</p>
-<p>We use <strong><code>pydantic-evals</code></strong> (ships with Pydantic AI, same ecosystem): <code>Case</code> / <code>Dataset</code> / <code>Evaluator</code>, the built-in <code>IsInstance</code> and <code>Contains</code>, and — directly answering the latency requirement — <strong><code>MaxDuration(seconds=...)</code></strong> as a first-class assertion. <strong><code>LLMJudge</code> is available in that library and is banned here</strong>; a branch importing it fails lint, not review. <code>EvaluatorContext</code> exposes <code>ctx.duration</code>, <code>ctx.metrics</code> and <code>ctx.span_tree</code>, so correctness, latency and token cost come out of one run.</p>
+<p>We use <strong><code>pydantic-evals</code></strong>, kept deliberately when the agents moved to ADK — the reasoning and its cost are in <em>Why evals stay on <code>pydantic-evals</code></em> above, and it is a <strong>dev-group dependency that never enters a service image</strong>. <code>Case</code> / <code>Dataset</code> / <code>Evaluator</code>, the built-in <code>IsInstance</code> and <code>Contains</code>, and — directly answering the latency requirement — <strong><code>MaxDuration(seconds=...)</code></strong> as a first-class assertion. <strong><code>LLMJudge</code> is available in that library and is banned here</strong>; a branch importing it fails lint, not review. <code>EvaluatorContext</code> exposes <code>ctx.duration</code> and <code>ctx.metrics</code>, so correctness and latency come out of one run; token cost is read from ADK's <code>usage_metadata</code> and passed in as an explicit metric.</p>
 <h3 id="two-tiers">Two tiers</h3>
 <p><strong>Tier A — deterministic components</strong> (no model anywhere): docmodel, intake rules, transport, contracts, the store. Golden assertions plus a wall-clock budget. Runs in CI on every push.</p>
-<p><strong>Tier B — pipeline evals</strong>: the system under test calls a live model, so it costs money and runs nightly or on demand rather than on every push. CI substitutes <code>TestModel</code>.</p>
+<p><strong>Tier B — pipeline evals</strong>: the system under test calls a live model, so it costs money and runs nightly or on demand rather than on every push. CI substitutes <code>FakeLlm</code>.</p>
 <p><strong>The scorer is structural in both tiers.</strong> No LLM-as-judge anywhere. The pipeline is non-deterministic; whether its output is complete is not:</p>
 <blockquote>
 <p>non-deterministic system + deterministic scorer = a repeatable number</p>
@@ -1832,7 +2048,7 @@ class BlobStore(Protocol):
   cases.yaml          the dataset — inputs + expected, reviewable in a PR diff
   structure.yaml      the structural spec this stage's output must satisfy
   evaluators.py       custom Evaluator subclasses; assert the spec, never judge
-  test_evals.py       Tier A: runs under pytest in CI with TestModel
+  test_evals.py       Tier A: runs under pytest in CI with FakeLlm
   README.md           recorded baseline: violations, p95, tokens, model id, date
 </code></pre>
 <p><strong>Mutation-test the evaluator.</strong> An evaluator that has only ever seen correct output is worthless — it may be asserting nothing. Each branch must break its own golden output in at least three ways and show the evaluator catching each. This is not optional: the fixture's reference checker had a real bug (a field extractor that swallowed the rest of the comment, so a one-character justification passed a length check) and only mutation testing found it.</p>
@@ -1845,7 +2061,12 @@ class BlobStore(Protocol):
 <li><strong>import-linter</strong> contracts pinning the dependency direction: <code>services → packages → mff-contracts</code>, never sideways, never upward. This is the single most valuable gate here — it's what stops B6 from reaching into B4's internals at 2am.</li>
 <li><strong><code>mff-contracts</code> has no third-party dependency but <code>pydantic</code>.</strong> It's the seam; it stays boring.</li>
 <li><strong>Per-package coverage ≥ 85%</strong>, measured per package, not globally — a global number lets one well-tested package hide four untested ones.</li>
-<li><strong>No model call outside <code>llm/</code> and <code>agents/</code>.</strong> Enforced by import-linter.</li>
+<li><strong>No model call outside <code>llm/</code> and <code>agents/</code>.</strong> Enforced by import-linter. The forbidden
+  list is <code>google</code> (covering both <code>google.adk</code> and <code>google.genai</code>), plus <code>pydantic_ai</code>,
+  <code>anthropic</code>, <code>openai</code>, <code>vertexai</code> and <code>litellm</code>. <code>pydantic_ai</code> stays on it precisely
+  <em>because</em> we no longer use it: <code>pydantic-evals</code> pins <code>pydantic-ai-slim</code>, so the module is
+  importable in the dev environment and only this contract stops it drifting back into
+  runtime source.</li>
 <li><strong><code>pydantic_evals.evaluators.LLMJudge</code> is forbidden</strong> — enforced by ruff's
   <code>flake8-tidy-imports.banned-api</code>, <strong>not</strong> import-linter. Import-linter can only forbid a
   <em>module</em>, so expressing this there bans the whole of <code>pydantic_evals</code>, taking <code>Case</code>,
@@ -1869,7 +2090,7 @@ class BlobStore(Protocol):
 <li><strong>Requirement ids from the PDF it must satisfy</strong> (e.g. B1 → reqs 14, 15; B5 → reqs 11, 12, 16, 17).</li>
 <li><strong>The exact directories it owns</strong> and the instruction that touching anything else — especially <code>mff-contracts</code> — is out of bounds; raise it in the PR description instead.</li>
 <li><strong>The frozen contract signatures</strong> it consumes and produces.</li>
-<li><strong>Test requirements</strong>: unit tests in its own package; no live Gemini calls in CI (<code>TestModel</code>/<code>FunctionModel</code> only); <code>make check</code> green.</li>
+<li><strong>Test requirements</strong>: unit tests in its own package; no live Gemini calls in CI (<code>FakeLlm</code> only); <code>make check</code> green.</li>
 <li><strong>Eval requirements</strong>: the <code>evals/</code> dir for its stage, the invariant assertions at 1.0, and the <strong>recorded baseline</strong> (score, p95 latency, tokens, model id, date) pasted into the PR description. A branch that cannot state its numbers is not done.</li>
 <li><strong>PR discipline</strong>: branch from <code>main</code> after B0, one PR, description lists requirement ids covered and any contract change it wants.</li>
 </ol>
@@ -1877,7 +2098,7 @@ class BlobStore(Protocol):
 <ul>
 <li><code>make check</code> — ruff, mypy, pytest across the workspace; no network.</li>
 <li><code>packages/mff-docmodel</code>: round-trip a fixture docx, assert line ids stable, assert a locked-region edit raises, open the output in Word and confirm comments land in the review pane.</li>
-<li><code>services/editor-service</code>: <code>TestModel</code>-driven machine tests — force a validator failure three times and assert the requirement comes back <code>unverified</code> rather than raising.</li>
+<li><code>services/editor-service</code>: <code>FakeLlm</code>-driven machine tests — force a validator failure three times and assert the requirement comes back <code>unverified</code> rather than raising.</li>
 <li><code>services/editor-service</code>: one <strong>live</strong> Gemini smoke test behind an env flag, run manually, not in CI.</li>
 <li>End-to-end (B9): <code>docker compose up</code>, drop the fleet-vehicle-return email into mailpit, assert (a) confirmation reply contains the parsed requirement list, (b) the returned .docx has one comment per requirement, (c) net-new mode produces a document from client inputs alone.</li>
 </ul>
@@ -1937,7 +2158,7 @@ delimited as data rather than concatenated as instruction, requirement text is t
 untrusted throughout, and the structural evaluator is the backstop — a run whose verdicts
 all flip to <code>pass</code> should fail its spec regardless of what the model was persuaded of.</p>
 <h3 id="d5-per-job-cost-ceiling">D5 — per-job cost ceiling</h3>
-<p><code>UsageLimits</code> caps a slice; nothing caps a job. A manifest that parses into 200
+<p>The <code>UsagePlugin</code> caps a slice; nothing caps a job. A manifest that parses into 200
 requirements, times three attempts, run to completion in the background, is a bill rather
 than an error — and the parser is itself a model, so a strange manifest can inflate the
 requirement count without anyone having written 200 requirements.</p>
@@ -1971,11 +2192,3 @@ no branch owns finding them. The fixture already contains a mild instance — th
   sync();
 })();
 </script>
-
-<script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
-<script>
-  if (window.mermaid) { mermaid.initialize({ startOnLoad: true, theme: "base", securityLevel: "loose" }); }
-  else { document.querySelectorAll("pre.mermaid").forEach(function (el) { el.style.whiteSpace="pre"; el.style.font="12px ui-monospace,monospace"; }); }
-</script>
-</body>
-</html>

@@ -1,14 +1,65 @@
+# Build context for every image in docker/**. Applies repo-wide: Dockerfiles COPY from
+# the repo root (docker build -f docker/<service>.Dockerfile .), so anything expensive or
+# sensitive has to be excluded here, not per-Dockerfile.
+#
+# fixtures/ is the one that matters most: 12 MB of photographs that belong in no
+# production image. vision-stub is the sole exception, and it does not get it via this
+# file — its Dockerfile COPYs exactly one file (inventory.yaml) by explicit path, which
+# stays honest about being the placeholder's one real dependency on the fixture.
+
+# Version control and CI
 .git
-.venv
-**/.venv
-**/__pycache__
-**/*.pyc
-**/.DS_Store
-services/cv/reports
-example_images
-fixtures
+.github
+
+# Docs and specs — not runtime weight
 docs
 multimodal-form-filling
+*.md
+!services/*/README.md
+
+# The fixture — 12 MB of photographs and golden .docx files. vision-stub.Dockerfile is
+# the sole exception, and even it does not get the whole tree back: these three lines
+# re-include just enough path to let it COPY one explicit file, inventory.yaml — the
+# stand-in's one real dependency on the fixture. Negating a file inside an excluded
+# directory requires re-including every ancestor first, which is why this is three
+# patterns rather than one `!inventory.yaml`.
+fixtures/*
+!fixtures/fleet-vehicle-return/
+fixtures/fleet-vehicle-return/*
+!fixtures/fleet-vehicle-return/inventory.yaml
+
+# Local infra config that has no business inside an image
+docker/compose.dev.yaml
+compose.yaml
 mock-firestore-app
+example_images
+/cv/
+
+# Python/uv build & cache artefacts — never ship the host's venv or caches into the image
+.venv
+.venv*
+**/__pycache__
+**/*.py[cod]
+**/*.egg-info
+.mypy_cache
+.ruff_cache
+.pytest_cache
+.coverage
+.coverage.*
+htmlcov
+**/.uv-cache
+dist
+build
+
+# Editors, OS noise, secrets
+.vscode
+.idea
+.DS_Store
+.env
+.env.*
+!.env.example
+
+# Node/other tooling that has no place here
+node_modules
 *.HEIC
 *.heic
