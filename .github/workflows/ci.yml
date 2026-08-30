@@ -43,3 +43,17 @@ jobs:
         run: |
           uv run python fixtures/fleet-vehicle-return/check_output.py \
             fixtures/fleet-vehicle-return/expected_output/report_reviewed.docx
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.5.7"
+          terraform_wrapper: false
+
+      - name: terraform fmt
+        run: terraform fmt -check -recursive infra
+
+      - name: terraform validate
+        run: |
+          terraform -chdir=infra init -backend=false
+          terraform -chdir=infra validate

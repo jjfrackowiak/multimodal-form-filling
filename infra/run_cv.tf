@@ -1,11 +1,14 @@
 resource "google_cloud_run_v2_service" "cv" {
-  count = local.cv_image == "" ? 0 : 1
-
   name     = "cv"
   location = var.region
   ingress  = "INGRESS_TRAFFIC_ALL"
 
   deletion_protection = false
+
+  # API echoes a service-level scaling block we do not set; ignore so applies do not flap.
+  lifecycle {
+    ignore_changes = [scaling]
+  }
 
   template {
     service_account                  = google_service_account.cv.email
@@ -18,7 +21,7 @@ resource "google_cloud_run_v2_service" "cv" {
     }
 
     containers {
-      image = local.cv_image
+      image = var.cv_image
 
       resources {
         limits = {
@@ -62,10 +65,15 @@ resource "google_cloud_run_v2_service" "cv" {
 }
 
 resource "google_cloud_run_v2_service_iam_member" "editor_invokes_cv" {
-  count = local.cv_image == "" ? 0 : 1
-
-  name     = google_cloud_run_v2_service.cv[0].name
-  location = google_cloud_run_v2_service.cv[0].location
+  name     = google_cloud_run_v2_service.cv.name
+  location = google_cloud_run_v2_service.cv.location
   role     = "roles/run.invoker"
   member   = "serviceAccount:${google_service_account.editor.email}"
+}
+
+resource "google_cloud_run_v2_service_iam_member" "github_invokes_cv" {
+  name     = google_cloud_run_v2_service.cv.name
+  location = google_cloud_run_v2_service.cv.location
+  role     = "roles/run.invoker"
+  member   = "serviceAccount:${google_service_account.github_deploy.email}"
 }

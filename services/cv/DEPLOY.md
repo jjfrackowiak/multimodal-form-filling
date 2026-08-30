@@ -1,6 +1,7 @@
 # Cloud Run — CV tool
 
-Canonical deploy is Terraform in `infra/`. This file is the image build only.
+Canonical deploy is GitHub Actions (`.github/workflows/deploy-cv.yml`): Cloud Build
+then Terraform. This file is the laptop equivalent.
 
 Editor calls `POST /v1/inventory`. Runtime SA needs Vertex + Storage object viewer.
 Contract: [`integration_guide_CV.md`](integration_guide_CV.md).
@@ -8,11 +9,10 @@ Contract: [`integration_guide_CV.md`](integration_guide_CV.md).
 ```bash
 PROJECT=linen-badge-507111-r6
 REGION=europe-central2
-IMG=$REGION-docker.pkg.dev/$PROJECT/app/cv:v1
+IMG=$REGION-docker.pkg.dev/$PROJECT/app/cv:$(git rev-parse HEAD)
 
-# from repo root, after `terraform -chdir=infra apply`
-gcloud builds submit --tag "$IMG" -f docker/cv.Dockerfile .
+gcloud builds submit --config docker/cloudbuild-cv.yaml --substitutions=_IMAGE="$IMG" .
 terraform -chdir=infra apply -var="cv_image=$IMG"
 ```
 
-Do not set `ENABLE_JOB_ADAPTER` in production.
+`cv_image` is required. Do not set `ENABLE_JOB_ADAPTER` in production.

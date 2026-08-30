@@ -30,8 +30,13 @@ variable "bucket_name" {
 
 variable "cv_image" {
   type        = string
-  description = "Full CV image URL. Empty skips the Cloud Run service until the first build."
-  default     = ""
+  description = "Full CV image URL (Artifact Registry). Required — omitting it errors instead of deleting Cloud Run."
+}
+
+variable "github_repository" {
+  type        = string
+  description = "GitHub repo allowed to impersonate github-deploy via WIF (owner/name)."
+  default     = "jjfrackowiak/multimodal-form-filling"
 }
 
 variable "vertex_location" {

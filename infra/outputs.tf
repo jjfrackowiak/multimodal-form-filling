@@ -14,8 +14,12 @@ output "artifact_registry" {
   value = "${local.ar_host}/${var.project_id}/${var.artifact_repo}"
 }
 
-output "cv_image_suggested" {
-  value = "${local.ar_host}/${var.project_id}/${var.artifact_repo}/cv:v1"
+output "cv_image_prefix" {
+  value = "${local.ar_host}/${var.project_id}/${var.artifact_repo}/cv"
+}
+
+output "cv_image" {
+  value = var.cv_image
 }
 
 output "cv_runtime_sa" {
@@ -27,6 +31,13 @@ output "editor_runtime_sa" {
 }
 
 output "cv_url" {
-  value       = try(google_cloud_run_v2_service.cv[0].uri, null)
-  description = "Set after the first image build + apply with cv_image."
+  value = google_cloud_run_v2_service.cv.uri
+}
+
+output "github_deploy_sa" {
+  value = google_service_account.github_deploy.email
+}
+
+output "github_wif_provider" {
+  value = google_iam_workload_identity_pool_provider.github.name
 }
