@@ -88,6 +88,18 @@ new_requirement)`. Do not block it — a later requirement legitimately supersed
 one sometimes. But it is the only mechanical signal we have that two requirements may
 contradict each other, so it must be surfaced rather than swallowed.
 
+## What to test against
+
+`fixtures/fleet-vehicle-return/` gives you real data without inventing any:
+
+- **`expected_output/review.yaml`** — ten real `ReviewComment`s, two of them `fail` with
+  suggestions. Build `SliceReport`s from these rather than making up comments.
+- **`expected_requirements.yaml`** — R-01…R-10 with their `ordinal`s, so a slice of six
+  and a slice of four are easy to construct.
+- The **net-new** side is `input/netnew/WN-7020U/` — 17 images and 2 `.txt` files, which is
+  what a `FormDraft` gets built from. R-02 wants **four** seat entries, so it is the
+  natural `append` test.
+
 ## Definition of done
 
 1. `make check` green.

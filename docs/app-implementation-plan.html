@@ -671,6 +671,23 @@ files:</p>
 </code></pre>
 <p>The folder name becomes <code>form_id</code>, so the client's own labelling survives into the reply —
 they named it, and the results email refers to it by that name.</p>
+<h3 id="the-txt-files-are-content-not-instructions">The <code>.txt</code> files are content, not instructions</h3>
+<p>Worth stating plainly, because the contract agent asked and it is exactly the kind of thing
+that gets resolved the convenient way:</p>
+<p><strong>The manifest — what is <em>required</em> — is always the email body.</strong> A <code>.txt</code> file inside a
+net-new folder is never a requirement. It is <strong>complementary material the client supplies
+so that a requirement can be satisfied</strong>: a description of the circumstances, a note about
+what happened, the vehicle's details.</p>
+<p>If a requirement says <em>"describe the condition on return"</em>, <code>uwagi.txt</code> is where the answer
+comes from. The requirement lives in the body; the raw material lives in the folder.</p>
+<p>That split matters because it decides what the net-new agent does with the text. It is
+<strong>source content to compose from</strong>, not a second place to look for instructions — so a
+<code>.txt</code> saying "also add a section about X" is a client describing their situation, not
+amending the manifest. The manifest is the manifest.</p>
+<p>It also settles a shape question left open when <code>ClientInputs</code> was added: <code>texts</code> is a flat
+<code>filename -&gt; content</code> map precisely because these are documents to draw on, not structured
+fields to parse. Nothing needs to know that <code>dane-pojazdu.txt</code> contains a registration
+number — a requirement asking for the registration will find it there.</p>
 <h3 id="this-answers-a-question-that-was-open-all-day">This answers a question that was open all day</h3>
 <p><strong>W12</strong> asked how a client indicates that an image or a requirement pertains to a
 particular form. The zip structure answers it: <strong>containment is the signal.</strong> An image in

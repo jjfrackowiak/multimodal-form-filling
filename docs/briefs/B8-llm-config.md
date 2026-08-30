@@ -103,6 +103,13 @@ That is why `SliceRequest` carries no `pending`, no `history` and no `validator_
 Set `attempts_used` on the report. A slice routinely needing three tries is a prompt
 problem, and it should be visible without reading logs.
 
+## What to test against
+
+- **`fixtures/fleet-vehicle-return/expected_requirements.yaml`** — build a real `SliceRequest` from the first six
+  requirements rather than inventing one.
+- **`fixtures/fleet-vehicle-return/expected_output/review.yaml`** — what a `FunctionModel` should return, so the
+  retry lifecycle is exercised on realistic comments.
+
 ## Definition of done
 
 1. `make check` green, coverage ≥ 85%.

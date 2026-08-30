@@ -128,17 +128,29 @@ description and stop; ten branches depend on that shape.
 client-written Polish manifest. Most briefs assert against it.
 
 ```
-manifest.txt                        10 lines, real, misspelled — do not normalise it
-input/netnew/WN-7020U/              one net-new job: 17 images (15 distinct) + 2 .txt files
-inventory.yaml                      human labels: what each photo shows
-expected_requirements.yaml          the golden parse — 10 requirements, R-01…R-10
-input/derivative/form_supplied.docx the submitted report, 2.8 MB, 17 embedded photos
-                                    the same submission, sent the net-new way
-expected_output/report_reviewed.docx  golden output, 10 real Word comments
+manifest.txt                          THE EMAIL BODY — 10 lines, real, misspelled.
+                                      Do not normalise it.
+inventory.yaml                        human labels: what each photo shows
+expected_requirements.yaml            the golden parse — 10 requirements, R-01…R-10
+
+input/derivative/form_supplied.docx   one DERIVATIVE job. 2.8 MB, 17 embedded photos.
+input/netnew/WN-7020U/                one NET-NEW job. The folder IS the input set.
+  dane-pojazdu.txt                      }  ClientInputs.texts
+  uwagi.txt                             }
+  *.jpg                                 17 files, 15 distinct → JobRequest.images
+
+expected_output/report_reviewed.docx  the golden OUTPUT — 10 real Word comments
 expected_output/delivery.txt          the results email
+expected_output/review.yaml           the review layer, as data
 expected_output/structure.yaml        THE EVAL TARGET
 check_output.py                       reference evaluator — 156 assertions, offline
 ```
+
+**The `.txt` files are content, not instructions.** The manifest — what is *required* —
+is always the email body. A `.txt` in a net-new folder is **complementary material the
+client supplies so a requirement can be satisfied**: a description of the circumstances, a
+note about damage, the vehicle's details. If a requirement says "describe the condition on
+return", `uwagi.txt` is where the answer comes from. Never read a `.txt` as a requirement.
 
 **The case it exists to catch:** the manifest asks for two headliner photos, and a
 constraint **six lines later** says they must be shot from between the front seats. Two
@@ -149,7 +161,7 @@ is wrong.
 Run the evaluator any time:
 
 ```bash
-.venv-fixture/bin/python fixtures/fleet-vehicle-return/check_output.py \
+uv run python fixtures/fleet-vehicle-return/check_output.py \
     fixtures/fleet-vehicle-return/expected_output/report_reviewed.docx
 → PASS  156/156 checks passed
 ```

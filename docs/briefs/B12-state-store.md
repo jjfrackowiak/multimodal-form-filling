@@ -102,6 +102,15 @@ STORAGE_EMULATOR_HOST=http://gcs:4443
 Switch by environment variable only. **No code may branch on "am I local"** — that is the
 seam rotting.
 
+## What to test against
+
+- **`fixtures/fleet-vehicle-return/expected_output/report_reviewed.docx`** — 2.8 MB. Round-trip it through
+  `BlobStore` to prove documents go to GCS rather than Firestore, where they would breach
+  the 1 MiB document cap.
+- **`fixtures/fleet-vehicle-return/input/netnew/WN-7020U/*.jpg`** — 17 files, **15 distinct**. Store all seventeen
+  and assert fifteen blobs; that is the content-addressing test, on real duplicates rather
+  than synthetic ones.
+
 ## Definition of done
 
 1. `make check` green, coverage ≥ 85%.

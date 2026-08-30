@@ -109,6 +109,17 @@ class SliceRunner(Protocol):
 Dispatch through it so the whole orchestrator tests end-to-end with a fake runner, no
 editor service, no HTTP, no model. That fake is also what B9's e2e test will use.
 
+## What to test against
+
+`fixtures/fleet-vehicle-return/` supplies a whole job without inventing data:
+
+- **`manifest.txt`** + **`expected_requirements.yaml`** → ten requirements that chunk into
+  exactly **two slices, 6 and 4**.
+- **`input/derivative/form_supplied.docx`** → a derivative job.
+- **`input/netnew/WN-7020U/`** → a net-new job, so a **mixed request** is one of each,
+  which is the case the contract change exists for.
+- **`expected_output/review.yaml`** → what a fake `SliceRunner` should return.
+
 ## Definition of done
 
 1. `make check` green, coverage ≥ 85%.

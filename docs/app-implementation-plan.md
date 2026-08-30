@@ -312,6 +312,29 @@ net-new.zip
 The folder name becomes `form_id`, so the client's own labelling survives into the reply —
 they named it, and the results email refers to it by that name.
 
+### The `.txt` files are content, not instructions
+
+Worth stating plainly, because the contract agent asked and it is exactly the kind of thing
+that gets resolved the convenient way:
+
+**The manifest — what is *required* — is always the email body.** A `.txt` file inside a
+net-new folder is never a requirement. It is **complementary material the client supplies
+so that a requirement can be satisfied**: a description of the circumstances, a note about
+what happened, the vehicle's details.
+
+If a requirement says *"describe the condition on return"*, `uwagi.txt` is where the answer
+comes from. The requirement lives in the body; the raw material lives in the folder.
+
+That split matters because it decides what the net-new agent does with the text. It is
+**source content to compose from**, not a second place to look for instructions — so a
+`.txt` saying "also add a section about X" is a client describing their situation, not
+amending the manifest. The manifest is the manifest.
+
+It also settles a shape question left open when `ClientInputs` was added: `texts` is a flat
+`filename -> content` map precisely because these are documents to draw on, not structured
+fields to parse. Nothing needs to know that `dane-pojazdu.txt` contains a registration
+number — a requirement asking for the registration will find it there.
+
 ### This answers a question that was open all day
 
 **W12** asked how a client indicates that an image or a requirement pertains to a

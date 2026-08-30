@@ -138,6 +138,17 @@ what you accept and explicit about what you reject.
 **Attachment filenames may be RFC 2047 encoded** (`=?UTF-8?B?...?=`). Decode them, or
 `protokół.docx` arrives as gibberish and your `.docx` check fails on a valid file.
 
+## What to test against
+
+Build your test emails from `fixtures/fleet-vehicle-return/`:
+
+- **`manifest.txt`** is the **email body**. Not an attachment.
+- **`input/derivative/form_supplied.docx`** zipped as `derivative.zip` → one derivative job.
+- **`input/netnew/WN-7020U/`** zipped as `net-new.zip` → one net-new job, `form_id`
+  `WN-7020U`, its two `.txt` files becoming `ClientInputs.texts` and its 17 images becoming
+  `JobRequest.images`.
+- Both zips in one email → the mixed case.
+
 ## Definition of done
 
 1. `make check` green, coverage ≥ 85%.
