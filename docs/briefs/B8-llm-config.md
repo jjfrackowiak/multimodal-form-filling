@@ -238,8 +238,15 @@ problem, and it should be visible without reading logs.
    `GOOGLE_CLOUD_PROJECT` fails loudly at construction rather than on the first model call.
 9. A test that an `LlmAgent` carrying **both** `output_schema` and a non-empty `tools` list
    produces a request in which the real tools survive — assert against
-   `FakeLlm.requests[-1]`. This is the one ADK behaviour the whole design rests on; prove
-   it rather than trusting the release notes.
+   `FakeLlm.requests[-1]`. This is the one ADK behaviour the whole design rests on.
+
+   **Already verified live on 2026-08-30, against this project's Vertex:**
+   `gemini-2.5-flash` reports `capabilities.output_schema_and_tools == True`, so the schema
+   goes straight onto the request and the `set_model_response` fallback is not even
+   exercised. A probe agent with one tool and an `output_schema` called its tool *and*
+   returned JSON that validated against the pydantic model. **You are implementing a
+   behaviour known to work, not gambling on one** — the unit test exists to stop it
+   regressing, and to catch the day a model id changes that capability flag.
 10. Rule 2 tested directly: a requirement that passes on attempt 1 and whose answer the
    model *changes* on attempt 2 must keep its attempt-1 verdict. `FakeLlm` makes this
    scriptable, and it is what keeps E1's exact-match assertion sound.
@@ -247,10 +254,18 @@ problem, and it should be visible without reading logs.
     exceeds its budget short-circuits in `before_model_callback` rather than calling out.
 12. One live smoke test behind an env flag, run manually, never in CI. It runs on **ADC,
     with no key in the environment** — that is what proves the switch actually works. Hit
-    **both** models: the editor's Gemini and the parser's Gemma. This test is also what
-    settles the parser's exact model-id string (Google's docs say `gemma-4-26b-a4b-it`;
-    some integrations show a `-maas` suffix) — resolve it once here and pin it in
-    `.env.example`.
+    **both** models: `gemini-2.5-flash` and `gemma-4-26b-a4b-it-maas`.
+
+    The model ids and location are **settled, verified live on 2026-08-30** — do not
+    re-derive them from the docs, which are wrong here:
+
+    | Setting | Value | Note |
+    |---|---|---|
+    | `GOOGLE_CLOUD_LOCATION` | `global` | regional (`us-central1`) 404s for both models |
+    | `EDITOR_MODEL_ID` | `gemini-2.5-flash` | |
+    | `PARSER_MODEL_ID` | `gemma-4-26b-a4b-it-maas` | the `-maas` suffix is required; without it, 404 |
+
+    Google's own model page gives the parser id *without* `-maas`. It does not work.
 
 ## Out of scope
 
