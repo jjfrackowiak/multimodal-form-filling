@@ -22,6 +22,4 @@ async def build_inventory(
 
     One call per job. The result is index-aligned with the request.
     """
-    return InventoryResponse(
-        images=await svc.build_inventory(body.images, body.requirements)
-    )
+    return InventoryResponse(images=await svc.build_inventory(body.images, body.requirements))

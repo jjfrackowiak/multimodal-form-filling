@@ -18,13 +18,20 @@ requirements, the service knows what it is discriminating between.
 Because the real implementation is remote, the contract is shaped for a network call:
 async, images named by URI so the service fetches them itself, and one round trip per
 job rather than per image.
+
+`ImageAnalysis` and `RequirementSpec` are wire types shared with the editor and are
+defined in `mff_contracts`, not here — this module re-exports them so nothing downstream
+notices. `ImageRef` and `VisionTool` stay local: they are this client's concern, not the
+frozen contract's.
 """
 
 from __future__ import annotations
 
 from typing import Protocol, runtime_checkable
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
+
+from mff_contracts import ImageAnalysis, RequirementSpec
 
 __all__ = [
     "UNKNOWN",
@@ -62,39 +69,6 @@ class ImageRef(BaseModel):
     def name(self) -> str:
         """Basename, which is how humans and the fixture refer to an image."""
         return self.uri.rsplit("/", 1)[-1]
-
-
-class RequirementSpec(BaseModel):
-    """What the vision service is looking for.
-
-    A deliberate **projection** of the editor's `Requirement`, not a copy. The service has
-    no business knowing manifest offsets, slice scopes or `applies_to` — it needs the
-    thing being asked for and any constraint that changes what counts as satisfying it.
-    """
-
-    id: str
-    text: str
-    constraint: str | None = None    # e.g. "camera position: between_front_seats"
-
-
-class ImageAnalysis(BaseModel):
-    """What one photograph actually shows.
-
-    `depicts` answers "what is this a picture of". `shot_from` answers "from where", which
-    is a separate question and the one that decides R-04 in the fleet fixture: two
-    photographs both depict the headliner and only one is taken from between the front
-    seats. Merging the two fields would lose that distinction entirely.
-    """
-
-    file: str
-    depicts: str
-    shot_from: str | None = None
-    note: str | None = None
-    confidence: float = Field(default=1.0, ge=0.0, le=1.0)
-
-    @property
-    def is_known(self) -> bool:
-        return self.depicts != UNKNOWN
 
 
 @runtime_checkable
