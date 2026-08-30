@@ -27,6 +27,13 @@ dev = [
     # "python-docx must not appear in the editor" rules: those bind package source
     # under packages/ and services/, not this repo-root dev tooling group.
     "python-docx>=1.1",
+    # Structural evals (B2's manifest live eval today; B6/B7's slice evals later) stay on
+    # pydantic-evals even though agents are ADK — see CONTEXT.md, "Rules every branch
+    # inherits". A dev-group dependency, same reasoning as python-docx above: it pins
+    # pydantic-ai-slim, which must never reach a service image, so the banned-api rule on
+    # `pydantic_evals.evaluators.LLMJudge` (below) is what actually keeps it honest, not
+    # keeping the package itself out of dev tooling.
+    "pydantic-evals>=0.1",
 ]
 
 # ---------------------------------------------------------------------------
@@ -109,6 +116,23 @@ ignore_missing_imports = true
 # B12: google-cloud-storage ships no py.typed (unlike google-cloud-firestore, which does),
 # so it is unresolved under mypy --strict regardless of import style.
 module = ["google.cloud.storage", "google.cloud.storage.*"]
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+# B2: packages/mff-manifest/tests/live_extractor.py — used ONLY by the manual,
+# env-flag-gated live eval (test_live_eval.py), never by the package itself or by any
+# other test. `google-genai` is mff-manifest's `live-eval` OPTIONAL extra, never installed
+# by `uv sync --all-packages`, so `google.genai` is unresolved in this environment by
+# design. mypy still type-checks everything under tests/ (see the Makefile's `typecheck`
+# target), so the import needs to resolve as `Any` even though the underlying package is
+# absent here. The bare "google" entry is required alongside the dotted ones: with
+# `google.genai` itself absent from disk, mypy's namespace-package resolution reports the
+# gap against the "google" namespace it importantly did locate (via mff-store's
+# google-cloud-* packages), not against "google.genai" — narrowing this to the dotted
+# form alone leaves the original error in place. It does not widen what the existing
+# `google.cloud.storage` override already covers: a bare, non-wildcard "google" entry
+# matches only `import google` itself, and mff-store never imports the package that way.
+module = ["google", "google.genai", "google.genai.*"]
 ignore_missing_imports = true
 
 # ---------------------------------------------------------------------------
