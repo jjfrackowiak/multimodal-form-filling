@@ -2,8 +2,12 @@
 
 from __future__ import annotations
 
+import pytest
+from pydantic import ValidationError
+
 from mff_contracts import (
     BlobRef,
+    ClientInputs,
     CompiledForm,
     IntakeProblem,
     IntakeVerdict,
@@ -16,6 +20,13 @@ from mff_contracts import (
     RequestRecord,
     RequestResult,
     RunSpan,
+)
+
+SOURCE = BlobRef(
+    uri="gs://bucket/jobs/j-1/source/abc",
+    content_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    size_bytes=1024,
+    sha256="abc123",
 )
 
 
@@ -36,7 +47,6 @@ def test_intake_verdict_carries_actionable_problems() -> None:
 def test_request_record_owns_delivery_threading() -> None:
     record = RequestRecord(
         request_id="req-1",
-        mode=Mode.DERIVATIVE,
         manifest_raw="Pod maską",
         reply_to="client@example.com",
         original_message_id="<msg-1@mail>",
@@ -46,10 +56,91 @@ def test_request_record_owns_delivery_threading() -> None:
     assert record.requirements == []
 
 
-def test_job_request_form_is_none_for_net_new() -> None:
-    request = JobRequest(job_id="j-1", request_id="req-1", mode=Mode.NET_NEW, form_id="form-1")
-    assert request.form is None
+def test_job_request_derivative_carries_form_and_no_inputs() -> None:
+    request = JobRequest(
+        job_id="j-1", request_id="req-1", mode=Mode.DERIVATIVE, form_id="form-1", form=SOURCE
+    )
+    assert request.form == SOURCE
+    assert request.inputs is None
     assert request.images == []
+
+
+def test_job_request_net_new_carries_inputs_and_no_form() -> None:
+    inputs = ClientInputs(
+        set_id="folder-1", texts={"notes.txt": "Pojazd zwrócony w stanie dobrym."}
+    )
+    request = JobRequest(
+        job_id="j-1", request_id="req-1", mode=Mode.NET_NEW, form_id="folder-1", inputs=inputs
+    )
+    assert request.form is None
+    assert request.inputs is not None
+    assert request.inputs.texts["notes.txt"] == "Pojazd zwrócony w stanie dobrym."
+
+
+def test_client_inputs_round_trips_utf8_text() -> None:
+    polish = "Na desce rozdzielczej widoczny komunikat o awarii skrzyni biegów."
+    inputs = ClientInputs(set_id="folder-1", texts={"notes.txt": polish})
+    dumped = inputs.model_dump_json()
+    restored = ClientInputs.model_validate_json(dumped)
+    assert restored.texts["notes.txt"] == polish
+
+
+@pytest.mark.parametrize(
+    ("mode", "kwargs"),
+    [
+        pytest.param(
+            Mode.DERIVATIVE,
+            {"form": SOURCE, "inputs": ClientInputs(set_id="folder-1")},
+            id="derivative-with-inputs",
+        ),
+        pytest.param(Mode.DERIVATIVE, {}, id="derivative-with-neither"),
+        pytest.param(
+            Mode.NET_NEW,
+            {"form": SOURCE, "inputs": ClientInputs(set_id="folder-1")},
+            id="net-new-with-form",
+        ),
+        pytest.param(Mode.NET_NEW, {}, id="net-new-with-neither"),
+    ],
+)
+def test_job_request_rejects_mode_payload_mismatch(mode: Mode, kwargs: dict[str, object]) -> None:
+    with pytest.raises(ValidationError, match="JobRequest: mode is"):
+        JobRequest(job_id="j-1", request_id="req-1", mode=mode, form_id="form-1", **kwargs)
+
+
+def test_mixed_request_covers_derivative_and_net_new_jobs_together() -> None:
+    """The case the change exists for: one client email, one RequestRecord, both modes."""
+    derivative_jobs = [
+        JobRequest(
+            job_id=f"j-d{i}",
+            request_id="req-1",
+            mode=Mode.DERIVATIVE,
+            form_id=f"form-{i}.docx",
+            form=SOURCE,
+        )
+        for i in range(3)
+    ]
+    net_new_jobs = [
+        JobRequest(
+            job_id=f"j-n{i}",
+            request_id="req-1",
+            mode=Mode.NET_NEW,
+            form_id=f"folder-{i}",
+            inputs=ClientInputs(set_id=f"folder-{i}", texts={"notes.txt": "treść"}),
+        )
+        for i in range(4)
+    ]
+    all_jobs = derivative_jobs + net_new_jobs
+    record = RequestRecord(
+        request_id="req-1",
+        manifest_raw="Pod maską",
+        job_ids=[job.job_id for job in all_jobs],
+        reply_to="client@example.com",
+        original_message_id="<msg-1@mail>",
+        status="running",
+    )
+    assert len(record.job_ids) == 7
+    assert sum(1 for job in all_jobs if job.mode == Mode.DERIVATIVE) == 3
+    assert sum(1 for job in all_jobs if job.mode == Mode.NET_NEW) == 4
 
 
 def test_request_accepted_quotes_the_parsed_requirements() -> None:
