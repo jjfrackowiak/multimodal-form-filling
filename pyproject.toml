@@ -258,14 +258,11 @@ forbidden_modules = ["pydantic_ai", "anthropic", "openai", "google", "vertexai",
 ignore_imports = [
     "mff_store.firestore_store -> google",
     "mff_store.gcs -> google",
-    "editor_service.llm.agent -> google.adk",
-    "editor_service.llm.deps -> google.adk",
-    "editor_service.llm.model -> google.adk",
-    "editor_service.llm.model -> google.genai",
-    "editor_service.llm.plugins -> google.adk",
-    "editor_service.llm.plugins -> google.genai",
-    "editor_service.llm.run -> google.adk",
-    "editor_service.llm.run -> google.genai",
+    "editor_service.llm.agent -> google",
+    "editor_service.llm.deps -> google",
+    "editor_service.llm.model -> google",
+    "editor_service.llm.plugins -> google",
+    "editor_service.llm.run -> google",
 ]
 
 # ---------------------------------------------------------------------------
