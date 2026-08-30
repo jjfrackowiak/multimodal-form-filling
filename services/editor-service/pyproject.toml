@@ -1,9 +1,28 @@
 [project]
 name = "editor-service"
 version = "0.1.0"
-description = "Empty skeleton (B0). Owned by a later branch: the AI editor — orchestrator, runner, agents, slicing, and compilation (Part 2)."
+description = "The AI editor — the only service that constructs a model client. B8 wires ADK (agent factory, retry loop, settings); B6/B7 add flows/agents on top."
 requires-python = ">=3.11"
-dependencies = ["mff-contracts"]
+dependencies = [
+    "mff-contracts",
+    "mff-vision",
+    # Base install only — see B8 brief ("Use bare google-adk — no extras"):
+    # google-adk[extensions]/[all] both bundle anthropic/openai, which the dependency
+    # test in tests/llm/test_dependencies.py asserts stay uninstalled. types.HttpRetryOptions
+    # lives in google-genai, which the base install already carries.
+    "google-adk>=2.8",
+    # Already transitive dependencies of google-adk (fastapi, uvicorn, starlette); declared
+    # explicitly here because this service's own HTTP surface (/slices:run, /healthz) is
+    # built directly on them, matching the convention in vision-stub and email-service.
+    "fastapi>=0.115",
+    "uvicorn>=0.30",
+]
+
+[dependency-groups]
+# mff-fakes (B15) never ships in this service's image — see the "no module outside llm/
+# and agents/ imports a model library" contract's note on why it is safe as a dev-only
+# dependency. Every test in tests/llm/** uses it in place of a live model (brief DoD 2).
+dev = ["mff-fakes"]
 
 [build-system]
 requires = ["hatchling"]
@@ -14,3 +33,5 @@ packages = ["src/editor_service"]
 
 [tool.uv.sources]
 mff-contracts = { workspace = true }
+mff-vision = { workspace = true }
+mff-fakes = { workspace = true }

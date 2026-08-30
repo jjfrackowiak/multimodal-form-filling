@@ -778,11 +778,29 @@ name = "editor-service"
 version = "0.1.0"
 source = { editable = "services/editor-service" }
 dependencies = [
+    { name = "fastapi" },
+    { name = "google-adk" },
     { name = "mff-contracts" },
+    { name = "mff-vision" },
+    { name = "uvicorn" },
+]
+
+[package.dev-dependencies]
+dev = [
+    { name = "mff-fakes" },
 ]
 
 [package.metadata]
-requires-dist = [{ name = "mff-contracts", editable = "packages/mff-contracts" }]
+requires-dist = [
+    { name = "fastapi", specifier = ">=0.115" },
+    { name = "google-adk", specifier = ">=2.8" },
+    { name = "mff-contracts", editable = "packages/mff-contracts" },
+    { name = "mff-vision", editable = "packages/mff-vision" },
+    { name = "uvicorn", specifier = ">=0.30" },
+]
+
+[package.metadata.requires-dev]
+dev = [{ name = "mff-fakes", editable = "packages/mff-fakes" }]
 
 [[package]]
 name = "email-service"
