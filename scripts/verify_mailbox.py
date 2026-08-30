@@ -157,10 +157,18 @@ def main() -> int:
         print(f"FAIL  message did not arrive within {TIMEOUT:.0f}s")
         return 1
 
-    attachments = [
-        p.get_filename() for p in msg.walk() if p.get_filename()
-    ]
-    body_ok = "Pod maską" in str(msg)
+    attachments = [p.get_filename() for p in msg.walk() if p.get_filename()]
+
+    # Decode the text part before checking. str(msg) is the raw MIME source,
+    # where the body is base64 or quoted-printable — the literal characters are
+    # never in there, so testing against it reports a transport failure that did
+    # not happen.
+    body = ""
+    for part in msg.walk():
+        if part.get_content_type() == "text/plain":
+            payload = part.get_payload(decode=True) or b""
+            body += payload.decode(part.get_content_charset() or "utf-8", "replace")
+    body_ok = "Pod maską" in body
 
     print(f"  received  subject: {msg.get('Subject')}")
     print(f"            message-id: {msg.get('Message-ID')}")
@@ -171,6 +179,7 @@ def main() -> int:
         return 1
     if not body_ok:
         print("FAIL  Polish characters did not survive the round trip")
+        print(f"      decoded body began: {body[:60]!r}")
         return 1
 
     print("PASS  SMTP send and IMAP retrieve both work, with attachment and UTF-8 intact")
