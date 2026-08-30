@@ -243,9 +243,25 @@ forbidden_modules = ["pydantic_ai", "anthropic", "openai", "google", "vertexai",
 #      "google.cloud.storage" / "google.auth.credentials" (which is what the actual
 #      import statements name, and what a narrower, matching ignore would look like if
 #      grimp tracked external submodules by default).
+#
+# B8: editor_service.llm is exactly the `llm/` subpackage this contract's own NOTE
+# (above) anticipated -- it is the one place in the service allowed to import
+# google.adk / google.genai (LlmAgent, App, Gemini, Runner, InMemorySessionService,
+# BasePlugin, types.HttpRetryOptions). `editor_service.api.*` do NOT get an exemption:
+# they depend on the *result* of building an agent (via the SliceRunner callable
+# in api/deps.py), never on google.adk directly, and /healthz (api.routers.health,
+# settings.py) must stay import-clean of it entirely -- see the brief, DoD 7.
 ignore_imports = [
     "mff_store.firestore_store -> google",
     "mff_store.gcs -> google",
+    "editor_service.llm.agent -> google.adk",
+    "editor_service.llm.deps -> google.adk",
+    "editor_service.llm.model -> google.adk",
+    "editor_service.llm.model -> google.genai",
+    "editor_service.llm.plugins -> google.adk",
+    "editor_service.llm.plugins -> google.genai",
+    "editor_service.llm.run -> google.adk",
+    "editor_service.llm.run -> google.genai",
 ]
 
 # ---------------------------------------------------------------------------
