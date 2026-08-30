@@ -60,8 +60,8 @@ def _expected_ordinals() -> dict[str, int]:
 
 @pytest.fixture
 def manifest() -> Manifest:
-    manifest_raw = (FIXTURE / "manifest.txt").read_text(encoding="utf-8")
-    return Manifest(manifest_raw=manifest_raw, requirements=_load_requirements())
+    raw = (FIXTURE / "manifest.txt").read_text(encoding="utf-8")
+    return Manifest(raw=raw, requirements=_load_requirements())
 
 
 def test_requirement_ordinals_match_the_fixtures_expected_ordinals(manifest: Manifest) -> None:

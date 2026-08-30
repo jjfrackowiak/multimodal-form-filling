@@ -6,7 +6,7 @@ derived structure every consumer must build the same way: how requirements group
 slices for review.
 
 Invariants asserted elsewhere (by the parser, not this package): every `source_span`
-appears verbatim in `manifest_raw`, and `id` is assigned after sorting by
+appears verbatim in `Manifest.raw`, and `id` is assigned after sorting by
 `(ordinal, text)` — `text` breaks the tie when two requirements share a span.
 
 `SlicePlan` lives here, next to `Manifest.slices()`, rather than alongside
@@ -33,9 +33,9 @@ class Requirement(BaseModel):
     """One normalised, individually checkable statement extracted from a manifest."""
 
     id: str  # "R-03", assigned AFTER canonical sort so ids read in order
-    ordinal: int  # manifest_raw.index(source_span) — the ordering key
+    ordinal: int  # Manifest.raw.index(source_span) — the ordering key
     text: str  # one normalised, individually checkable statement
-    source_span: str  # VERBATIM substring of manifest_raw
+    source_span: str  # VERBATIM substring of Manifest.raw
     source_line: int  # 1-indexed, for the delivered requirement list
     applies_to: list[str] = Field(default_factory=list)  # form ids; empty = all forms
     expected_count: int = 1  # "4x fotele" is ONE requirement with count 4
@@ -54,8 +54,8 @@ class SlicePlan(BaseModel):
 class Manifest(BaseModel):
     """The parsed manifest: raw text plus the requirements extracted from it."""
 
-    manifest_raw: str
-    requirements: list[Requirement] = Field(default_factory=list)
+    raw: str  # the client's text, byte-for-byte
+    requirements: list[Requirement]  # in canonical (ordinal) order
 
     def slices(self) -> list[SlicePlan]:
         """Sort requirements by `ordinal` ascending, then chunk into groups of at most

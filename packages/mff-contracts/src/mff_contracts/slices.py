@@ -1,13 +1,11 @@
 """Slices — reqs 11, 16, 17.
 
-`history` is typed `list[dict[str, Any]]` on both `SliceRequest` and `SliceReport` —
-deliberately opaque. Typing it as the agent framework's message type would drag
-`pydantic-ai` into the package everything else depends on.
+The retry loop lives inside the editor's run, not across the wire: a `SliceReport` is
+always well-formed by the time it leaves a run, so no retry state (a pending list, a
+validator error, a message history) crosses the boundary that this contract describes.
 """
 
 from __future__ import annotations
-
-from typing import Any
 
 from pydantic import BaseModel, Field
 
@@ -25,17 +23,13 @@ class SliceRequest(BaseModel):
     slice_id: str
     mode: Mode
     requirements: list[Requirement]
-    pending: list[str] = Field(default_factory=list)  # narrows on retry
     artifact: Artifact  # CURRENT: includes prior slices' committed work
     scope_ids: list[str] = Field(default_factory=list)  # node ids or section ids
-    history: list[dict[str, Any]] = Field(default_factory=list)  # OPAQUE
-    validator_error: str | None = None
 
 
 class SliceReport(BaseModel):
     slice_id: str
-    attempt: int
-    comments: list[ReviewComment] = Field(default_factory=list)  # only for ids in `pending`
+    comments: list[ReviewComment] = Field(default_factory=list)  # one per requirement, complete
     ops: list[DraftOp] = Field(default_factory=list)  # net-new only; empty for derivative
-    unanswered: list[str] = Field(default_factory=list)
-    history: list[dict[str, Any]] = Field(default_factory=list)
+    unverified: list[str] = Field(default_factory=list)  # exhausted their three attempts (req 17)
+    attempts_used: int = Field(ge=1)  # telemetry

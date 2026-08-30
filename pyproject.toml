@@ -36,13 +36,19 @@ src = ["packages", "services"]
 extend-exclude = ["docs", "fixtures", "scripts", "multimodal-form-filling", "*.md"]
 
 [tool.ruff.lint]
-select = ["E", "F", "I", "UP", "B", "C4", "SIM", "RUF"]
+select = ["E", "F", "I", "UP", "B", "C4", "SIM", "RUF", "TID"]
 ignore = []
 
 [tool.ruff.lint.flake8-bugbear]
 # FastAPI's dependency-injection idiom is `param: X = Depends(...)`; B008 otherwise flags it
 # as a mutable-default-style footgun, which it is not in FastAPI's calling convention.
 extend-immutable-calls = ["fastapi.Depends", "fastapi.Query", "fastapi.Path", "fastapi.Body"]
+
+[tool.ruff.lint.flake8-tidy-imports.banned-api]
+# Import-linter can only forbid a module, not a symbol inside one -- `pydantic_evals` as a
+# whole is needed by every eval suite (Case, Dataset, Evaluator). This targets the one
+# symbol the plan actually forbids.
+"pydantic_evals.evaluators.LLMJudge".msg = "Evaluators here are structural, never LLM-as-judge. See the evals section of docs/app-implementation-plan.md."
 
 [tool.ruff.lint.isort]
 known-first-party = [
@@ -141,22 +147,6 @@ forbidden_modules = ["pydantic_ai", "anthropic", "openai", "google", "vertexai"]
 # When a branch introduces one, exempt it here with `ignore_imports`, e.g.:
 #   ignore_imports = ["editor_service.agents.reviewer -> pydantic_ai"]
 # rather than removing this contract.
-
-[[tool.importlinter.contracts]]
-name = "pydantic_evals.evaluators.LLMJudge is forbidden anywhere — every evaluator is structural"
-type = "forbidden"
-source_modules = [
-    "mff_contracts",
-    "mff_vision",
-    "mff_docmodel",
-    "mff_manifest",
-    "mff_applier",
-    "mff_store",
-    "email_service",
-    "editor_service",
-    "vision_stub",
-]
-forbidden_modules = ["pydantic_evals"]
 
 # ---------------------------------------------------------------------------
 # coverage — per-package, not global (see Makefile). Protocol method bodies
