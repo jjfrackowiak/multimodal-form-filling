@@ -1,9 +1,9 @@
 # B2 · Manifest parsing
 
 **Branch:** `feat/manifest` → PR into `main`
-**Depends on:** B0 (merged), B15 (`mff-fakes`).
+**Depends on:** B0 (merged). **Not** B15 — see the note on `FakeLlm` below.
 **Needs:** Application Default Credentials for the live eval only — no API key. CI and
-every unit test run on `FakeLlm` with no network. Your model is `PARSER_MODEL_ID`
+every unit test run on a local scripted extractor with no network. Your model is `PARSER_MODEL_ID`
 (`gemma-4-26b-a4b-it`), served on Vertex as MaaS behind the same ADC as the editor's
 Gemini; you never construct the client yourself, so this is the editor service's problem
 and not yours.
@@ -128,8 +128,11 @@ R-05/R-06 and R-08/R-09 each share both offset and span.
 ## Definition of done
 
 1. `make check` green, coverage ≥ 85%.
-2. **Every unit test uses `FakeLlm` from `mff-fakes`, injected through the
-   `RequirementExtractor` Protocol. No network in CI.**
+2. **Every unit test uses a locally-defined scripted `RequirementExtractor`, with no
+   network.** **Do not use `FakeLlm` from `mff-fakes`** — it subclasses
+   `google.adk.models.BaseLlm`, so importing it here would pull `google.adk` into this
+   package's own test suite and violate the "no model library at all" rule above. It is
+   also the wrong shape: an ADK model double, not a `chunk → list[Requirement]` extractor.
 3. Golden test against `expected_requirements.yaml`: all 10 requirements, correct
    `ordinal`, `source_line`, `expected_count`, `constraint` and `ambiguity`.
 4. **Invariant test:** every `source_span` verbatim in `raw`, every `ordinal` equal to its
