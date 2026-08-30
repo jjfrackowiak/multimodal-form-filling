@@ -11,6 +11,8 @@ Email-driven form validation / composition. Spec: [`multimodal-form-filling/emai
 | Image / CV tools (processing, understanding, cropping) | Michal | req. 13 |
 | GCP deployment | Michal | — |
 
+Local GCP mock (api + worker + Firestore emulator + fake GCS): [`mock-firestore-app/`](mock-firestore-app/). App on Cloud Run, Gemini on Vertex, files in the bucket, job records in Firestore.
+
 ## What it is
 
 An email-driven service that receives forms plus a free-text **manifest**, then hands off to an AI editor that either:
