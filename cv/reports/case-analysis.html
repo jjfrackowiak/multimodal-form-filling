@@ -217,7 +217,7 @@ Podsufitka trzeba spomiędzy forteli zrobić</pre>
           <code>ParsedManifest</code> (Pydantic). No <code>expected_requirements.yaml</code>
           — that file is not an input. Look-fors come only from the client text.</li>
         <li><strong>Hash every file (sha256).</strong> Collapse duplicates. The model never sees two copies of the same boot photo as two photos. That is not vision — it is ingest.</li>
-        <li><strong>For each unique image,</strong> call Vertex <code>gemini-2.5-flash</code> with:
+        <li><strong>For each unique image,</strong> call Vertex <code>gemini-3.7-flash</code> with:
           the pixels + a prompt that <em>lists this manifest’s requirements</em> +
           structured output schema <code>ImageLabel</code> (not “please return JSON”).</li>
         <li><strong>Validate</strong> the model output as Pydantic: <code>requirement_ids</code>,

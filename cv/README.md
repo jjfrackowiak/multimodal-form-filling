@@ -18,7 +18,7 @@ python -m cv fixtures/fleet-vehicle-return/images \
 
 `--manifest` only if the yaml lacks `id` or `source_span` on a requirement.
 
-Vertex Gemini (`gemini-2.5-flash`, ADC). Images are downscaled before the call.
+Vertex Gemini (`gemini-3.7-flash`, ADC). Images are downscaled before the call.
 Labels run **in parallel** (`CV_CONCURRENCY` or `--workers`).
 
 Offline checks: `python -m cv.test_offline`
