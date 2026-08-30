@@ -32,18 +32,83 @@ Not in scope for v1: image tooling (req 13) ships as a **stubbed interface only*
 
 ```mermaid
 flowchart TD
-    IMAP["📥 inbound IMAP"] --> ES["email-service"]
-    ES --> IV{"intake validation<br/><i>req 6</i>"}
-    IV -->|invalid| BAD["SMTP reply:<br/>exactly what's missing<br/><i>req 8</i>"]
-    IV -->|valid| JOB["POST /jobs<br/>→ editor-service"]
-    IV -->|valid| ACK["SMTP reply: handed over<br/>+ parsed requirement list<br/><i>req 7</i>"]
+    IMAP["inbound IMAP"] --> ES["email-service"]
+    ES --> IV{"intake validation<br/>req 6"}
+    IV -->|invalid| BAD["SMTP reply:<br/>exactly what is missing<br/>req 8"]
+    IV -->|valid| JOB["POST /jobs<br/>manifest_raw + forms"]
+    JOB --> ED["editor-service parses the manifest<br/>req 5"]
+    ED --> ACC["202 Accepted<br/>returns Requirement[]"]
+    ACC --> ACK["SMTP reply: handed over<br/>+ that exact requirement list<br/>req 7"]
+    ACC --> RUN["job continues async"]
+    RUN -.-> CB["editor calls back on completion"]
+    CB --> DEL["SMTP reply: reviewed documents<br/>+ pass/fail summary + unverified<br/>req 10"]
 ```
+
+### The email service has two roles, not one
+
+This is easy to under-plan, and the first draft of this document did exactly that —
+it stopped at the confirmation and never delivered anything back.
+
+**Role 1 — intake, synchronous.** Receive, validate, hand off, confirm. Everything above.
+
+**Role 2 — delivery, asynchronous.** The job finishes minutes later in another service.
+Something has to put the reviewed Word documents in front of the client, and req 10
+says that output *is* the product. Without this leg the system does nothing useful.
+
+The two roles have almost nothing in common: different triggers (an inbound message vs.
+a completed job), different failure modes, different idempotency keys. They share only
+the transport. That is why delivery is its own branch (**B13**) rather than more surface
+area on intake.
+
+**How delivery is triggered.** The editor calls back to the email service on completion,
+and the email service *also* sweeps for jobs that have been in flight too long. Callback
+alone loses jobs whenever the email service is restarting; polling alone adds latency to
+every job. The sweep costs little because `JobRecord` already exists for D2, and it makes
+a dropped callback recoverable instead of fatal.
+
+**What the delivery email must carry**, beyond the attachments:
+
+- a pass/fail summary, so the client knows the outcome without opening the documents
+- **any requirement marked `unverified`**, called out explicitly. This is where req 17
+  becomes visible to a human: the system gave up after three attempts and the client
+  must be told which checks were never completed rather than left to infer it.
+- on outright failure, a message saying so — which is most of concern **D2** answered
+  almost for free, once this leg exists at all.
+
+**Threading.** The delivery reply sets `In-Reply-To` / `References` against the
+**original client message**, not against the confirmation, so request → confirmation →
+results reads as one conversation.
+
+**Attachment size is a real constraint, not a detail.** The fleet fixture's single
+reviewed document is 2.8 MB with 17 embedded photos. A request carrying several forms
+clears typical limits quickly — Gmail refuses at 25 MB and many corporate servers at 10.
+Delivery therefore attaches below a configured threshold and otherwise sends a signed
+link to the object in the bucket. The documents already live in GCS as `BlobRef`s, so the
+link costs nothing extra.
+
+**Idempotency.** A callback that fires twice, or a callback plus the sweep catching the
+same job, must not send the client two copies. Keyed on `job_id`, with delivery recorded
+on the job record before the send is acknowledged.
+
+**The manifest is parsed exactly once, by the editor, and the list travels back.**
+That ordering is forced by req 7: the confirmation reply has to contain the parsed
+requirements, so the email service cannot send it until the parse exists.
+
+The tempting alternative — the email service parses for the reply, the editor parses
+again for the run — is a **silent correctness bug**. The parser has a model in it
+(see below), so it is not deterministic: two parses of the same manifest can yield
+different requirement sets. The client would then be shown one list while the document
+is graded against another, destroying the exact thing req 7 exists to provide. Parse
+once, return it, store it, never re-derive.
+
+Keeping the parse in the editor also keeps **all model credentials in one service**.
+The email layer never talks to Gemini.
 
 ### Editor layer (`editor-service`, `POST /jobs`)
 
 ```mermaid
 flowchart TD
-    A["PARSE_MANIFEST"] --> M{"mode?"}
+    A["PARSE_MANIFEST<br/>at admission — result returned in the 202"] --> M{"mode?"}
     M -->|derivative| P["PARSE_DOCX<br/>the client's document"]
     M -->|net-new| G["GENERATE_SCAFFOLD<br/>a section per requirement"]
     P --> C["CLASSIFY_REGIONS<br/>an agent decides locked/editable"]
@@ -92,6 +157,97 @@ path, and the pressure from there is all in the wrong direction.
 **Consequence for the plan:** the scaffold generator is a real component, not the
 hand-wave "blank/template doc" this plan carried earlier. It is the one genuinely new
 thing net-new needs, and it belongs to B7.
+
+## How the manifest becomes requirements
+
+Req 5 calls this "a simple parsing / normalisation step". The fleet fixture shows it
+is not simple, and it is worth being concrete about why — this stage is the single
+highest-risk artefact in the system, because every downstream verdict is graded
+against its output.
+
+The client's manifest, verbatim:
+
+```
+16 zdjęć,
+Pod maską
+4x fotele i 2 przekatne pojazdu
+2x podsufitka,
+Pod maską,
+Przednia szyba że środka i zewnątrz
+Bieżnik opony
+zdjęcie bagażnika + wyposażenia pod klapą
+i zegary
+Podsufitka trzeba spomiędzy forteli zrobić
+```
+
+Ten lines, and every one of the four hard cases below is in there.
+
+### Stage 1 — deterministic pre-split (no model)
+
+Break on line boundaries and list markers into candidate chunks. Cheap, reproducible,
+and it establishes the character offsets that provenance depends on. It cannot finish
+the job, for the reasons below.
+
+### Stage 2 — extraction pass (small model call)
+
+Candidate chunks become discrete `Requirement` objects. Four things make this the
+part that needs judgement:
+
+**One line, two requirements.** `Przednia szyba że środka i zewnątrz` is a single line
+naming two separately checkable things — the windscreen from inside (R-05) and from
+outside (R-06). Same with `bagażnika + wyposażenia pod klapą` → R-08 and R-09. A
+line-per-requirement parser silently under-counts.
+
+**Counts are not repetitions.** `4x fotele` is one requirement with `expected_count: 4`,
+not four requirements. Getting this wrong inflates the requirement set and produces
+four near-identical review comments.
+
+**A constraint stranded from its subject.** Line 10, `Podsufitka trzeba spomiędzy
+forteli zrobić`, qualifies `2x podsufitka` on line 4 — six lines away. Attach it to the
+wrong requirement and the wrong photo gets rejected; drop it and R-04 passes when it
+should fail. This is the case that makes a pure line-by-line split insufficient, and
+it is why there is a model here at all.
+
+**Genuine ambiguity, to be surfaced rather than guessed.** `Pod maską` appears twice.
+One reading gives 15 photos, the other 16 — and the client wrote 16 on line 1. The
+parser records the ambiguity on the requirement rather than silently picking; the
+client sees the resolution in the confirmation reply and can correct it.
+
+Note also that the input is misspelled throughout — `że` for `ze`, `forteli` for
+`foteli`, `przekatne` missing its diacritic. Normalising the text before parsing would
+be the obvious move and it is **forbidden**, because of the next stage.
+
+### Stage 3 — provenance binding
+
+Every `Requirement` carries a `source_span` that is a **verbatim substring of the raw
+manifest**. Asserted as an invariant, not scored:
+
+> every `source_span` appears character-for-character in `manifest.txt`
+
+That is what makes the parse auditable — the client can see exactly which of their own
+words produced each requirement, typos and all. It is also what catches a parser that
+has started inventing requirements rather than extracting them, which is the failure
+mode that matters most here: L1 requires recall ≥ 0.95 but **precision 1.0**. Missing a
+requirement is recoverable, since the client sees the list and says so. Inventing one
+means the client is told their document fails a rule they never wrote.
+
+### Stage 4 — slicing
+
+Requirements are grouped by `scope` into the slices each agent run will own (req 11).
+The fixture yields `exterior_mechanical`, `interior`, `glass`, `tyres`, `boot`.
+
+Slice boundaries are a real design decision, not bookkeeping: an agent only ever sees
+its own slice, so two requirements that contradict each other land in different runs
+and neither notices. That is concern **D3**, and slicing is where it is created.
+
+### Why req 7 matters more than it looks
+
+Because there is a model in stage 2, the requirement list is generated, not derived.
+Sending it back to the client in the confirmation reply is the cheapest correction
+point in the entire system — it costs one paragraph of email and catches a misparse
+before a single comment has been written against it.
+
+Which is also why the parse must happen **once**. See the email layer above.
 
 ## State & persistence
 
@@ -215,9 +371,15 @@ class Mode(StrEnum): DERIVATIVE = "derivative"; NET_NEW = "net_new"
 class JobRequest(BaseModel):   # email-service → editor-service
     job_id: str; mode: Mode; manifest_raw: str
     forms: list[FormPayload]; client_inputs: dict[str, Any]
-class JobResult(BaseModel):
+class JobAccepted(BaseModel):  # 202 response — what the confirmation reply quotes
+    job_id: str
+    requirements: list[Requirement]   # parsed once, here; req 7 sends exactly this
+class JobResult(BaseModel):   # editor-service → email-service, on completion
     job_id: str; status: Literal["done", "failed"]
-    documents: list[DocumentPayload]; unverified: list[str]
+    documents: list[DocumentPayload]      # BlobRefs; attached or linked by size
+    unverified: list[str]                 # req 17 — named explicitly in the reply
+    summary: dict[str, int]               # {"pass": 8, "fail": 2, "unverified": 0}
+    failure_detail: str | None = None     # populated when status == "failed"
 
 class IntakeProblem(BaseModel): code: str; detail: str     # req 8: what to add/change
 class IntakeVerdict(BaseModel): valid: bool; problems: list[IntakeProblem]
@@ -231,19 +393,21 @@ Directory ownership is **disjoint per branch** — that is what keeps 7 concurre
 
 **B0 · scaffold + contracts** — `pyproject.toml`, `packages/ffx-contracts/**`, `Makefile`, CI workflow (ruff + mypy + pytest), empty package/service skeletons so later branches only add files. Ships the frozen models above with full unit tests on the validators (`suggestion` required when `verdict=="fail"`, etc.).
 
-### Layer 1 — 8 PRs in parallel, all branch from B0
+### Layer 1 — 9 PRs in parallel, all branch from B0
 
 | ID | Branch | Owns | Deliverable |
 |----|--------|------|-------------|
 | **B1** | `feat/docmodel` | `packages/ffx-docmodel/**` | `.docx → Artifact` (stable line ids incl. table cells), `apply_edits()` surgical line replace with **locked-region enforcement** (raises on a locked target), `attach_comments()` via `python-docx` `add_comment`, `Artifact → .docx`. No AI. Round-trip tests on fixture docs. |
 | **B2** | `feat/manifest` | `packages/ffx-manifest/**` | Free text → `Requirement[]` (req 5): deterministic pre-split + one small Gemini extraction agent, stable ids, `source_span` provenance, `slices()` grouping strategy. Tested with `FunctionModel` — no live API in CI. |
-| **B3** | `feat/intake` | `services/email-service/src/**/{intake,replies}.py` | Req 6/7/8: MIME parse, attachment extraction, mode inference (derivative needs supplied forms — req 3), `IntakeVerdict` rules, and both reply templates — the valid one **embeds the parsed requirement list** (req 7 *Recommended*). |
+| **B3** | `feat/intake` | `services/email-service/src/**/{intake,replies}.py` | Req 6/7/8: MIME parse, attachment extraction, mode inference (derivative needs supplied forms — req 3), `IntakeVerdict` rules, and both reply templates — the valid one **quotes the `Requirement[]` returned in the 202** (req 7 *Recommended*) — it must never parse the manifest itself. |
 | **B4** | `feat/mail-transport` | `services/email-service/src/**/transport/**` | `MailTransport` Protocol + IMAP poller (IDLE/poll, seen-state, idempotency by Message-ID) + SMTP sender with threaded replies (`In-Reply-To`/`References`), **plus an in-memory fake** every other branch tests against. |
 | **B5** | `feat/editor-machine` | `services/editor-service/src/**/{machine,slicing,validation}.py` | The state machine + programmatic hand-off loop: slice iteration, `EditorDeps`, the `SliceReport` validator (every requirement answered / justified / reference resolves — req 16), 3-attempt cap with the error fed back, then `unverified` (req 17). Agent-agnostic: takes a `SliceRunner` Protocol so B6/B7 plug in. Tested with `TestModel`. |
 | **B8** | `feat/llm-config` | `services/editor-service/src/**/llm/**`, `settings.py` | `GoogleModel` + `GoogleProvider` wiring, pinned model id in settings, `HttpRetryOptions`, per-slice `UsageLimits`, shared `RunUsage` accounting, structured logging. One `build_agent()` factory both flows call. |
 | **B10** | `feat/docker` | `docker/**`, `compose.yaml` | Multi-stage Dockerfile per service (non-root, uv-installed deps, healthcheck), compose bringing up both services + `mailpit` for a local mailbox. No GCP, no Terraform. |
 
 | **B12** | `feat/state-store` | `packages/ffx-store/**` | `ArtifactRepository` + `JobRepository`: the in-memory adapter every other branch tests against, and the Firestore + GCS adapter for GCP. Versioned writes, per-slice checkpointing, no credentials needed for the in-memory path. |
+
+| **B13** | `feat/delivery` | `services/email-service/src/**/delivery.py` | **Role 2.** The completion callback endpoint, the stale-job sweep, the results email (summary + unverified called out + failure detail), attach-or-link by size threshold, threading against the original message, and idempotency on `job_id`. Built against the frozen `JobResult` and the in-memory transport, so it needs neither the editor nor a mailbox to develop. |
 
 ### Layer 2 — 3 PRs in parallel, need B1/B5 (+B8)
 
@@ -303,6 +467,7 @@ Everything else is scored with a threshold. Mixing the two is how eval suites en
 | L3 | one slice run (5 reqs) | B5+B6 | **20 s** | invariants 1.0; verdict set matches golden exactly |
 | L4 | net-new slice run | B7 | **20 s** | structural spec violations = 0; reference-resolution 1.0 |
 | A6 | artifact `save` → `load` round-trip | B12 | **300 ms** | version conflict detected; GCS blob pointer resolves |
+| A7 | job complete → results email sent | B13 | **20 s** | exactly one send per `job_id`; unverified listed; threaded on the original |
 | E1 | full derivative job (10 reqs, 1 form) | B9 | **90 s** | end-to-end on the fleet fixture |
 | E2 | full net-new job (10 reqs) | B9 | **120 s** | end-to-end on the fleet fixture |
 
@@ -365,4 +530,4 @@ Each Sonnet agent gets a brief containing, verbatim:
 
 ## Open, carried forward
 
-D1 (PDF/OCR input), D2 (job status after confirmation — the HTTP boundary leaves room for a `GET /jobs/{id}`), D3 (cross-requirement conflicts, invisible to per-slice runs). None blocks v1.
+D1 (PDF/OCR input), D2 (job status after confirmation — largely answered now that B13 exists: the client is told on completion *and* on failure; what remains is status **on demand**, mid-run), D3 (cross-requirement conflicts, invisible to per-slice runs). None blocks v1.

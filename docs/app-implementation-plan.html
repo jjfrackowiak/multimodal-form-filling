@@ -350,7 +350,6 @@ html{scroll-behavior:smooth}
   body{margin:0}
   img{max-width:100%}
   [hidden]{display:none!important}
-  /* mermaid renders into the pre; keep it from inheriting the code-block look */
   pre.mermaid{background:none;border:none;padding:0;margin:0}
   pre.mermaid svg{max-width:100%;height:auto}
 </style>
@@ -366,6 +365,7 @@ html{scroll-behavior:smooth}
       <a href="#scope">Scope &amp; decisions</a>
       <a href="#grounding">Framework grounding</a>
       <a href="#architecture">Architecture</a>
+      <a href="#parsing">Manifest → requirements</a>
       <a href="#state">State &amp; persistence</a>
       <a href="#contract">The frozen contract</a>
       <a href="#branches">Parallel branch tasks</a>
@@ -438,13 +438,35 @@ flowchart TD
     IMAP["inbound IMAP"] --> ES["email-service"]
     ES --> IV{"intake validation<br/>req 6"}
     IV -->|invalid| BAD["SMTP reply:<br/>exactly what is missing<br/>req 8"]
-    IV -->|valid| JOB["POST /jobs<br/>to editor-service"]
-    IV -->|valid| ACK["SMTP reply: handed over<br/>+ parsed requirement list<br/>req 7"]
+    IV -->|valid| JOB["POST /jobs<br/>manifest_raw + forms"]
+    JOB --> ED["editor-service parses<br/>the manifest — req 5"]
+    ED --> ACC["202 Accepted<br/>returns Requirement[]"]
+    ACC --> ACK["SMTP reply: handed over<br/>+ that exact list — req 7"]
+    ACC --> RUN["job continues async"]
+    RUN -.-> CB["editor calls back<br/>on completion"]
+    CB --> DEL["SMTP reply: reviewed documents<br/>+ summary + unverified — req 10"]
 </pre>
         </div>
-        <figcaption>Fig. 1 — intake, and the two replies a client can receive.</figcaption>
+        <figcaption>Fig. 1 — both roles. Intake is synchronous; delivery happens minutes later, on a callback.</figcaption>
       </figure>
-      <p>The confirmation reply carries the <strong>parsed requirement list</strong> (req 7, <em>Recommended</em>). That is the cheapest correction point in the whole system: the client catches a misparsed requirement before a single comment is generated against it.</p>
+      <p><strong>The manifest is parsed exactly once, by the editor, and the list travels back.</strong> That ordering is forced by req 7: the confirmation reply has to contain the parsed requirements, so the email service cannot send it until the parse exists.</p>
+      <h3>The email service has two roles, not one</h3>
+      <p>This is easy to under-plan, and the first draft of this document did exactly that — it stopped at the confirmation and never delivered anything back.</p>
+      <p><strong>Role 1 — intake, synchronous.</strong> Receive, validate, hand off, confirm.</p>
+      <p><strong>Role 2 — delivery, asynchronous.</strong> The job finishes minutes later in another service. Something has to put the reviewed documents in front of the client, and req 10 says that output <em>is</em> the product. Without this leg the system does nothing useful.</p>
+      <p>The two share only the transport — different triggers, different failure modes, different idempotency keys. That is why delivery is its own branch (<strong>B13</strong>) rather than more surface area on intake.</p>
+      <p><strong>Triggering.</strong> The editor calls back on completion, and the email service also sweeps for jobs in flight too long. Callback alone loses jobs whenever the email service is restarting; polling alone adds latency to every job. The sweep is cheap because <code>JobRecord</code> already exists for D2.</p>
+      <p><strong>The delivery email carries more than attachments:</strong> a pass/fail summary so the outcome is readable without opening anything; <strong>every requirement marked <code>unverified</code>, called out explicitly</strong> — this is where req 17 becomes visible to a human, since the system gave up after three attempts and the client must be told which checks were never completed; and on outright failure, a message saying so, which answers most of concern D2 almost for free.</p>
+      <div class="callout">
+        <span class="tag">Attachment size is a constraint, not a detail</span>
+        <p>The fleet fixture's single reviewed document is <strong>2.8 MB</strong> with 17 embedded photos. A request carrying several forms clears typical limits fast — Gmail refuses at 25 MB, many corporate servers at 10. Delivery attaches below a configured threshold and otherwise sends a signed link to the object in the bucket. The documents already live in GCS as <code>BlobRef</code>s, so the link costs nothing extra.</p>
+        <p>Threading sets <code>In-Reply-To</code> against the <strong>original client message</strong>, not the confirmation, so request → confirmation → results reads as one conversation. Idempotency is keyed on <code>job_id</code>: a callback that fires twice, or a callback plus the sweep catching the same job, must not send two copies.</p>
+      </div>
+      <div class="callout">
+        <span class="tag">Why not parse in both services</span>
+        <p>The tempting alternative — the email service parses for the reply, the editor parses again for the run — is a <strong>silent correctness bug</strong>. The parser has a model in it, so it is not deterministic: two parses of the same manifest can return different requirement sets. The client would be shown one list while the document is graded against another, destroying the exact thing req 7 exists to provide.</p>
+        <p>Parse once, return it in the 202, store it, never re-derive. It also keeps every model credential inside one service — the email layer never talks to Gemini.</p>
+      </div>
 
       <h3>Editor layer</h3>
       <figure class="wide">
@@ -452,7 +474,7 @@ flowchart TD
 <pre class="mermaid">
 %%{init:{"theme":"base","themeVariables":{"fontFamily":"JetBrains Mono, ui-monospace, monospace","fontSize":"13px","primaryColor":"#ffffff","primaryTextColor":"#16191d","primaryBorderColor":"#155e63","lineColor":"#5f6b78","tertiaryColor":"#f6f7f8"}}}%%
 flowchart TD
-    A["PARSE_MANIFEST"] --> M{"mode?"}
+    A["PARSE_MANIFEST<br/>at admission"] --> M{"mode?"}
     M -->|derivative| P["PARSE_DOCX<br/>the client's document"]
     M -->|net-new| G["GENERATE_SCAFFOLD<br/>a section per requirement"]
     P --> C["CLASSIFY_REGIONS<br/>an agent decides"]
@@ -489,6 +511,45 @@ flowchart TD
         <span class="chip fail">fail — carries a suggestion</span>
         <span class="chip unver">unverified — retries exhausted</span>
       </div>
+    </section>
+
+    <section id="parsing">
+      <h2>How the manifest becomes requirements</h2>
+      <div class="h2-rule"></div>
+      <p>Req 5 calls this "a simple parsing / normalisation step". The fleet fixture shows it is not simple, and it is worth being concrete — this stage is the highest-risk artefact in the system, because every downstream verdict is graded against its output.</p>
+      <p>The client's manifest, verbatim:</p>
+      <pre class="code">16 zdjęć,
+Pod maską
+4x fotele i 2 przekatne pojazdu
+2x podsufitka,
+Pod maską,
+Przednia szyba że środka i zewnątrz
+Bieżnik opony
+zdjęcie bagażnika + wyposażenia pod klapą
+i zegary
+Podsufitka trzeba spomiędzy forteli zrobić</pre>
+      <p>Ten lines, and every one of the four hard cases below is in there.</p>
+
+      <h3>Stage 1 — deterministic pre-split, no model</h3>
+      <p>Break on line boundaries and list markers into candidate chunks. Cheap, reproducible, and it fixes the character offsets provenance depends on. It cannot finish the job.</p>
+
+      <h3>Stage 2 — extraction pass, small model call</h3>
+      <p><strong>One line, two requirements.</strong> <code>Przednia szyba że środka i zewnątrz</code> is a single line naming two separately checkable things — windscreen from inside (R-05) and outside (R-06). Same for <code>bagażnika + wyposażenia pod klapą</code> → R-08, R-09. A line-per-requirement parser silently under-counts.</p>
+      <p><strong>Counts are not repetitions.</strong> <code>4x fotele</code> is one requirement with <code>expected_count: 4</code>, not four requirements — otherwise you get four near-identical review comments.</p>
+      <p><strong>A constraint stranded from its subject.</strong> Line 10, <code>Podsufitka trzeba spomiędzy forteli zrobić</code>, qualifies <code>2x podsufitka</code> on line 4 — six lines away. Attach it to the wrong requirement and the wrong photo is rejected; drop it and R-04 passes when it should fail. This is the case that makes a pure line split insufficient, and the reason there is a model here at all.</p>
+      <p><strong>Genuine ambiguity, surfaced rather than guessed.</strong> <code>Pod maską</code> appears twice. One reading gives 15 photos, the other 16 — and the client wrote 16 on line 1. The parser records the ambiguity on the requirement instead of silently picking, and the client sees the resolution in the confirmation reply.</p>
+      <p>The input is also misspelled throughout — <code>że</code> for <code>ze</code>, <code>forteli</code> for <code>foteli</code>. Normalising before parsing is the obvious move, and it is <strong>forbidden</strong>, because of the next stage.</p>
+
+      <h3>Stage 3 — provenance binding</h3>
+      <p>Every <code>Requirement</code> carries a <code>source_span</code> that is a <strong>verbatim substring of the raw manifest</strong>, asserted as an invariant rather than scored. That is what makes the parse auditable: the client can see exactly which of their own words produced each requirement, typos and all.</p>
+      <div class="callout">
+        <span class="tag">Recall ≥ 0.95, precision 1.0</span>
+        <p>The asymmetry is deliberate. <strong>Missing</strong> a requirement is recoverable — the client sees the list and says so. <strong>Inventing</strong> one means telling the client their document fails a rule they never wrote. The verbatim-span check is what catches a parser that has started generating instead of extracting.</p>
+      </div>
+
+      <h3>Stage 4 — slicing</h3>
+      <p>Requirements are grouped by <code>scope</code> into the slices each agent run owns (req 11). The fixture yields <code>exterior_mechanical</code>, <code>interior</code>, <code>glass</code>, <code>tyres</code>, <code>boot</code>.</p>
+      <p>Slice boundaries are a real design decision, not bookkeeping: an agent only ever sees its own slice, so two requirements that contradict each other land in different runs and neither notices. That is concern <strong>D3</strong> — and slicing is where it is created.</p>
     </section>
 
     <section id="state">
@@ -563,6 +624,10 @@ flowchart TD
     suggestion: str | None  <span class="c"># required when verdict == "fail"</span>
     source_reference: str   <span class="c"># req 16: must resolve to a real source</span>
 
+<span class="k">class</span> JobAccepted(BaseModel):  <span class="c"># the 202 — req 7 quotes exactly this</span>
+    job_id: str
+    requirements: list[Requirement]   <span class="c"># parsed once, here</span>
+
 <span class="k">class</span> Artifact(BaseModel):  <span class="c"># req 12: outlives any single run</span>
     lines: list[Line]
     regions: list[Region]
@@ -587,7 +652,7 @@ flowchart TD
     <section id="branches">
       <h2>Parallel branch tasks</h2>
       <div class="h2-rule"></div>
-      <p>Directory ownership is <strong>disjoint per branch</strong> — that is what keeps concurrent PRs from colliding. Layers are honest about dependencies: peak parallelism is eight-wide, not thirteen.</p>
+      <p>Directory ownership is <strong>disjoint per branch</strong> — that is what keeps concurrent PRs from colliding. Layers are honest about dependencies: peak parallelism is nine-wide, not fourteen.</p>
 
       <div class="layer">
         <div class="layer-head">
@@ -607,7 +672,7 @@ flowchart TD
         <div class="layer-head">
           <span class="layer-n">Layer 1</span>
           <span class="layer-t">Fully parallel — all branch from B0</span>
-          <span class="layer-w">8 PRs</span>
+          <span class="layer-w">9 PRs</span>
         </div>
         <div class="cards">
           <div class="card">
@@ -644,6 +709,11 @@ flowchart TD
             <div class="card-top"><span class="card-id">B12</span><span class="card-br">feat/state-store</span></div>
             <div class="owns">packages/ffx-store</div>
             <p><code>ArtifactRepository</code> and <code>JobRepository</code>: the in-memory adapter every other branch tests against, and the Firestore + GCS adapter for GCP. Versioned writes, per-slice checkpointing, no credentials on the in-memory path.</p>
+          </div>
+          <div class="card">
+            <div class="card-top"><span class="card-id">B13</span><span class="card-br">feat/delivery</span></div>
+            <div class="owns">email-service/delivery</div>
+            <p><strong>Role 2.</strong> Completion callback, stale-job sweep, the results email (summary, unverified called out, failure detail), attach-or-link by size, threading on the original message, idempotency on <code>job_id</code>.</p>
           </div>
           <div class="card">
             <div class="card-top"><span class="card-id">B10</span><span class="card-br">feat/docker</span></div>
@@ -728,6 +798,7 @@ flowchart TD
             <tr><td class="id">L3</td><td>one slice run, 5 reqs</td><td class="num">B5+B6</td><td class="num">20 s</td><td>invariants 1.0; verdict set matches golden exactly</td></tr>
             <tr><td class="id">L4</td><td>net-new slice run</td><td class="num">B7</td><td class="num">20 s</td><td>structural violations = 0; reference resolution 1.0</td></tr>
             <tr><td class="id">A6</td><td>artifact save → load round-trip</td><td class="num">B12</td><td class="num">300 ms</td><td>version conflict detected; blob pointer resolves</td></tr>
+            <tr><td class="id">A7</td><td>job complete → results email sent</td><td class="num">B13</td><td class="num">20 s</td><td>one send per job_id; unverified listed; threaded</td></tr>
             <tr><td class="id">E1</td><td>full derivative job</td><td class="num">B9</td><td class="num">90 s</td><td>end-to-end on the fleet fixture</td></tr>
             <tr><td class="id">E2</td><td>full net-new job</td><td class="num">B9</td><td class="num">120 s</td><td>end-to-end on the fleet fixture</td></tr>
           </tbody>
@@ -843,9 +914,6 @@ flowchart TD
 
 <script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
 <script>
-  // Diagrams sit on a constant light plate in both themes, so pin the mermaid
-  // theme to light rather than following the OS — its colours are baked into
-  // the emitted SVG and cannot re-resolve when the page theme flips.
   if (window.mermaid) {
     mermaid.initialize({ startOnLoad: true, theme: "base", securityLevel: "loose" });
   } else {
