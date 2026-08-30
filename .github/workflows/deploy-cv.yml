@@ -58,6 +58,7 @@ jobs:
           terraform_wrapper: false
 
       - name: terraform apply
+        id: tf
         working-directory: infra
         env:
           TF_IN_AUTOMATION: "true"
@@ -65,10 +66,17 @@ jobs:
         run: |
           terraform init
           terraform apply -auto-approve -var="cv_image=${{ steps.image.outputs.img }}"
+          echo "url=$(terraform output -raw cv_url)" >> "$GITHUB_OUTPUT"
+
+      # WIF ADC cannot gcloud auth print-identity-token --audiences (SA-key only).
+      - uses: google-github-actions/auth@v2
+        id: oidc
+        with:
+          project_id: ${{ env.PROJECT_ID }}
+          workload_identity_provider: projects/19550183464/locations/global/workloadIdentityPools/github/providers/github-oidc
+          service_account: github-deploy@linen-badge-507111-r6.iam.gserviceaccount.com
+          token_format: id_token
+          id_token_audience: ${{ steps.tf.outputs.url }}
 
       - name: GET /health
-        working-directory: infra
-        run: |
-          URL="$(terraform output -raw cv_url)"
-          TOKEN="$(gcloud auth print-identity-token --audiences="$URL")"
-          curl -fsS -H "Authorization: Bearer $TOKEN" "$URL/health"
+        run: curl -fsS -H "Authorization: Bearer ${{ steps.oidc.outputs.id_token }}" "${{ steps.tf.outputs.url }}/health"
