@@ -583,6 +583,35 @@ the failure this causes, and it looks exactly like "no mail arrived".
 variable or a mounted secret at runtime. An image with a working password inside it is a
 credential leak wearing a Dockerfile.
 
+### Getting a mailbox without a phone number
+
+Gmail's App Passwords require 2-Step Verification, and enabling that on a *new*
+account normally means phone verification. Three ways round it, in order of effort.
+
+**1. Reuse an existing account with plus-addressing and a label.** Gmail exposes labels
+as IMAP folders. A filter routing `you+forms@gmail.com` to a `FormRequests` label lets
+the poller select that folder and never read personal mail. No new account, no phone —
+provided the existing account already has 2-Step Verification, which established
+accounts usually do.
+
+Set `IMAP_FOLDER=FormRequests`. **Never assume `INBOX`** — that is the setting that makes
+this arrangement safe to run.
+
+Be clear-eyed about the limit: an App Password grants the *whole* mailbox. Folder
+scoping constrains what we read, not what we could read. Acceptable for a demo against
+your own account; not something to carry into production against anyone else's.
+
+**2. A paid mailbox that does not ask for a phone.** Purelymail (~$10/year, IMAP with
+IDLE), Migadu, Mailbox.org, or a Fastmail trial. Cleanest separation — a real service
+account, no entanglement with anyone's personal mail, and app-password support. Worth it
+the moment this outlives the hackathon.
+
+**3. Stay on GreenMail.** Everything except real delivery already works without any
+account at all, so this only blocks the final hop.
+
+Whichever is chosen, `IMAP_FOLDER` stops being an assumption and becomes configuration —
+which is the part that matters for B4 regardless of which route is taken.
+
 ### In production
 
 A Gmail account with an **App Password** is the quickest real mailbox: enable 2-Step

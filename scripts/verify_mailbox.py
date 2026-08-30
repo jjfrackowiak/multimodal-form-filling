@@ -37,6 +37,7 @@ SMTP_HOST = os.environ.get("SMTP_HOST", "localhost")
 SMTP_PORT = int(os.environ.get("SMTP_PORT", "3025"))
 USER = os.environ.get("IMAP_USER", "forms@example.test")
 PASSWORD = os.environ.get("IMAP_PASSWORD", "anything")
+FOLDER = os.environ.get("IMAP_FOLDER", "INBOX")
 SMTP_USER = os.environ.get("SMTP_USER", USER)
 SMTP_PASSWORD = os.environ.get("SMTP_PASSWORD", PASSWORD)
 MAIL_FROM = os.environ.get("MAIL_FROM", USER)
@@ -62,7 +63,10 @@ def send(marker: str) -> None:
     # send and receive, which is what the service needs. A real client message
     # arrives from elsewhere, but that path is identical from here.
     msg["From"] = MAIL_FROM
-    msg["To"] = USER
+    # Send to the polled address. With plus-addressing this is what a Gmail
+    # filter matches on, so the verifier exercises the same route real requests
+    # take rather than a shortcut past it.
+    msg["To"] = os.environ.get("MAIL_TO", USER)
     msg["Subject"] = f"Walidacja formularza [{marker}]"
     msg["Message-ID"] = f"<{marker}@example.test>"
     msg.set_content(
@@ -89,7 +93,7 @@ def fetch(marker: str) -> email.message.Message | None:
     while time.monotonic() < deadline:
         with _imap() as m:
             m.login(USER, PASSWORD)
-            m.select("INBOX")
+            m.select(FOLDER)
             typ, data = m.search(None, "ALL")
             for num in data[0].split():
                 typ, raw = m.fetch(num, "(RFC822)")
@@ -104,7 +108,7 @@ def main() -> int:
     marker = uuid.uuid4().hex[:8]
     print(f"SMTP  {SMTP_HOST}:{SMTP_PORT} tls={SMTP_TLS}")
     print(f"IMAP  {IMAP_HOST}:{IMAP_PORT} tls={IMAP_TLS}")
-    print(f"user  {USER}")
+    print(f"user  {USER}   folder {FOLDER}")
 
     try:
         send(marker)
