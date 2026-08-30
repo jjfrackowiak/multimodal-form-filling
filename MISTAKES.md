@@ -1,5 +1,10 @@
 # Mistakes
 
+## 2026-08-30 — GCP is Terraform later
+
+**Note (not a bug yet):** User wants GCP as **code (Terraform)**. Do not design around permanent console/`gcloud` snowflakes. `DEPLOY.md` is temporary. When provisioning Cloud Run / Firestore / bucket / IAM / Vertex, add `.tf` in-repo.
+
+
 ## 2026-08-30 — CV is not inside the editor service
 
 **What went wrong:** Talked about B11 as `services/editor-service/.../tools/vision` (`VisionTool` living in the editorial process). That matches Janek’s implementation plan, not how we are building it.

@@ -1,5 +1,7 @@
 # Deploy to a real project (not the emulator)
 
+**Future note:** production GCP should be **Terraform** in this repo, not a one-off `gcloud` script. The commands below are a bootstrap cheat sheet until that exists.
+
 Project: `linen-badge-507111-r6` (`all-things-agentic-google`).
 
 Grok is **not** logged into your GCP. Run these locally after

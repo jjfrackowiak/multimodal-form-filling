@@ -7,7 +7,7 @@ Two owners. Do not cross the line unless asked.
 ## Michal (`michaluppal`)
 
 - Image / CV tools (req. 13): image processing, image understanding, cropping.
-- GCP deployment.
+- GCP deployment. **Future: Terraform (infrastructure as code)** — Cloud Run, Firestore, GCS, IAM, Vertex access. Do not treat `gcloud` console clicks or `gcp/DEPLOY.md` as the long-term source of truth. No Terraform tree yet; when we provision for real, start with `.tf` in-repo.
 
 **CV is its own service** (`cv/`). It is **not** inside the AI editor. For now the deliverable is **`inventory.yaml`** (depicts + headliner `shot_from`). Cropping is deferred. Duplicates are sha256, not the model.
 
