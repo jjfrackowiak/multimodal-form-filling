@@ -82,6 +82,15 @@ wraps ADK's `BaseLlm`, which is exactly the import this package's tests also pro
   here now; today it proves the plumbing carries no text-sniffing logic of its own.
 - `test_import_boundary.py` — the Protocol boundary, proven rather than assumed.
 
+**Mutation-tested.** `parser.py` was broken three ways and the suite caught each: dropping
+the `(ordinal, text)` tiebreak back to `ordinal` alone (2 failures, in
+`test_ids_and_ordering.py`), skipping constraint-span verification in the retry loop (1
+failure — the constraint invariant is still caught by `_canonicalise`'s own check, just as
+an unexpected exception type rather than a clean `ManifestParseError`), and trusting the
+extractor's `ordinal` instead of recomputing it from `source_span` (6 failures, across the
+golden test and the invariant test). Not committed — reproduce with `git stash` after
+editing `parser.py` by hand if you want to see it again.
+
 ## Live eval
 
 Gated behind `MFF_MANIFEST_LIVE_EVAL=1`, never run in CI. `tests/live_extractor.py`
