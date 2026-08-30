@@ -9,14 +9,19 @@ from __future__ import annotations
 import httpx
 import pytest
 
-from mff_vision import HttpVisionTool, ImageRef, RequirementSpec, VisionUnavailable
+from mff_vision import Constraint, HttpVisionTool, ImageRef, RequirementSpec, VisionUnavailable
 from vision_stub.main import create_app
 
 REQS = [
     RequirementSpec(
         id="R-04",
         text="Two photographs of the headliner.",
-        constraint="camera position: between_front_seats",
+        constraint=Constraint(
+            kind="camera_position",
+            value="between_front_seats",
+            source_span="Podsufitka trzeba spomiędzy forteli zrobić",
+            source_line=10,
+        ),
     )
 ]
 

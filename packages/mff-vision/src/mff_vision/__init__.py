@@ -9,6 +9,7 @@ from .client import HttpVisionTool
 from .mock import InventoryVisionTool
 from .models import (
     UNKNOWN,
+    Constraint,
     ImageAnalysis,
     ImageRef,
     RequirementSpec,
@@ -18,6 +19,7 @@ from .models import (
 
 __all__ = [
     "UNKNOWN",
+    "Constraint",
     "HttpVisionTool",
     "ImageAnalysis",
     "ImageRef",
