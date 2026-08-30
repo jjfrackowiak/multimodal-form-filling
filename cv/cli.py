@@ -7,7 +7,7 @@ import sys
 from pathlib import Path
 
 from cv.dump import inventory_to_yaml
-from cv.pipeline import DEFAULT_WORKERS, build_inventory
+from cv.pipeline import MAX_WORKERS, build_inventory
 from cv.vertex import LOCATION, MODEL, PROJECT
 
 
@@ -17,11 +17,16 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--requirements", type=Path, required=True)
     p.add_argument("--manifest", type=Path, default=None)
     p.add_argument("--out", type=Path, default=Path("inventory.generated.yaml"))
-    p.add_argument("--workers", type=int, default=DEFAULT_WORKERS)
+    p.add_argument(
+        "--workers",
+        type=int,
+        default=None,
+        help=f"parallel Vertex calls; default min(n_images, {MAX_WORKERS})",
+    )
     args = p.parse_args(argv)
 
     print(
-        f"Vertex project={PROJECT} location={LOCATION} model={MODEL} workers={args.workers}",
+        f"Vertex project={PROJECT} location={LOCATION} model={MODEL}",
         flush=True,
     )
     try:

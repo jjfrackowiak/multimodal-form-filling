@@ -12,7 +12,7 @@ T = TypeVar("T", bound=BaseModel)
 
 PROJECT = os.environ.get("GOOGLE_CLOUD_PROJECT", "linen-badge-507111-r6")
 LOCATION = os.environ.get("GOOGLE_CLOUD_LOCATION", "global")
-MODEL = os.environ.get("CV_MODEL", "gemini-3.7-flash")
+MODEL = os.environ.get("CV_MODEL", "gemini-2.5-flash")
 
 
 def client() -> genai.Client:

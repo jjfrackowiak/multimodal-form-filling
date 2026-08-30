@@ -13,7 +13,7 @@ from cv.schema import ImageLabel, Inventory, InventoryImage, ParsedChecklist
 from cv.vertex import client as vertex_client
 from cv.vertex import generate_structured
 
-DEFAULT_WORKERS = int(os.environ.get("CV_CONCURRENCY", "6"))
+MAX_WORKERS = int(os.environ.get("CV_MAX_WORKERS", "12"))
 
 
 def _label_one(
@@ -44,7 +44,7 @@ def build_inventory(
     images: Path,
     requirements: Path,
     manifest: Path | None = None,
-    workers: int = DEFAULT_WORKERS,
+    workers: int | None = None,
 ) -> Inventory:
     checklist = load_checklist(requirements)
     if spans_complete(checklist):
@@ -59,8 +59,11 @@ def build_inventory(
         raise FileNotFoundError(f"no images in {images}")
     unique, pairs = collapse_duplicates(files)
 
+    cap = MAX_WORKERS if workers is None else max(1, workers)
+    n = max(1, min(len(unique), cap, MAX_WORKERS))
+    print(f"labeling {len(unique)} images with {n} workers (cap {MAX_WORKERS})", flush=True)
+
     c = vertex_client()
-    n = max(1, workers)
     rows: list[InventoryImage] = []
     with ThreadPoolExecutor(max_workers=n) as pool:
         futs = {
