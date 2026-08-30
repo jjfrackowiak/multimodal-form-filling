@@ -47,7 +47,8 @@ extend-immutable-calls = ["fastapi.Depends", "fastapi.Query", "fastapi.Path", "f
 [tool.ruff.lint.flake8-tidy-imports.banned-api]
 # Import-linter can only forbid a module, not a symbol inside one -- `pydantic_evals` as a
 # whole is needed by every eval suite (Case, Dataset, Evaluator). This targets the one
-# symbol the plan actually forbids.
+# symbol the plan actually forbids. Note that `pydantic-evals` is a DEV-GROUP dependency
+# only: it pins `pydantic-ai-slim`, which must never reach a service image. Agents are ADK.
 "pydantic_evals.evaluators.LLMJudge".msg = "Evaluators here are structural, never LLM-as-judge. See the evals section of docs/app-implementation-plan.md."
 
 [tool.ruff.lint.isort]
@@ -111,6 +112,7 @@ name = "mff_contracts depends on pydantic and nothing else"
 type = "forbidden"
 source_modules = ["mff_contracts"]
 forbidden_modules = [
+    "google",
     "pydantic_ai",
     "httpx",
     "docx",
@@ -142,11 +144,23 @@ source_modules = [
     "editor_service",
     "vision_stub",
 ]
-forbidden_modules = ["pydantic_ai", "anthropic", "openai", "google", "vertexai"]
+# `google` covers both `google.adk` (the agent framework) and `google.genai` (the model
+# SDK underneath it). `pydantic_ai` stays on this list even though we no longer use it:
+# `pydantic-evals` pins `pydantic-ai-slim`, so the module is importable in the dev
+# environment and only this contract stops it drifting back into runtime source.
+forbidden_modules = ["pydantic_ai", "anthropic", "openai", "google", "vertexai", "litellm"]
 # NOTE: this repo has no `llm/` or `agents/` subpackages yet (out of scope for B0).
 # When a branch introduces one, exempt it here with `ignore_imports`, e.g.:
-#   ignore_imports = ["editor_service.agents.reviewer -> pydantic_ai"]
+#   ignore_imports = ["editor_service.agents.reviewer -> google.adk"]
 # rather than removing this contract.
+#
+# VISION IS EXEMPT FROM THE ADK DECISION. ADK is the editor's choice, not a repo-wide
+# mandate. The vision service is separately owned (see AGENTS.md, req 13) and MAY use
+# Pydantic AI or any other framework -- it sits behind an HTTP contract and what runs on
+# the far side is its owner's call. `vision_stub` is listed above only because today's
+# placeholder calls no model at all. When the real service lands and imports one, give it
+# an `ignore_imports` entry or drop it from `source_modules`; do NOT strip its dependency
+# to match the editor, and do not report it as drift.
 
 # ---------------------------------------------------------------------------
 # coverage — per-package, not global (see Makefile). Protocol method bodies
