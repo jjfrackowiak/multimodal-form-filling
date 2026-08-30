@@ -25,9 +25,9 @@ def test_healthz_does_not_require_credentials(monkeypatch: pytest.MonkeyPatch) -
 
     client = TestClient(create_app())
     response = client.get("/healthz")
-
     assert response.status_code == 200
     assert response.json() == {"status": "ok"}
+    assert client.get("/health").json() == {"status": "ok"}
 
 
 def test_healthz_imports_nothing_from_llm_or_settings() -> None:

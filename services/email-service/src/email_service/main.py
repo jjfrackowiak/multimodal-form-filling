@@ -123,6 +123,7 @@ def create_app() -> FastAPI:
         lifespan=lifespan,
     )
 
+    @app.get("/health")
     @app.get("/healthz")
     def healthz() -> dict[str, str]:
         return {"status": "ok"}
