@@ -521,11 +521,21 @@ flowchart TD
 it</strong>. Under a parallel design every instance would see the same seed and none could see
 another's work, making a whole class of requirement unrepresentable rather than merely
 slow.</p>
-<p><strong>Slice order is computed, not chosen.</strong> It is the ascending <code>ordinal</code> of each slice's
-earliest requirement, where <code>ordinal</code> is the character offset of that requirement's
-<code>source_span</code> in the raw manifest. No model output sits anywhere in the ordering path, and
-the justification is honest: the client wrote their requirements in an order, and that
-order is theirs.</p>
+<p><strong>Slicing is deliberately dumb.</strong> Sort requirements by <code>ordinal</code> — the character offset of
+each requirement's <code>source_span</code> in the raw manifest — then take them in consecutive
+chunks of <strong>at most six</strong>. That is the entire algorithm.</p>
+<p>No scope grouping, no semantic clustering, no splitting oversized groups or merging
+undersized ones. An earlier draft had all of that and it bought nothing: <strong>any grouping
+strategy is a guess about which requirements belong together, and a wrong guess costs a
+whole slice run to discover.</strong> Chunking in the client's own order is predictable,
+trivially testable, and has no model output anywhere in its path.</p>
+<p>It also removes a weakness rather than managing one. Granularity was previously unbounded
+— a parser emitting a unique <code>scope</code> per requirement would produce ten slices of one, and
+one emitting a single scope would produce one slice of ten, both contract-valid and wildly
+different in cost. A fixed maximum makes that impossible by construction instead of
+requiring a rule to police it.</p>
+<p>The fleet fixture's ten requirements therefore give exactly two slices: R-01…R-06 and
+R-07…R-10.</p>
 <h3 id="two-validators-two-levels">Two validators, two levels</h3>
 <p>The system validates twice, at different levels, for different reasons. Collapsing them
 into one is the most likely implementation error here, and it fails in both directions:
@@ -718,12 +728,17 @@ has started inventing requirements rather than extracting them, which is the fai
 mode that matters most here: L1 requires recall ≥ 0.95 but <strong>precision 1.0</strong>. Missing a
 requirement is recoverable, since the client sees the list and says so. Inventing one
 means the client is told their document fails a rule they never wrote.</p>
-<h3 id="stage-4-slicing">Stage 4 — slicing</h3>
-<p>Requirements are grouped by <code>scope</code> into the slices each agent run will own (req 11).
-The fixture yields <code>exterior_mechanical</code>, <code>interior</code>, <code>glass</code>, <code>tyres</code>, <code>boot</code>.</p>
-<p>Slice boundaries are a real design decision, not bookkeeping: an agent only ever sees
-its own slice, so two requirements that contradict each other land in different runs
-and neither notices. That is concern <strong>D3</strong>, and slicing is where it is created.</p>
+<h3 id="stage-4-chunking">Stage 4 — chunking</h3>
+<p>Requirements are taken <strong>in ordinal order, six at a time</strong>. Nothing is grouped by meaning,
+and the parser is not asked to invent categories. The fixture's ten requirements give two
+slices: R-01…R-06 and R-07…R-10.</p>
+<p>The parser's job therefore ends at stage 3. Slicing is arithmetic on the result — which is
+the point, because it removes the parser's phrasing from a decision that affects cost,
+latency and D3 exposure.</p>
+<p>Slice boundaries still matter, just not as a thing anyone tunes: an agent only ever sees
+its own slice, so two requirements that contradict each other can land in different runs
+and neither notices. That is concern <strong>D3</strong>. Chunking does not fix it — but nor did
+grouping, and chunking at least makes where the boundaries fall predictable.</p>
 <h3 id="why-req-7-matters-more-than-it-looks">Why req 7 matters more than it looks</h3>
 <p>Because there is a model in stage 2, the requirement list is generated, not derived.
 Sending it back to the client in the confirmation reply is the cheapest correction
@@ -1243,7 +1258,6 @@ goes back through the layer-0 owner. It depends on <strong>nothing but pydantic<
     text: str               # one normalised, individually checkable statement
     source_span: str        # VERBATIM substring of manifest_raw
     source_line: int        # 1-indexed, for the delivered requirement list
-    scope: str              # slice key
     applies_to: list[str]   # form ids; empty = all forms
     expected_count: int = 1 # &quot;4x fotele&quot; is ONE requirement with count 4
     constraint: str | None  # e.g. &quot;camera position: between_front_seats&quot;
@@ -1365,8 +1379,8 @@ an in-flight job loaded after a shape change must fail loudly rather than parse 
 <h3 id="slices-reqs-11-16-17">Slices — reqs 11, 16, 17</h3>
 <pre><code class="language-python">class SlicePlan(BaseModel):
     slice_id: str
-    ordinal: int                    # min(r.ordinal) — execution order, computed
-    requirement_ids: list[str]      # 2-6 per slice; oversized scopes split, undersized merge
+    ordinal: int                    # first requirement's ordinal — execution order
+    requirement_ids: list[str]      # consecutive chunk of at most 6, in ordinal order
 
 class SliceRequest(BaseModel):
     job_id: str; slice_id: str; mode: Mode
@@ -1384,10 +1398,9 @@ class SliceReport(BaseModel):
     unanswered: list[str]
     history: list[dict[str, Any]]
 </code></pre>
-<p>The <strong>2–6 requirements per slice</strong> bound is deliberate. Without it, a parser emitting a
-unique <code>scope</code> per requirement produces ten slices of one and one emitting a single scope
-produces one slice of ten — both contract-valid, wildly different in cost. Slicing should
-be a design decision, not an accident of prompt phrasing.</p>
+<p><code>Manifest.slices()</code> is plain chunking: sort by <code>ordinal</code>, take six at a time. There is no
+minimum — the last chunk is whatever remains, including a chunk of one. <code>Requirement</code> has
+no <code>scope</code> field, because with chunking the owning slice is determined by position.</p>
 <h3 id="compile-the-typed-output">Compile — the typed output</h3>
 <pre><code class="language-python">class RunSpan(BaseModel):           # how an anchor id becomes actual runs
     paragraph_index: int

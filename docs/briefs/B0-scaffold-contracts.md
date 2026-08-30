@@ -93,12 +93,15 @@ These are the contract's teeth. Each needs a passing and a failing test:
 | `DraftOp` field combinations are valid per `kind` | `append` needs `section_id`, `set`/`delete` need `entry_id` |
 | `schema_version` is present on both artifacts | these persist and the shape has already changed twice |
 
-Also provide `Manifest.slices()` returning `list[SlicePlan]`, with:
+Also provide `Manifest.slices()` returning `list[SlicePlan]`. It is **plain chunking and
+nothing else**: sort by `ordinal` ascending, take consecutive chunks of **at most 6**.
 
-- `slice.ordinal = min(r.ordinal for r in slice)`, sorted ascending
-- **2–6 requirements per slice** — split oversized scopes by `ordinal`, merge undersized
-  adjacent ones. Without the bound, slice granularity becomes an accident of how the
-  parser happened to phrase `scope`.
+No grouping by `scope`, no splitting, no merging — and `Requirement` has **no `scope`
+field**, since with chunking the owning slice is determined by position. There is no
+minimum size; the last chunk is whatever remains, including one.
+
+Any grouping strategy is a guess about which requirements belong together, and a wrong
+guess costs a whole slice run to discover. Prefer the dumb, obvious implementation.
 
 ---
 
@@ -142,8 +145,9 @@ The fixture's evaluator must also still pass:
 
 1. `make check` green: ruff, mypy --strict, import-linter, pytest — offline, no keys.
 2. Every validator above has a passing **and** a failing test.
-3. `Manifest.slices()` tested against the fleet fixture's 10 requirements: ordinals match
-   `expected_ordinals` in `expected_output/structure.yaml`, and every slice is 2–6 wide.
+3. `Manifest.slices()` tested against the fleet fixture's 10 requirements: exactly **2
+   slices of 6 and 4**, ids running R-01…R-06 then R-07…R-10, and ordinals matching
+   `expected_ordinals` in `expected_output/structure.yaml`.
 4. The existing 13 vision tests pass with `ImageAnalysis` imported from contracts.
 5. `check_output.py` still returns 156/156.
 6. An import-linter test that **fails** if someone adds `pydantic-ai` to

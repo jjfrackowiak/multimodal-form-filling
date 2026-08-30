@@ -119,11 +119,24 @@ it**. Under a parallel design every instance would see the same seed and none co
 another's work, making a whole class of requirement unrepresentable rather than merely
 slow.
 
-**Slice order is computed, not chosen.** It is the ascending `ordinal` of each slice's
-earliest requirement, where `ordinal` is the character offset of that requirement's
-`source_span` in the raw manifest. No model output sits anywhere in the ordering path, and
-the justification is honest: the client wrote their requirements in an order, and that
-order is theirs.
+**Slicing is deliberately dumb.** Sort requirements by `ordinal` — the character offset of
+each requirement's `source_span` in the raw manifest — then take them in consecutive
+chunks of **at most six**. That is the entire algorithm.
+
+No scope grouping, no semantic clustering, no splitting oversized groups or merging
+undersized ones. An earlier draft had all of that and it bought nothing: **any grouping
+strategy is a guess about which requirements belong together, and a wrong guess costs a
+whole slice run to discover.** Chunking in the client's own order is predictable,
+trivially testable, and has no model output anywhere in its path.
+
+It also removes a weakness rather than managing one. Granularity was previously unbounded
+— a parser emitting a unique `scope` per requirement would produce ten slices of one, and
+one emitting a single scope would produce one slice of ten, both contract-valid and wildly
+different in cost. A fixed maximum makes that impossible by construction instead of
+requiring a rule to police it.
+
+The fleet fixture's ten requirements therefore give exactly two slices: R-01…R-06 and
+R-07…R-10.
 
 ### Two validators, two levels
 
@@ -316,14 +329,20 @@ mode that matters most here: L1 requires recall ≥ 0.95 but **precision 1.0**. 
 requirement is recoverable, since the client sees the list and says so. Inventing one
 means the client is told their document fails a rule they never wrote.
 
-### Stage 4 — slicing
+### Stage 4 — chunking
 
-Requirements are grouped by `scope` into the slices each agent run will own (req 11).
-The fixture yields `exterior_mechanical`, `interior`, `glass`, `tyres`, `boot`.
+Requirements are taken **in ordinal order, six at a time**. Nothing is grouped by meaning,
+and the parser is not asked to invent categories. The fixture's ten requirements give two
+slices: R-01…R-06 and R-07…R-10.
 
-Slice boundaries are a real design decision, not bookkeeping: an agent only ever sees
-its own slice, so two requirements that contradict each other land in different runs
-and neither notices. That is concern **D3**, and slicing is where it is created.
+The parser's job therefore ends at stage 3. Slicing is arithmetic on the result — which is
+the point, because it removes the parser's phrasing from a decision that affects cost,
+latency and D3 exposure.
+
+Slice boundaries still matter, just not as a thing anyone tunes: an agent only ever sees
+its own slice, so two requirements that contradict each other can land in different runs
+and neither notices. That is concern **D3**. Chunking does not fix it — but nor did
+grouping, and chunking at least makes where the boundaries fall predictable.
 
 ### Why req 7 matters more than it looks
 
@@ -872,7 +891,6 @@ class Requirement(BaseModel):
     text: str               # one normalised, individually checkable statement
     source_span: str        # VERBATIM substring of manifest_raw
     source_line: int        # 1-indexed, for the delivered requirement list
-    scope: str              # slice key
     applies_to: list[str]   # form ids; empty = all forms
     expected_count: int = 1 # "4x fotele" is ONE requirement with count 4
     constraint: str | None  # e.g. "camera position: between_front_seats"
@@ -1017,8 +1035,8 @@ an in-flight job loaded after a shape change must fail loudly rather than parse 
 ```python
 class SlicePlan(BaseModel):
     slice_id: str
-    ordinal: int                    # min(r.ordinal) — execution order, computed
-    requirement_ids: list[str]      # 2-6 per slice; oversized scopes split, undersized merge
+    ordinal: int                    # first requirement's ordinal — execution order
+    requirement_ids: list[str]      # consecutive chunk of at most 6, in ordinal order
 
 class SliceRequest(BaseModel):
     job_id: str; slice_id: str; mode: Mode
@@ -1037,10 +1055,9 @@ class SliceReport(BaseModel):
     history: list[dict[str, Any]]
 ```
 
-The **2–6 requirements per slice** bound is deliberate. Without it, a parser emitting a
-unique `scope` per requirement produces ten slices of one and one emitting a single scope
-produces one slice of ten — both contract-valid, wildly different in cost. Slicing should
-be a design decision, not an accident of prompt phrasing.
+`Manifest.slices()` is plain chunking: sort by `ordinal`, take six at a time. There is no
+minimum — the last chunk is whatever remains, including a chunk of one. `Requirement` has
+no `scope` field, because with chunking the owning slice is determined by position.
 
 ### Compile — the typed output
 
