@@ -101,6 +101,10 @@ module = [
     "google.cloud.*",
     "google.genai.*",
     "PIL.*",
+    "factories",
+    "intake_helpers",
+    "golden",
+    "conftest",
 ]
 ignore_missing_imports = true
 
