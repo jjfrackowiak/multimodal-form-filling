@@ -15,7 +15,7 @@ Decisions locked with the user:
 | Service boundary | Two services over HTTP, frozen contracts package between them |
 | Word comments | `python-docx` native comments (`document.add_comment`) |
 
-Not in scope for v1: image tooling (req 13) ships as a **stubbed interface only** — the real cropping/understanding module comes later; OCR/PDF input (D1); job status polling (D2); cross-requirement conflict detection (D3).
+Not in scope for v1: image tooling (req 13) ships as a **stubbed interface only** — the real understanding service comes later, and cropping is dropped from the interface entirely; OCR/PDF input (D1); job status polling (D2); cross-requirement conflict detection (D3).
 
 ## Framework grounding (verified against current docs)
 
@@ -347,48 +347,71 @@ Four rules, the first two enforced by import-linter rather than review:
 ## Image understanding is a third service
 
 Req 13's image tools are **owned separately** (`AGENTS.md`) and arrive as their own
-service, not a library. That is now wired end to end with a placeholder in its place:
+service, not a library. That boundary is wired end to end with a placeholder in place.
+
+**One operation, not three:**
 
 ```
-POST /v1/describe        ImageRef               → ImageAnalysis
-POST /v1/describe:batch  list[ImageRef]         → list[ImageAnalysis]
-POST /v1/crop            ImageRef + BoundingBox → ImageRef
+POST /v1/inventory    { images, requirements }  →  { images: ImageAnalysis[] }
 ```
 
-`packages/mff-vision` holds the `VisionTool` Protocol, an `HttpVisionTool` client, and
-`InventoryVisionTool` — a stand-in answering from the fixture's labelled inventory.
-`services/vision-stub` serves the same routes so the wiring is real rather than
-imagined. The editor depends on the Protocol only, so the real service is a
-configuration change.
+The service is told **what is being looked for** and answers with an inventory of **what
+each image actually shows**. That shape is deliberate: a generic "describe this image"
+call cannot know whether *"between the front seats"* is a meaningful distinction or an
+irrelevant detail, so it would invent its own vocabulary and leave the editor to reconcile
+it. Given the requirements, the service knows what it is discriminating between.
 
-**The stand-in is a lookup, not a constant.** Keyed by filename, so each image gets its
-own label — and the two headliner photographs return **different `shot_from` values**,
-which is precisely what lets a derivative run fail R-04 for the right reason rather than
-by luck. Collapse it to one answer and the fixture stops testing what it exists to test.
+**Called once per job at ingest**, not inside slices. The answer is deterministic per
+image, so every slice then reasons from identical image facts and cannot reach different
+conclusions because the service answered differently — and a job's whole submission costs
+one round trip rather than seventeen.
 
-It also cannot be wrong, which makes it useless for measuring vision quality and ideal
-for everything else: the editor, the applier and every eval become fully deterministic,
-so a red test means the editor is broken rather than that a model had an off day. When
-the real service lands, the same `inventory.yaml` becomes the answer key it is scored
-against.
+**`RequirementSpec` is a projection, not a copy.** The service receives `id`, `text` and
+`constraint`; it has no business knowing manifest offsets, slice scopes or `applies_to`.
 
-**Two distinctions the API insists on.** *Unidentifiable* is not *unavailable*: an image
-the service examined and could not place returns `depicts == "unknown"` with zero
-confidence — evidence the editor must reason about — while an unreachable service raises
-`VisionUnavailable`, which is infrastructure failure and must never be written into a
-comment about the client's photographs. And `depicts` and `shot_from` are separate
-fields, because "what is this a picture of" and "where was it taken from" are separate
-questions; merging them loses R-04 entirely.
+### Cropping is out of scope
 
-### Two things to settle with the owner
+An earlier draft included `crop` in this interface, following req 13's wording. It is
+**removed**. Nothing in the flow needs it: the editor decides whether a photograph
+satisfies a requirement, and a crop does not change that answer. Carrying an operation
+nobody calls would mean a payload type, a service route, and a stand-in implementation
+all maintained for a capability with no caller.
 
-The shapes in `mff_vision.models` were written from what the *editor* needs, not from
-what a CV pipeline naturally emits. They are a proposal, not a decision:
+This is a deliberate narrowing of req 13, recorded rather than assumed. If a real need
+appears — a requirement about a detail too small to judge at full frame — it comes back as
+a scoped addition with a caller attached.
 
-1. **The payload shapes**, before anything is built against them on the other side.
-2. **Whether `shot_from` is a closed vocabulary.** The fixture uses
-   `between_front_seats` and `beside_seat`. Left as free text, the editor has to
-   interpret strings it has never seen and R-04 stops being decidable.
+### Why the stand-in is a lookup, not a constant
+
+`InventoryVisionTool` answers from the fixture's labelled inventory, keyed by filename, so
+each image gets its own correct label. The two headliner photographs return **different
+`shot_from` values**, which is precisely what lets a derivative run fail R-04 for the right
+reason rather than by luck. Collapse it to one answer and the fixture stops testing what
+it exists to test.
+
+It also **cannot be wrong**, which makes it useless for measuring vision quality and ideal
+for everything else: the editor and every eval become fully deterministic, so a red test
+means the editor is broken rather than that a model had an off day. When the real service
+lands, the same `inventory.yaml` becomes the answer key it is scored against — which is
+exactly this interface's shape: requirements in, inventory out.
+
+### Two distinctions the API insists on
+
+**Unidentifiable is not unavailable.** An image the service examined and could not place
+returns `depicts == "unknown"` at zero confidence — evidence the editor must reason about.
+An unreachable service raises `VisionUnavailable`, which is infrastructure failure and must
+never be written into a comment about the client's photographs.
+
+**`depicts` and `shot_from` are separate fields**, because "what is this a picture of" and
+"where was it taken from" are separate questions. Merging them loses R-04 entirely.
+
+### To settle with the owner
+
+The payload shapes were written from what the *editor* needs, not from what a CV pipeline
+naturally emits, so they are a proposal rather than a decision. In particular: **is
+`shot_from` a closed vocabulary?** The fixture uses `between_front_seats` and
+`beside_seat`. Left as free text, the editor must interpret strings it has never seen and
+R-04 stops being decidable.
 
 ## Dependency pinning
 

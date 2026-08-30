@@ -1,22 +1,21 @@
-"""HTTP request shapes. Responses reuse the mff_vision models directly, which are
-the wire contract — see the plan: contracts and HTTP schemas do not leak."""
+"""HTTP request and response shapes.
+
+The models themselves come from `mff_vision` — they are the wire contract, and the
+service must not define a second, drifting copy of them.
+"""
 
 from __future__ import annotations
 
-from mff_vision import BoundingBox, ImageRef
+from mff_vision import ImageAnalysis, ImageRef, RequirementSpec
 from pydantic import BaseModel
 
-__all__ = ["BatchRequest", "CropRequest", "DescribeRequest"]
+__all__ = ["InventoryRequest", "InventoryResponse"]
 
 
-class DescribeRequest(BaseModel):
-    ref: ImageRef
+class InventoryRequest(BaseModel):
+    images: list[ImageRef]
+    requirements: list[RequirementSpec]
 
 
-class BatchRequest(BaseModel):
-    refs: list[ImageRef]
-
-
-class CropRequest(BaseModel):
-    ref: ImageRef
-    box: BoundingBox
+class InventoryResponse(BaseModel):
+    images: list[ImageAnalysis]     # index-aligned with the request

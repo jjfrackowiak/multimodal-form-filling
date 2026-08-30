@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import httpx
 
-from .models import BoundingBox, ImageAnalysis, ImageRef, VisionUnavailable
+from .models import ImageAnalysis, ImageRef, RequirementSpec, VisionUnavailable
 
 __all__ = ["HttpVisionTool"]
 
@@ -16,39 +16,43 @@ __all__ = ["HttpVisionTool"]
 class HttpVisionTool:
     """Talks to a service implementing the vision API."""
 
-    def __init__(self, base_url: str, client: httpx.AsyncClient | None = None,
-                 timeout: float = 30.0) -> None:
+    def __init__(
+        self,
+        base_url: str,
+        client: httpx.AsyncClient | None = None,
+        timeout: float = 120.0,
+    ) -> None:
+        # A whole job's images in one call, so the timeout is generous by design.
         self._base = base_url.rstrip("/")
         self._client = client
         self._timeout = timeout
 
-    async def _post(self, path: str, payload: dict) -> dict:
+    async def build_inventory(
+        self,
+        images: list[ImageRef],
+        requirements: list[RequirementSpec],
+    ) -> list[ImageAnalysis]:
+        payload = {
+            "images": [i.model_dump() for i in images],
+            "requirements": [r.model_dump() for r in requirements],
+        }
         client = self._client or httpx.AsyncClient(timeout=self._timeout)
         try:
-            r = await client.post(f"{self._base}{path}", json=payload)
+            r = await client.post(f"{self._base}/v1/inventory", json=payload)
             r.raise_for_status()
-            return r.json()
+            data = r.json()
         except httpx.HTTPError as exc:
-            # Unreachable is not the same as unidentifiable: the caller must be
-            # able to retry this, and must not record it as a finding about the
-            # client's photographs.
+            # Unreachable is not the same as unidentifiable: the caller must be able to
+            # retry this, and must not record it as a finding about the photographs.
             raise VisionUnavailable(f"vision service {self._base}: {exc}") from exc
         finally:
             if self._client is None:
                 await client.aclose()
 
-    async def describe(self, ref: ImageRef) -> ImageAnalysis:
-        data = await self._post("/v1/describe", {"ref": ref.model_dump()})
-        return ImageAnalysis.model_validate(data)
-
-    async def describe_many(self, refs: list[ImageRef]) -> list[ImageAnalysis]:
-        data = await self._post(
-            "/v1/describe:batch", {"refs": [r.model_dump() for r in refs]}
-        )
-        return [ImageAnalysis.model_validate(d) for d in data["results"]]
-
-    async def crop(self, ref: ImageRef, box: BoundingBox) -> ImageRef:
-        data = await self._post(
-            "/v1/crop", {"ref": ref.model_dump(), "box": box.model_dump()}
-        )
-        return ImageRef.model_validate(data)
+        results = [ImageAnalysis.model_validate(d) for d in data["images"]]
+        if len(results) != len(images):
+            raise VisionUnavailable(
+                f"vision service returned {len(results)} analyses for {len(images)} "
+                "images; the result must be index-aligned with the request"
+            )
+        return results

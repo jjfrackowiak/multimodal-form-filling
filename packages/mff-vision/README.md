@@ -11,7 +11,7 @@ deterministic stand-in so the editor can be built and evaluated before it exists
 
 | | What it is |
 |---|---|
-| `VisionTool` | The Protocol the editor depends on. Three operations, no state. |
+| `VisionTool` | The Protocol the editor depends on. **One** operation, no state. |
 | `HttpVisionTool` | Client for the real service. |
 | `InventoryVisionTool` | In-process stand-in answering from the fixture's labels. |
 
@@ -25,10 +25,13 @@ so every image gets its own correct label. That matters for one case in
 particular:
 
 ```python
-(await tool.describe(ImageRef(uri="1000040420.jpg"))).shot_from
-# 'between_front_seats'
-(await tool.describe(ImageRef(uri="IMG_20260830_132755 (5).jpg"))).shot_from
-# 'beside_seat'
+good, bad = await tool.build_inventory(
+    [ImageRef(uri="1000040420.jpg"), ImageRef(uri="IMG_20260830_132755 (5).jpg")],
+    [RequirementSpec(id="R-04", text="Two photographs of the headliner.",
+                     constraint="camera position: between_front_seats")],
+)
+good.shot_from   # 'between_front_seats'
+bad.shot_from    # 'beside_seat'
 ```
 
 Both photographs depict the headliner; only one satisfies the manifest's
@@ -50,8 +53,12 @@ evidence, and the editor must decide what it means for a requirement. A service
 that could not be reached raises `VisionUnavailable`, which is infrastructure
 failure and must never be recorded as a finding about the client's photographs.
 
-**`depicts` and `shot_from` are different questions.** What a picture is of, and
-where it was taken from. Collapsing them loses R-04.
+**`depicts` and `shot_from` are different questions.** What a picture is of, and where it
+was taken from. Collapsing them loses R-04.
+
+**Cropping is not part of this interface.** An earlier draft carried it, following req
+13's wording. Nothing in the flow calls it — the editor decides whether a photograph
+satisfies a requirement, and a crop does not change that answer.
 
 ## Configuration
 

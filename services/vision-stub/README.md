@@ -5,11 +5,12 @@ separately — see `AGENTS.md`. It exists so the editor has something real to ca
 while that service is built.
 
 ```
-POST /v1/describe        ImageRef              -> ImageAnalysis
-POST /v1/describe:batch  list[ImageRef]        -> list[ImageAnalysis]
-POST /v1/crop            ImageRef + BoundingBox -> ImageRef
+POST /v1/inventory   { images, requirements } -> { images: ImageAnalysis[] }
 GET  /healthz
 ```
+
+One operation. The service is told what is being looked for and answers with what each
+image shows. Called once per job at ingest, so a whole submission is one round trip.
 
 It answers from the fleet fixture's labelled inventory and **performs no image
 processing**. `/healthz` reports `"implementation": "placeholder"` so a green
@@ -26,7 +27,7 @@ curl -s -X POST localhost:8099/v1/describe \
 
 ## Replacing it
 
-The real service implements the same four routes and the same payloads. Nothing
+The real service implements the same single route and the same payloads. Nothing
 in the editor changes — it depends on the `VisionTool` Protocol, not on this.
 
 Two things to agree with the owner before that happens:

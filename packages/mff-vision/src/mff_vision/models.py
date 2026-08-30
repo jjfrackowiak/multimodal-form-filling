@@ -1,17 +1,23 @@
 """The seam between the editor and image understanding (req 13).
 
-This package contains no image processing and never will. Image understanding is
-a **separate service**, owned separately (see AGENTS.md). What lives here is the
-contract the editor calls through, plus a deterministic stand-in so the editor
-can be built and evaluated before that service exists.
+This package contains no image processing and never will. Image understanding is a
+**separate service**, owned separately (see AGENTS.md). What lives here is the contract
+the editor calls through, plus a deterministic stand-in so the editor can be built and
+evaluated before that service exists.
 
-Because the real implementation is remote, the contract is shaped for a network
-call rather than a library call:
+One operation, not three. The service is told **what is being looked for** and answers
+with an inventory of **what each image actually shows**:
 
-  * every operation is async
-  * images are named by URI, not by local path — the service fetches them itself
-  * `describe_many` exists so a document's worth of photographs is one round trip
-  * a result can be unknown; that is an answer, not an exception
+    requirements + images  ->  inventory
+
+That shape matters. A generic "describe this image" call cannot know whether
+"between the front seats" is a meaningful distinction or an irrelevant detail, so it
+would invent its own vocabulary and leave the editor to reconcile it. Given the
+requirements, the service knows what it is discriminating between.
+
+Because the real implementation is remote, the contract is shaped for a network call:
+async, images named by URI so the service fetches them itself, and one round trip per
+job rather than per image.
 """
 
 from __future__ import annotations
@@ -22,9 +28,9 @@ from pydantic import BaseModel, Field
 
 __all__ = [
     "UNKNOWN",
-    "BoundingBox",
     "ImageAnalysis",
     "ImageRef",
+    "RequirementSpec",
     "VisionTool",
     "VisionUnavailable",
 ]
@@ -35,18 +41,19 @@ UNKNOWN = "unknown"
 class VisionUnavailable(RuntimeError):
     """The vision service could not be reached or refused the request.
 
-    Distinct from an image the service looked at and could not identify — that
-    comes back as an ImageAnalysis with `depicts == UNKNOWN`. A caller should
-    treat this one as infrastructure failure and the other as evidence.
+    Distinct from an image the service looked at and could not identify — that comes back
+    as an ImageAnalysis with `depicts == UNKNOWN`. Treat this one as infrastructure
+    failure and the other as evidence: an unreachable service must never be recorded as a
+    finding about the client's photographs.
     """
 
 
 class ImageRef(BaseModel):
     """How an image is named across the wire.
 
-    A URI the vision service can resolve for itself (`gs://bucket/...`), so the
-    editor never ships pixels. A bare filename is accepted for tests and for the
-    mock, where there is no bucket.
+    A URI the service can resolve for itself (`gs://bucket/...`), so the editor never
+    ships pixels. A bare filename is accepted for tests and for the stand-in, where there
+    is no bucket.
     """
 
     uri: str
@@ -57,22 +64,26 @@ class ImageRef(BaseModel):
         return self.uri.rsplit("/", 1)[-1]
 
 
-class BoundingBox(BaseModel):
-    """Normalised 0..1 coordinates, so a crop survives resizing."""
+class RequirementSpec(BaseModel):
+    """What the vision service is looking for.
 
-    left: float = Field(ge=0.0, le=1.0)
-    top: float = Field(ge=0.0, le=1.0)
-    right: float = Field(ge=0.0, le=1.0)
-    bottom: float = Field(ge=0.0, le=1.0)
+    A deliberate **projection** of the editor's `Requirement`, not a copy. The service has
+    no business knowing manifest offsets, slice scopes or `applies_to` — it needs the
+    thing being asked for and any constraint that changes what counts as satisfying it.
+    """
+
+    id: str
+    text: str
+    constraint: str | None = None    # e.g. "camera position: between_front_seats"
 
 
 class ImageAnalysis(BaseModel):
-    """What the editor needs to know about one photograph.
+    """What one photograph actually shows.
 
-    `depicts` answers "what is this a picture of". `shot_from` answers "from
-    where", which is a different question and the one that decides R-04 in the
-    fleet fixture: two photographs both depict the headliner, and only one is
-    taken from between the front seats.
+    `depicts` answers "what is this a picture of". `shot_from` answers "from where", which
+    is a separate question and the one that decides R-04 in the fleet fixture: two
+    photographs both depict the headliner and only one is taken from between the front
+    seats. Merging the two fields would lose that distinction entirely.
     """
 
     file: str
@@ -88,24 +99,19 @@ class ImageAnalysis(BaseModel):
 
 @runtime_checkable
 class VisionTool(Protocol):
-    """Three operations, no configuration, no state.
+    """One operation. The editor calls it; it never calls the editor."""
 
-    The editor calls it; it never calls the editor.
-    """
+    async def build_inventory(
+        self,
+        images: list[ImageRef],
+        requirements: list[RequirementSpec],
+    ) -> list[ImageAnalysis]:
+        """Classify every image against what the requirements are looking for.
 
-    async def describe(self, ref: ImageRef) -> ImageAnalysis:
-        """Identify a single image."""
-        ...
+        Called **once per job at ingest**, not inside slices: the result is deterministic
+        per image, so every slice then reasons from identical image facts and cannot reach
+        different conclusions because the service answered differently.
 
-    async def describe_many(self, refs: list[ImageRef]) -> list[ImageAnalysis]:
-        """Identify several. The result is index-aligned with the input.
-
-        One call per document rather than per photograph: the fleet fixture has
-        seventeen, and seventeen round trips to another service is the difference
-        between a slice that fits its latency budget and one that does not.
+        The result is index-aligned with `images`.
         """
-        ...
-
-    async def crop(self, ref: ImageRef, box: BoundingBox) -> ImageRef:
-        """Produce a cropped derivative and return a reference to it."""
         ...

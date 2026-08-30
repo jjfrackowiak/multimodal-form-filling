@@ -54,7 +54,8 @@ Already on `main` and **not yours to touch**: `packages/mff-vision`,
 Transcribe the models from the plan's contract section exactly. They are grouped as:
 
 1. **Manifest and requirements** — `Requirement`, `Manifest`
-2. **Blobs and images** — `BlobRef`, `ImageAnalysis`, `JobImage`
+2. **Blobs and images** — `BlobRef`, `ImageAnalysis`, `RequirementSpec`, `JobImage`
+   (no `BoundingBox` — cropping is out of scope, see the plan)
 3. **Document models** — `Node`; `Entry`, `Section`, `FormDraft`, `DraftOp`
 4. **Review** — `Anchor`, `ReviewComment`
 5. **Artifacts** — `DerivativeArtifact`, `NetNewArtifact`, `Artifact` union
@@ -71,8 +72,9 @@ Transcribe the models from the plan's contract section exactly. They are grouped
 `python-docx`, not `httpx`, not `mff-vision`. Two specific traps, both of which were
 caught in review and will be caught again by CI:
 
-- `ImageAnalysis` **lives here**, not in `mff-vision`. `mff-vision` imports it from you.
-  Owning it there would make the frozen package depend on a service client.
+- `ImageAnalysis` and `RequirementSpec` **live here**, not in `mff-vision`; `mff-vision`
+  imports them from you. Owning them there would make the frozen package depend on a
+  service client.
 - `SliceRequest.history` and `SliceReport.history` are **`list[dict[str, Any]]`**, not
   `list[ModelMessage]`. Typing them would drag the whole agent framework into the package
   everything else depends on.
@@ -89,7 +91,6 @@ These are the contract's teeth. Each needs a passing and a failing test:
 | `Anchor.target_id` is set unless `kind == "document"` | an unanchored comment cannot exist in OOXML |
 | `justification` is non-empty on every comment | req 16 |
 | `DraftOp` field combinations are valid per `kind` | `append` needs `section_id`, `set`/`delete` need `entry_id` |
-| `BoundingBox` coordinates are within 0..1 | normalised so crops survive resizing |
 | `schema_version` is present on both artifacts | these persist and the shape has already changed twice |
 
 Also provide `Manifest.slices()` returning `list[SlicePlan]`, with:

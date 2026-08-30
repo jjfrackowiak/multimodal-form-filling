@@ -437,7 +437,7 @@ html{scroll-behavior:smooth}
 </tr>
 </tbody>
 </table>
-<p>Not in scope for v1: image tooling (req 13) ships as a <strong>stubbed interface only</strong> — the real cropping/understanding module comes later; OCR/PDF input (D1); job status polling (D2); cross-requirement conflict detection (D3).</p>
+<p>Not in scope for v1: image tooling (req 13) ships as a <strong>stubbed interface only</strong> — the real understanding service comes later, and cropping is dropped from the interface entirely; OCR/PDF input (D1); job status polling (D2); cross-requirement conflict detection (D3).</p>
 <h2 id="framework-grounding-verified-against-current-docs">Framework grounding (verified against current docs)</h2>
 <ul>
 <li><strong>Programmatic hand-off</strong> (req 11) is a Pydantic AI documented pattern: agents called in succession from <em>plain Python</em>, each run scoped to its own requirement slice, context carried by <code>message_history=</code> and shared <code>deps</code>/<code>usage</code>. There is no graph DSL needed — the "state machine" is our own explicit loop.</li>
@@ -718,41 +718,54 @@ written down. Both services use the same shape:</p>
 </ol>
 <h2 id="image-understanding-is-a-third-service">Image understanding is a third service</h2>
 <p>Req 13's image tools are <strong>owned separately</strong> (<code>AGENTS.md</code>) and arrive as their own
-service, not a library. That is now wired end to end with a placeholder in its place:</p>
-<pre><code>POST /v1/describe        ImageRef               → ImageAnalysis
-POST /v1/describe:batch  list[ImageRef]         → list[ImageAnalysis]
-POST /v1/crop            ImageRef + BoundingBox → ImageRef
+service, not a library. That boundary is wired end to end with a placeholder in place.</p>
+<p><strong>One operation, not three:</strong></p>
+<pre><code>POST /v1/inventory    { images, requirements }  →  { images: ImageAnalysis[] }
 </code></pre>
-<p><code>packages/mff-vision</code> holds the <code>VisionTool</code> Protocol, an <code>HttpVisionTool</code> client, and
-<code>InventoryVisionTool</code> — a stand-in answering from the fixture's labelled inventory.
-<code>services/vision-stub</code> serves the same routes so the wiring is real rather than
-imagined. The editor depends on the Protocol only, so the real service is a
-configuration change.</p>
-<p><strong>The stand-in is a lookup, not a constant.</strong> Keyed by filename, so each image gets its
-own label — and the two headliner photographs return <strong>different <code>shot_from</code> values</strong>,
-which is precisely what lets a derivative run fail R-04 for the right reason rather than
-by luck. Collapse it to one answer and the fixture stops testing what it exists to test.</p>
-<p>It also cannot be wrong, which makes it useless for measuring vision quality and ideal
-for everything else: the editor, the applier and every eval become fully deterministic,
-so a red test means the editor is broken rather than that a model had an off day. When
-the real service lands, the same <code>inventory.yaml</code> becomes the answer key it is scored
-against.</p>
-<p><strong>Two distinctions the API insists on.</strong> <em>Unidentifiable</em> is not <em>unavailable</em>: an image
-the service examined and could not place returns <code>depicts == "unknown"</code> with zero
-confidence — evidence the editor must reason about — while an unreachable service raises
-<code>VisionUnavailable</code>, which is infrastructure failure and must never be written into a
-comment about the client's photographs. And <code>depicts</code> and <code>shot_from</code> are separate
-fields, because "what is this a picture of" and "where was it taken from" are separate
-questions; merging them loses R-04 entirely.</p>
-<h3 id="two-things-to-settle-with-the-owner">Two things to settle with the owner</h3>
-<p>The shapes in <code>mff_vision.models</code> were written from what the <em>editor</em> needs, not from
-what a CV pipeline naturally emits. They are a proposal, not a decision:</p>
-<ol>
-<li><strong>The payload shapes</strong>, before anything is built against them on the other side.</li>
-<li><strong>Whether <code>shot_from</code> is a closed vocabulary.</strong> The fixture uses
-   <code>between_front_seats</code> and <code>beside_seat</code>. Left as free text, the editor has to
-   interpret strings it has never seen and R-04 stops being decidable.</li>
-</ol>
+<p>The service is told <strong>what is being looked for</strong> and answers with an inventory of <strong>what
+each image actually shows</strong>. That shape is deliberate: a generic "describe this image"
+call cannot know whether <em>"between the front seats"</em> is a meaningful distinction or an
+irrelevant detail, so it would invent its own vocabulary and leave the editor to reconcile
+it. Given the requirements, the service knows what it is discriminating between.</p>
+<p><strong>Called once per job at ingest</strong>, not inside slices. The answer is deterministic per
+image, so every slice then reasons from identical image facts and cannot reach different
+conclusions because the service answered differently — and a job's whole submission costs
+one round trip rather than seventeen.</p>
+<p><strong><code>RequirementSpec</code> is a projection, not a copy.</strong> The service receives <code>id</code>, <code>text</code> and
+<code>constraint</code>; it has no business knowing manifest offsets, slice scopes or <code>applies_to</code>.</p>
+<h3 id="cropping-is-out-of-scope">Cropping is out of scope</h3>
+<p>An earlier draft included <code>crop</code> in this interface, following req 13's wording. It is
+<strong>removed</strong>. Nothing in the flow needs it: the editor decides whether a photograph
+satisfies a requirement, and a crop does not change that answer. Carrying an operation
+nobody calls would mean a payload type, a service route, and a stand-in implementation
+all maintained for a capability with no caller.</p>
+<p>This is a deliberate narrowing of req 13, recorded rather than assumed. If a real need
+appears — a requirement about a detail too small to judge at full frame — it comes back as
+a scoped addition with a caller attached.</p>
+<h3 id="why-the-stand-in-is-a-lookup-not-a-constant">Why the stand-in is a lookup, not a constant</h3>
+<p><code>InventoryVisionTool</code> answers from the fixture's labelled inventory, keyed by filename, so
+each image gets its own correct label. The two headliner photographs return <strong>different
+<code>shot_from</code> values</strong>, which is precisely what lets a derivative run fail R-04 for the right
+reason rather than by luck. Collapse it to one answer and the fixture stops testing what
+it exists to test.</p>
+<p>It also <strong>cannot be wrong</strong>, which makes it useless for measuring vision quality and ideal
+for everything else: the editor and every eval become fully deterministic, so a red test
+means the editor is broken rather than that a model had an off day. When the real service
+lands, the same <code>inventory.yaml</code> becomes the answer key it is scored against — which is
+exactly this interface's shape: requirements in, inventory out.</p>
+<h3 id="two-distinctions-the-api-insists-on">Two distinctions the API insists on</h3>
+<p><strong>Unidentifiable is not unavailable.</strong> An image the service examined and could not place
+returns <code>depicts == "unknown"</code> at zero confidence — evidence the editor must reason about.
+An unreachable service raises <code>VisionUnavailable</code>, which is infrastructure failure and must
+never be written into a comment about the client's photographs.</p>
+<p><strong><code>depicts</code> and <code>shot_from</code> are separate fields</strong>, because "what is this a picture of" and
+"where was it taken from" are separate questions. Merging them loses R-04 entirely.</p>
+<h3 id="to-settle-with-the-owner">To settle with the owner</h3>
+<p>The payload shapes were written from what the <em>editor</em> needs, not from what a CV pipeline
+naturally emits, so they are a proposal rather than a decision. In particular: <strong>is
+<code>shot_from</code> a closed vocabulary?</strong> The fixture uses <code>between_front_seats</code> and
+<code>beside_seat</code>. Left as free text, the editor must interpret strings it has never seen and
+R-04 stops being decidable.</p>
 <h2 id="dependency-pinning">Dependency pinning</h2>
 <p><strong>Never depend on <code>pydantic-ai</code>.</strong> The meta-package resolves to:</p>
 <pre><code>pydantic-ai-slim[openai,anthropic,google,cli,mcp,evals,web,retries,logfire]

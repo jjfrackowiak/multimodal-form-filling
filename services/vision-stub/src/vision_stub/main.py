@@ -14,8 +14,9 @@ def create_app() -> FastAPI:
         title="Vision service (placeholder)",
         version="0.0.0",
         description=(
-            "Stands in for image understanding (req 13). Answers from the fleet "
-            "fixture's labelled inventory; performs no image processing."
+            "Stands in for image understanding (req 13). Takes a job's images and "
+            "what its requirements are looking for; answers with an inventory of what "
+            "each image shows. Reads the fleet fixture's labels; processes no pixels."
         ),
     )
     app.include_router(health.router)

@@ -3,11 +3,9 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends
-from mff_vision import ImageAnalysis, ImageRef
-from pydantic import BaseModel
 
 from vision_stub.api.deps import get_analysis_service
-from vision_stub.api.schemas import BatchRequest, CropRequest, DescribeRequest
+from vision_stub.api.schemas import InventoryRequest, InventoryResponse
 from vision_stub.services.analysis import AnalysisService
 
 __all__ = ["router"]
@@ -15,29 +13,15 @@ __all__ = ["router"]
 router = APIRouter(prefix="/v1", tags=["vision"])
 
 
-class BatchResponse(BaseModel):
-    results: list[ImageAnalysis]
-
-
-@router.post("/describe", response_model=ImageAnalysis)
-async def describe(
-    body: DescribeRequest,
+@router.post("/inventory", response_model=InventoryResponse)
+async def build_inventory(
+    body: InventoryRequest,
     svc: AnalysisService = Depends(get_analysis_service),
-) -> ImageAnalysis:
-    return await svc.describe(body.ref)
+) -> InventoryResponse:
+    """Classify a job's images against what its requirements are looking for.
 
-
-@router.post("/describe:batch", response_model=BatchResponse)
-async def describe_batch(
-    body: BatchRequest,
-    svc: AnalysisService = Depends(get_analysis_service),
-) -> BatchResponse:
-    return BatchResponse(results=await svc.describe_many(body.refs))
-
-
-@router.post("/crop", response_model=ImageRef)
-async def crop(
-    body: CropRequest,
-    svc: AnalysisService = Depends(get_analysis_service),
-) -> ImageRef:
-    return await svc.crop(body.ref, body.box)
+    One call per job. The result is index-aligned with the request.
+    """
+    return InventoryResponse(
+        images=await svc.build_inventory(body.images, body.requirements)
+    )
