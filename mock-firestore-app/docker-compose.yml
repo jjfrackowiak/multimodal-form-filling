@@ -50,28 +50,28 @@ services:
       STORAGE_EMULATOR_HOST: http://gcs:4443
       GCP_PROJECT: mock-project
       COLLECTION: jobs
-      CV_URL: http://cv:8080/process
     depends_on:
       firestore:
         condition: service_healthy
       gcs:
         condition: service_started
-      cv:
-        condition: service_started
 
   cv:
-    build: ./services/cv
+    build:
+      context: ..
+      dockerfile: cv/Dockerfile
     ports:
       - "8083:8080"
     environment:
       PORT: "8080"
-      FIRESTORE_EMULATOR_HOST: firestore:8080
       STORAGE_EMULATOR_HOST: http://gcs:4443
       GCP_PROJECT: mock-project
-      COLLECTION: jobs
+      GOOGLE_CLOUD_PROJECT: linen-badge-507111-r6
+      GOOGLE_CLOUD_LOCATION: global
+      GOOGLE_APPLICATION_CREDENTIALS: /home/app/.config/gcloud/application_default_credentials.json
+    volumes:
+      - ${HOME}/.config/gcloud:/home/app/.config/gcloud:ro
     depends_on:
-      firestore:
-        condition: service_healthy
       gcs:
         condition: service_started
 
@@ -88,3 +88,7 @@ services:
       - "8085:8080"
     environment:
       PORT: "8080"
+      CV_URL: http://cv:8080
+    depends_on:
+      cv:
+        condition: service_started

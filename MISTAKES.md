@@ -17,3 +17,10 @@
 **What went wrong:** Talked about B11 as `services/editor-service/.../tools/vision` (`VisionTool` living in the editorial process). That matches Janek’s implementation plan, not how we are building it.
 
 **Prevention:** The CV module is a **separate service** (`cv/`). The editor may hold a thin HTTP client; it must not contain crop/understand/process. Do not land vision under `editor-service`. First CV deliverable is generating `inventory.yaml`; cropping is deferred. Fixture YAML stubs evals until generate+eval is green.
+
+
+## 2026-08-30 — Production photos are JPEG/PNG/WebP
+
+**What went wrong:** The Aygo hold-out arrived as HEIC and was converted locally with `sips`. That is a fixture concern, not a Cloud Run feature.
+
+**Prevention:** Production CV rejects `.heic`/`.heif`. Clients upload jpeg/png/webp. Do not add pillow-heif or in-service conversion.

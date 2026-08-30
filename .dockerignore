@@ -1,0 +1,15 @@
+.git
+.venv
+cv/.venv
+**/__pycache__
+**/*.pyc
+**/.DS_Store
+cv/reports
+cv/inventory.generated.yaml
+example_images
+fixtures
+docs
+multimodal-form-filling
+mock-firestore-app
+*.HEIC
+*.heic

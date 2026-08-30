@@ -6,27 +6,29 @@ Local skeleton. No always-on polling worker.
 
 | Service | Port | Owner | Now |
 |---|---|---|---|
-| `cv` | 8083 | Michal | Dummy process step (later real image tools) |
+| `cv` | 8083 | Michal | Production tool: `POST /v1/inventory` |
 | `email` | 8084 | Janek | Stub |
-| `editor` | 8085 | Janek | Stub |
+| `editor` | 8085 | Janek | Stub (`CV_URL=http://cv:8080`) |
 
-**Job pipeline:**
+**Job pipeline (file pointer + prepare only):**
 
 | Piece | Port | Role |
 |---|---|---|
 | `api` | 8081 | Upload file, start job, read status |
-| `fn-prepare` | 8082 | Confirm object exists in the bucket, set `prepared`, call CV |
+| `fn-prepare` | 8082 | Confirm object exists in the bucket, set `prepared` |
 | Firestore emulator | 8080 | Job records + `gs://` pointers |
 | Fake GCS | 4443 | File bytes |
 
 ```
-POST /files        → uploaded
+POST /files          → uploaded
 POST /jobs/:id/start → queued, HTTP to fn-prepare
-fn-prepare         → prepared, HTTP to cv
-cv /process        → processing → done
+fn-prepare           → prepared  (does not call CV)
+editor (when filled) → POST {CV_URL}/v1/inventory
 ```
 
-On GCP: `fn-prepare` is a Cloud Run **function** (or small service). `cv`, `email`, `editor` are Cloud Run **services**. Glue between steps should be Cloud Tasks in production; locally it is HTTP.
+CV is a **tool**, not a job worker. Contract: [`../cv/integration_guide_CV.md`](../cv/integration_guide_CV.md).
+
+On GCP: `fn-prepare` is a Cloud Run **function** (or small service). `cv`, `email`, `editor` are Cloud Run **services**. Glue between prepare and the editor should be Cloud Tasks in production; locally it is HTTP.
 
 ## 1. Run locally
 
@@ -36,6 +38,7 @@ docker compose up --build
 ```
 
 Wait until the Firestore emulator is healthy (`Dev App Server is now running`).
+CV needs ADC mounted (`~/.config/gcloud`) for Vertex.
 
 ## 2. Flow
 
@@ -46,24 +49,36 @@ curl http://localhost:8081/jobs/JOB_ID
 
 curl http://localhost:8083/health   # cv
 curl http://localhost:8084/health   # email stub
-curl http://localhost:8085/health   # editor stub
+curl http://localhost:8085/health   # editor stub (includes cv_url)
 ```
 
-Expected job when finished:
+Call CV the way the editor will (photos must already be `gs://` JPEG/PNG/WebP):
+
+```bash
+curl -s http://localhost:8083/v1/inventory \
+  -H 'content-type: application/json' \
+  -d '{
+    "checklist": {
+      "requirements": [
+        {"id":"R-01","text":"Front of the vehicle","source_span":"front","expected_count":1}
+      ]
+    },
+    "image_prefix": "gs://mock-files/jobs/JOB_ID/images/"
+  }'
+```
+
+Job after prepare (before editor exists):
 
 ```json
 {
   "id": "...",
-  "status": "done",
-  "step": "process",
-  "file": {
-    "gsUri": "gs://mock-files/uploads/.../README.md"
-  },
-  "result": { "bytes": 1234, "preview": "..." }
+  "status": "prepared",
+  "step": "prepare",
+  "file": { "gsUri": "gs://mock-files/uploads/.../README.md" }
 }
 ```
 
-`status` / `step` tell you which unit failed (`prepare` vs `process`).
+`status` / `step` tell you which unit failed.
 
 ## 3. Real GCP
 

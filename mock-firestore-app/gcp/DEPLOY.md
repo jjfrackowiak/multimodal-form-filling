@@ -38,24 +38,31 @@ EDITOR_IMG=$REGION-docker.pkg.dev/$PROJECT/$REPO/editor:v1
 
 gcloud builds submit ./api --tag $API_IMG
 gcloud builds submit ./fn-prepare --tag $PREPARE_IMG
-gcloud builds submit ./services/cv --tag $CV_IMG
+# from repo root:
+gcloud builds submit --tag $CV_IMG -f cv/Dockerfile .
 gcloud builds submit ./services/email --tag $EMAIL_IMG
 gcloud builds submit ./services/editor --tag $EDITOR_IMG
 
-# Deploy cv first so prepare can point at it.
+# CV is the editor's tool, not a job worker. See cv/DEPLOY.md and
+# cv/integration_guide_CV.md.
 gcloud run deploy cv \
   --image $CV_IMG \
   --region $REGION \
   --no-allow-unauthenticated \
-  --set-env-vars GCP_PROJECT=$PROJECT,COLLECTION=jobs
+  --memory 2Gi --cpu 2 --timeout 300 --concurrency 4 \
+  --set-env-vars GOOGLE_CLOUD_PROJECT=$PROJECT,GOOGLE_CLOUD_LOCATION=global,CV_MAX_WORKERS=12
 
-# Then fn-prepare, api, stubs — set PREPARE_URL and CV_URL to the Cloud Run URLs.
+# Then fn-prepare, api, stubs.
+# Editor: CV_URL=<cv Cloud Run URL>
+# api:    PREPARE_URL=<fn-prepare URL>
+# fn-prepare does not call CV.
 ```
 
-IAM on the runtime SA:
+IAM:
 
-- `roles/datastore.user`
-- `roles/storage.objectAdmin`
+- CV runtime SA: `roles/aiplatform.user`, `roles/storage.objectViewer`
+- Editor runtime SA: `roles/run.invoker` on `cv`; `roles/storage.objectViewer` if it reads blobs
+- api / fn-prepare: `roles/datastore.user`, `roles/storage.objectAdmin`
 
 Teammate: IAM → Grant access → `user:email@...` → `roles/editor` (hackathon)
 or tighter Cloud Run / Firestore / Storage roles.

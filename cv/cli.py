@@ -6,7 +6,9 @@ import argparse
 import sys
 from pathlib import Path
 
+from cv.checklist import load_checklist, spans_complete
 from cv.dump import inventory_to_yaml
+from cv.images import list_images
 from cv.pipeline import MAX_WORKERS, build_inventory
 from cv.vertex import LOCATION, MODEL, PROJECT
 
@@ -29,11 +31,18 @@ def main(argv: list[str] | None = None) -> int:
         f"Vertex project={PROJECT} location={LOCATION} model={MODEL}",
         flush=True,
     )
+    checklist = load_checklist(args.requirements)
+    manifest_text = None
+    if not spans_complete(checklist):
+        if not args.manifest:
+            print("checklist missing ids/source_span; pass --manifest", file=sys.stderr)
+            return 2
+        manifest_text = args.manifest.read_text()
     try:
         inv = build_inventory(
-            images=args.images.resolve(),
-            requirements=args.requirements,
-            manifest=args.manifest,
+            list_images(args.images.resolve()),
+            checklist,
+            manifest_text=manifest_text,
             workers=args.workers,
         )
     except (ValueError, FileNotFoundError) as e:

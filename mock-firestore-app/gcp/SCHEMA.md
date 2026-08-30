@@ -21,4 +21,7 @@ error         string or null
 Rule: **file in Cloud Storage, metadata and status in Firestore.**
 Never store a PDF/image as a document field.
 
+CV does not read this collection. The editor calls `POST /v1/inventory` with
+`gs://` URIs (see `cv/integration_guide_CV.md`).
+
 `step` is which unit last ran or failed. A crash in CV does not erase the job; it stays `processing`/`failed` until you retry that step.

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class Requirement(BaseModel):
@@ -50,6 +50,10 @@ class ImageLabel(BaseModel):
 
 class InventoryImage(BaseModel):
     file: str
+    uri: str | None = Field(
+        default=None,
+        description="Original gs:// URI when the tool was called over HTTP.",
+    )
     hits: list[RequirementHit] = Field(default_factory=list)
     note: str = ""
     findings: list[Finding] = Field(default_factory=list)
@@ -64,3 +68,39 @@ class Inventory(BaseModel):
     checklist: ParsedChecklist
     images: list[InventoryImage]
     exact_duplicate_pairs: list[list[str]] = Field(default_factory=list)
+
+
+class InventoryRequest(BaseModel):
+    """Editor → CV tool. Photos stay in GCS; this payload is JSON only."""
+
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "checklist": {
+                    "requirements": [
+                        {
+                            "id": "R-01",
+                            "text": "Front of the vehicle",
+                            "source_span": "front of the vehicle",
+                            "expected_count": 1,
+                        }
+                    ]
+                },
+                "image_uris": ["gs://bucket/jobs/abc/front.jpg"],
+            }
+        }
+    )
+
+    checklist: ParsedChecklist
+    image_uris: list[str] = Field(default_factory=list, description="gs:// URIs")
+    image_prefix: str | None = Field(
+        default=None, description="gs://bucket/prefix/ — image objects under it"
+    )
+    manifest: str | None = None
+
+
+class InventoryResponse(BaseModel):
+    inventory: Inventory
+    duration_seconds: float
+    model: str
+    project: str

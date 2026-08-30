@@ -7,9 +7,28 @@ from pathlib import Path
 
 from PIL import Image
 
+# Production inputs. HEIC is not accepted — convert before upload if a phone
+# still emits it. Cloud Run does not convert.
 IMAGE_EXT = {".jpg", ".jpeg", ".png", ".webp"}
+UNSUPPORTED_EXT = {".heic", ".heif"}
 MAX_EDGE = 1536
 JPEG_QUALITY = 80
+
+
+def suffix(name: str) -> str:
+    return Path(name).suffix.lower()
+
+
+def is_supported_image(name: str) -> bool:
+    return suffix(name) in IMAGE_EXT
+
+
+def check_image_name(name: str) -> None:
+    ext = suffix(name)
+    if ext in UNSUPPORTED_EXT:
+        raise ValueError(f"unsupported image type {ext} (jpeg/png/webp only; not heic)")
+    if ext not in IMAGE_EXT:
+        raise ValueError(f"not an image: {name}")
 
 
 def list_images(folder: Path) -> list[Path]:

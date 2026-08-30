@@ -1,13 +1,30 @@
-# CV tool
+# CV tool (Cloud Run)
 
-In-process tool for the AI editor: checklist + photos → inventory.
+The AI editor calls this over HTTP. Same logic is available in-process.
+
+**Integration:** [`integration_guide_CV.md`](integration_guide_CV.md)  
+**Deploy:** [`DEPLOY.md`](DEPLOY.md)
 
 ```
-from cv import build_inventory
-inv = build_inventory(images=dir, requirements=yaml_path)
+POST /v1/inventory
+{
+  "checklist": { "requirements": [ { "id": "R-01", "text": "...", "source_span": "...", "expected_count": 1 } ] },
+  "image_uris": ["gs://bucket/jobs/.../a.jpg"],
+  "image_prefix": null,
+  "manifest": null
+}
 ```
 
-CLI (from repo root):
+Photos are `gs://` JPEG/PNG/WebP. Not HEIC. Not bytes in the body.
+
+If every requirement already has `id` + `source_span`, `manifest` is omitted.
+
+```python
+from cv import CvClient
+resp = CvClient().inventory(checklist, image_prefix="gs://bucket/jobs/abc/images/")
+```
+
+## Local CLI
 
 ```bash
 python -m cv fixtures/fleet-vehicle-return/images \
@@ -15,9 +32,16 @@ python -m cv fixtures/fleet-vehicle-return/images \
   --out /tmp/inventory.yaml
 ```
 
-`--manifest` only if the yaml lacks `id` or `source_span` on a requirement.
+## In-process (tests / CLI only)
 
-Vertex Gemini (`gemini-2.5-flash`, ADC). Images are downscaled before the call.
-One Vertex worker per unique image, capped at 12 (`CV_MAX_WORKERS` / `--workers`).
+```python
+from cv import build_inventory
+from cv.checklist import load_checklist
+from cv.images import list_images
 
-Offline checks: `python -m cv.test_offline`
+inv = build_inventory(list_images(dir), load_checklist(yaml_path))
+```
+
+Production callers use HTTP so the editor does not embed Vertex.
+
+Offline: `python -m cv.test_offline`

@@ -13,6 +13,8 @@ def inventory_to_yaml(inv: Inventory) -> str:
             "requirement_ids": im.requirement_ids,
             "hits": [h.model_dump(exclude_none=True) for h in im.hits],
         }
+        if im.uri:
+            row["uri"] = im.uri
         if im.note:
             row["note"] = im.note
         if im.findings:
