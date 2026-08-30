@@ -1,5 +1,5 @@
 resource "google_cloud_run_v2_service" "email" {
-  count    = var.email_image != "" && var.editor_image != "" ? 1 : 0
+  count    = var.email_image != "" && var.editor_image != "" && var.imap_host != "" ? 1 : 0
   name     = "email"
   location = var.region
   ingress  = "INGRESS_TRAFFIC_ALL"
@@ -117,7 +117,7 @@ resource "google_cloud_run_v2_service" "email" {
 }
 
 resource "google_cloud_run_v2_service_iam_member" "github_invokes_email" {
-  count    = var.email_image != "" && var.editor_image != "" ? 1 : 0
+  count    = var.email_image != "" && var.editor_image != "" && var.imap_host != "" ? 1 : 0
   name     = google_cloud_run_v2_service.email[0].name
   location = google_cloud_run_v2_service.email[0].location
   role     = "roles/run.invoker"
