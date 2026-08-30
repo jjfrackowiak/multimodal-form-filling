@@ -19,7 +19,15 @@ def initial_prompt(req: SliceRequest) -> str:
         "justification, and (only when the verdict is 'fail') a suggestion.",
     ]
     for requirement in req.requirements:
-        lines.append(f"- {requirement.id}: {requirement.text}")
+        constraint = (
+            f"; constraint={requirement.constraint.kind}:{requirement.constraint.value}"
+            if requirement.constraint is not None
+            else ""
+        )
+        lines.append(
+            f"- {requirement.id}: {requirement.text}; "
+            f"expected_count={requirement.expected_count}{constraint}"
+        )
     return "\n".join(lines)
 
 

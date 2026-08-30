@@ -1,0 +1,5 @@
+name: mff-b9-live-fleet
+cases:
+  - name: fleet-vehicle-return
+    expected_failures: [R-01, R-04]
+    max_duration_seconds: 130

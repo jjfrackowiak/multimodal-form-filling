@@ -1,4 +1,4 @@
-"""Run the offline mixed-mode fleet fixture through the complete pipeline."""
+"""Run the mixed-mode fleet fixture through the complete pipeline."""
 
 # The demo is intentionally runnable without installing each workspace package.
 # Ruff's E402 is expected after this path bootstrap.
@@ -6,13 +6,13 @@
 from __future__ import annotations
 
 import asyncio
-import importlib.util
+import argparse
 import io
+import os
 import subprocess
 import sys
 import tempfile
 import zipfile
-from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
@@ -23,7 +23,9 @@ import yaml
 REPO_ROOT = Path(__file__).resolve().parents[1]
 for source_root in (
     REPO_ROOT / "services" / "email-service" / "src",
+    REPO_ROOT / "services" / "editor-service" / "src",
     REPO_ROOT / "packages" / "mff-contracts" / "src",
+    REPO_ROOT / "packages" / "mff-fakes" / "src",
     REPO_ROOT / "packages" / "mff-docmodel" / "src",
     REPO_ROOT / "packages" / "mff-manifest" / "src",
     REPO_ROOT / "packages" / "mff-store" / "src",
@@ -31,21 +33,29 @@ for source_root in (
 ):
     sys.path.insert(0, str(source_root))
 
+from google.adk.models.llm_response import LlmResponse
+from google.genai import types
+
+from editor_service.flows.derivative import review_derivative
+from editor_service.flows.netnew import compose_netnew
+from editor_service.llm.output import SliceTurnOutput
+from editor_service.settings import Settings
 from email_service.delivery import DeliveryDispatcher
 from email_service.intake import ParsedRequest, parse_inbound, validate_intake
 from email_service.orchestrator import OrchestratorDeps, run_request
-from email_service.runner.fake import FakeSliceRunner
 from email_service.transport import Attachment, InboundMessage, InMemoryTransport, OutboundMessage
 from mff_contracts import (
     Anchor,
     ClientInputs,
     Constraint,
-    DraftOp,
+    DerivativeArtifact,
+    ImageAnalysis,
     JobImage,
     JobRecord,
     JobRequest,
     Manifest,
     Mode,
+    NetNewArtifact,
     RequestRecord,
     RequestResult,
     Requirement,
@@ -53,6 +63,7 @@ from mff_contracts import (
     SliceReport,
     SliceRequest,
 )
+from mff_fakes import FakeLlm
 from mff_manifest import parse_manifest
 from mff_store.memory import (
     InMemoryArtifactRepository,
@@ -103,6 +114,9 @@ class DemoRun:
     result: RequestResult
     outbound: OutboundMessage
     jobs: list[JobRecord]
+    flow_calls: list[SliceRequest]
+    flow_reports: list[SliceReport]
+    flow_runs: list[tuple[SliceRequest, SliceReport]]
     checker_output: str
 
 
@@ -240,56 +254,83 @@ async def _to_job_requests(
     return jobs
 
 
-def _runner(comments: dict[str, ReviewComment]) -> FakeSliceRunner:
-    """Build the current-main runner until the B6/B7 flow adapter is merged.
+@dataclass
+class FlowSliceRunner:
+    """B9's in-process bridge from the B5 protocol to the B6/B7 flows."""
 
-    B6/B7 are separate branches and their flow functions require editor-side inventory
-    and session dependencies that the B5 `SliceRunner` protocol does not carry. Once
-    both flows land, replace this fallback with a runner that passes a
-    `FakeLlm.script(...)` to each flow and translates the flow's `SliceReport` directly.
-    """
-    try:
-        flows_available = all(
-            importlib.util.find_spec(module_name) is not None
-            for module_name in (
-                "editor_service.flows.derivative",
-                "editor_service.flows.netnew",
+    comments: dict[str, ReviewComment]
+    inventory: list[ImageAnalysis]
+    netnew_texts: dict[str, dict[str, str]]
+    live_model: bool = False
+    calls: list[SliceRequest] = field(default_factory=list)
+    reports: list[SliceReport] = field(default_factory=list)
+    runs: list[tuple[SliceRequest, SliceReport]] = field(default_factory=list)
+
+    async def run(self, request: SliceRequest) -> SliceReport:
+        self.calls.append(request)
+        if request.mode is Mode.DERIVATIVE:
+            assert isinstance(request.artifact, DerivativeArtifact)
+            model = None
+            if not self.live_model:
+                comments = [self.comments[requirement.id] for requirement in request.requirements]
+                model = FakeLlm.script([SliceTurnOutput(comments=comments)])
+            report = await review_derivative(
+                request,
+                request.artifact,
+                self.inventory,
+                model=model,
             )
-        )
-    except ModuleNotFoundError:
-        flows_available = False
-    if flows_available:
-        raise RuntimeError(
-            "B9 flow adapter TODO: B6/B7 are present; wire FakeLlm.script into both "
-            "flows before running the mixed-mode demo"
-        )
+        else:
+            assert isinstance(request.artifact, NetNewArtifact)
+            model = None
+            if not self.live_model:
+                comments = [self.comments[requirement.id] for requirement in request.requirements]
+                model = FakeLlm.script(
+                    [_netnew_mutations(request), SliceTurnOutput(comments=comments)]
+                )
+            report = await compose_netnew(
+                request,
+                request.artifact,
+                self.inventory,
+                self.netnew_texts[request.job_id],
+                model=model,
+            )
+        self.reports.append(report)
+        self.runs.append((request, report))
+        return report
 
-    def handler(request: SliceRequest) -> SliceReport:
-        selected = [comments[requirement.id] for requirement in request.requirements]
-        ops: list[DraftOp] = []
-        if request.mode == Mode.NET_NEW:
-            ops = [
-                DraftOp(
-                    kind="append",
-                    requirement_id=requirement.id,
-                    section_id="draft",
-                    value=f"Client input reviewed for {requirement.id}",
+
+def _netnew_mutations(request: SliceRequest) -> LlmResponse:
+    return LlmResponse(
+        content=types.Content(
+            role="model",
+            parts=[
+                types.Part(
+                    function_call=types.FunctionCall(
+                        name="append_entry",
+                        args={
+                            "section_id": "section-09",
+                            "label": requirement.id,
+                            "value": f"Reviewed client evidence for {requirement.id}",
+                            "requirement_id": requirement.id,
+                        },
+                    )
                 )
                 for requirement in request.requirements
-            ]
-        return SliceReport(
-            slice_id=request.slice_id,
-            comments=selected,
-            ops=ops,
-            unverified=[],
-            attempts_used=1,
+            ],
         )
-
-    typed_handler: Callable[[SliceRequest], Awaitable[SliceReport] | SliceReport] = handler
-    return FakeSliceRunner(handler=typed_handler)
+    )
 
 
-async def run_demo() -> DemoRun:
+def _fixture_inventory() -> list[ImageAnalysis]:
+    data: dict[str, Any] = yaml.safe_load((FIXTURE_ROOT / "inventory.yaml").read_text("utf-8"))
+    return [ImageAnalysis.model_validate(image) for image in data["images"]]
+
+
+async def run_demo(*, live_model: bool = False) -> DemoRun:
+    """Run offline by default; use real Gemini calls only when explicitly requested."""
+    if live_model:
+        Settings.from_env()
     transport = InMemoryTransport()
     inbound = _fixture_email()
     transport.deliver(inbound)
@@ -328,7 +369,16 @@ async def run_demo() -> DemoRun:
     request_repo = InMemoryRequestRepository()
     job_repo = InMemoryJobRepository()
     await request_repo.put(request)
-    runner = _runner(_fixture_comments())
+    runner = FlowSliceRunner(
+        comments=_fixture_comments(),
+        inventory=_fixture_inventory(),
+        netnew_texts={
+            job.job_id: dict(job.inputs.texts)
+            for job in jobs
+            if job.mode is Mode.NET_NEW and job.inputs is not None
+        },
+        live_model=live_model,
+    )
     deps = OrchestratorDeps(
         artifact_repo=InMemoryArtifactRepository(),
         job_repo=job_repo,
@@ -381,13 +431,26 @@ async def run_demo() -> DemoRun:
         result=result,
         outbound=outbound,
         jobs=records,
+        flow_calls=runner.calls,
+        flow_reports=runner.reports,
+        flow_runs=runner.runs,
         checker_output=checker_output,
     )
 
 
 async def _main() -> int:
-    run = await run_demo()
-    print("B9 e2e demo: PASS")
+    parser = argparse.ArgumentParser(description="Run the fleet form-filling E2E demo.")
+    parser.add_argument(
+        "--live",
+        action="store_true",
+        help="use the configured Gemini model through ADC instead of FakeLlm",
+    )
+    args = parser.parse_args()
+    if args.live and not os.environ.get("GOOGLE_CLOUD_PROJECT", "").strip():
+        parser.error("--live requires GOOGLE_CLOUD_PROJECT and Application Default Credentials")
+
+    run = await run_demo(live_model=args.live)
+    print(f"B9 {'live ' if args.live else ''}e2e demo: PASS")
     print(f"RequestResult status: {run.result.status}")
     print(f"jobs done: {len(run.jobs)}; attachments: {len(run.outbound.attachments)}")
     print("requirements: " + ", ".join(requirement.id for requirement in run.manifest.requirements))

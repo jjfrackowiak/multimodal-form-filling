@@ -1,0 +1,15 @@
+name: fleet-vehicle-return-derivative-live
+description: >
+  Live B6 derivative evaluation against the ADC-backed default Gemini model. The fixture
+  is split into B6-sized slices and scored as one review result.
+fixtures:
+  requirements: fixtures/fleet-vehicle-return/expected_requirements.yaml
+  inventory: fixtures/fleet-vehicle-return/inventory.yaml
+  structure: fixtures/fleet-vehicle-return/expected_output/structure.yaml
+  review: fixtures/fleet-vehicle-return/expected_output/review.yaml
+  document: fixtures/fleet-vehicle-return/input/derivative/form_supplied.docx
+cases:
+  - name: golden-fleet-vehicle-return
+    job_id: job-fleet-vehicle-return
+    form_id: form_supplied.docx
+    max_duration_seconds: 100
