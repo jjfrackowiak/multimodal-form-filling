@@ -249,6 +249,82 @@ before a single comment has been written against it.
 
 Which is also why the parse must happen **once**. See the email layer above.
 
+## Citations must quote, not point
+
+A reference like `manifest.txt → R-04` tells the client nothing. They did not write
+`R-04`; they wrote `2x podsufitka`. A justification is only auditable if it carries the
+words that actually drove the decision, so `ReviewComment.citations` holds verbatim
+quotes with their line numbers, and the fixture asserts three things about them:
+
+- **every quote is a literal substring of the manifest.** A citation the client cannot
+  find in their own words is worse than no citation — it looks like evidence and isn't.
+- **the cited line number is where that quote actually appears.**
+- **the required spans are all present**, not just one of them.
+
+That last point is the substantive one. Two requirements in the fixture need **two
+citations each**:
+
+| Req | Must cite | Why both |
+|---|---|---|
+| R-01 | `16 zdjęć` + `Pod maską` | The repeated line is why two are expected; the client's own stated total of 16 is why that reading wins |
+| R-04 | `2x podsufitka` + `Podsufitka trzeba spomiędzy forteli zrobić` | Cite only the first and the client cannot see why two supplied photos failed |
+
+Cite one span where two were needed and the comment becomes unanswerable. The evaluator
+enforces this — dropping R-04's constraint citation, paraphrasing it instead of quoting,
+or citing it against the wrong line number all fail the fixture.
+
+## In net-new, everything arrives as an edit
+
+Req 14 says edits are line-targeted and there is no full regeneration. That constrains
+net-new more than it first appears: the scaffold generator does **not** get to emit
+finished content.
+
+The generator emits **structure only** — headings, field labels, empty content slots —
+and declares its own regions as it goes: structure locked, slots editable. Every piece
+of actual content then arrives through the same `Edit(line_id, new_text, requirement_id)`
+path that derivative uses. Nothing is written directly into the document.
+
+Three things fall out of that, and they are the reason to insist on it:
+
+- **Provenance is total.** `Artifact.edits` becomes the complete account of how the
+  document came to exist, with every line traceable to the requirement that caused it.
+  Req 10 asks net-new comments to show how each requirement was realised — this is what
+  makes that answerable rather than asserted.
+- **One apply path.** `APPLY_EDITS` is identical in both modes, so locked-region
+  enforcement is exercised by both and cannot rot in the mode that "doesn't need it".
+- **The invariant is checkable:** in net-new output, every character outside the
+  generated scaffold must be attributable to an `Edit` carrying a `requirement_id`.
+  Content that appears with no edit behind it is a bug, however good it reads.
+
+## Service structure
+
+Nine agents building in parallel will each invent their own layout unless one is
+written down. Both services use the same shape:
+
+```
+services/<name>/src/<pkg>/
+  main.py           app factory + lifespan; nothing else
+  api/
+    routers/        thin HTTP layer, one module per resource
+    deps.py         FastAPI Depends providers — settings, repos, clients
+    schemas.py      HTTP request/response shapes (NOT the wire contracts)
+  services/         business logic
+  <domain>/         machine/, agents/, llm/, store/, transport/ …
+```
+
+Four rules, the first two enforced by import-linter rather than review:
+
+1. **`services/` must not import `fastapi`.** This is the load-bearing rule. It is what
+   lets the state machine be driven from a test, the eval harness or a CLI with no HTTP
+   anywhere, and it is why the whole Tier-A suite runs without starting a server.
+2. **Routers hold no business logic.** Parse, delegate, shape the response. A router
+   containing a domain `if` is in the wrong file.
+3. **Dependencies arrive through `Depends`**, never module-level singletons — that is
+   how a test injects the in-memory repository and the fake transport.
+4. **`ffx-contracts` models are the wire contract between services; `api/schemas.py` is
+   for HTTP concerns only.** Do not leak one into the other, or the frozen package stops
+   being frozen in practice.
+
 ## State & persistence
 
 Req 12 says the artifact lives "outside any single agent run". In-process that's a Python object — but across an HTTP boundary, a retry, a crash, or a second replica, an in-process object is gone. It needs a store, and that store is also what finally gives **D2** (job status after confirmation) something to report.
@@ -352,13 +428,19 @@ class Region(BaseModel):
 class Edit(BaseModel):
     line_id: str; new_text: str; requirement_id: str
 
+class Citation(BaseModel):         # the client's own words, not a pointer
+    requirement_id: str
+    quote: str                     # VERBATIM substring of manifest_raw
+    line: int                      # 1-indexed line it appears on
+    start: int; end: int           # char offsets; manifest_raw[start:end] == quote
+
 class ReviewComment(BaseModel):
     line_id: str
     requirement_id: str
     verdict: Literal["pass", "fail", "realised", "unverified"]
     justification: str                 # req 16: every answer justified
     suggestion: str | None             # required when verdict == "fail" (req 10)
-    source_reference: str              # req 16: must resolve to a real Requirement or Line
+    citations: list[Citation]          # req 16 — plural, and quoted; see below
 
 class Artifact(BaseModel):     # req 12 — lives outside any single agent run
     doc_id: str

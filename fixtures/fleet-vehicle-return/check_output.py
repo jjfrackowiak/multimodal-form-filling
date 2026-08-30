@@ -23,6 +23,11 @@ from docx import Document
 
 HERE = Path(__file__).parent
 SPEC = HERE / "expected_output" / "structure.yaml"
+MANIFEST = (HERE / "manifest.txt").read_text(encoding="utf-8")
+MANIFEST_LINES = MANIFEST.split("\n")
+
+# 'wiersz 4: "2x podsufitka"'  ->  ("4", "2x podsufitka")
+CITE_RE = re.compile(r'wiersz\s+(\d+):\s*"([^"]+)"')
 
 REQ_RE = re.compile(r"\[(R-\d{2})\]")
 VERDICT_RE = re.compile(r"\[R-\d{2}\]\s+(\w+)")
@@ -33,7 +38,7 @@ VERDICT_RE = re.compile(r"\[R-\d{2}\]\s+(\w+)")
 FIELD_RE = {
     "justification": re.compile(r"Uzasadnienie:\s*(.*?)(?=\n\s*(?:Sugestia:|Źródło:)|\Z)", re.S),
     "suggestion":    re.compile(r"Sugestia:\s*(.*?)(?=\n\s*(?:Uzasadnienie:|Źródło:)|\Z)", re.S),
-    "source":        re.compile(r"Źródło:\s*(.*?)(?=\n\s*(?:Uzasadnienie:|Sugestia:)|\Z)", re.S),
+    "source":        re.compile(r"Źródło[^\n]*:\s*(.*?)(?=\n\s*(?:Uzasadnienie:|Sugestia:)|\Z)", re.S),
 }
 MIN_JUSTIFICATION = 20
 
@@ -138,12 +143,21 @@ def check_review(doc, spec: dict, r: Report) -> None:
             r.check(not has_sugg, f"{req} passes but carries a suggestion")
 
         src = field(text, "source")
-        if inv.get("every_comment_has_source_reference"):
-            r.check(bool(src), f"{req} has no source reference")
-        if inv.get("every_source_reference_resolves"):
-            named = src.split("\u2192")[-1].strip()
-            r.check(named in rv["requirement_ids"],
-                    f"{req} source reference does not resolve: {named!r}")
+        if inv.get("every_comment_cites_the_manifest"):
+            r.check(bool(src), f"{req} cites nothing")
+
+        cited = CITE_RE.findall(src)
+        for want in spec.get("required_citations", {}).get(req, []):
+            r.check(any(q == want for _, q in cited),
+                    f"{req} does not cite {want!r}")
+        for line_no, quote in cited:
+            if inv.get("every_citation_is_verbatim"):
+                r.check(quote in MANIFEST,
+                        f"{req} citation is not verbatim in the manifest: {quote!r}")
+            if inv.get("cited_line_numbers_correct"):
+                idx = int(line_no) - 1
+                ok = 0 <= idx < len(MANIFEST_LINES) and quote in MANIFEST_LINES[idx]
+                r.check(ok, f"{req} cites line {line_no} but {quote!r} is not there")
 
     counts: dict[str, int] = {}
     for text in seen.values():

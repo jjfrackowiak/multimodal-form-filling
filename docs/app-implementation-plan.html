@@ -366,6 +366,7 @@ html{scroll-behavior:smooth}
       <a href="#grounding">Framework grounding</a>
       <a href="#architecture">Architecture</a>
       <a href="#parsing">Manifest → requirements</a>
+      <a href="#citations">Citations &amp; structure</a>
       <a href="#state">State &amp; persistence</a>
       <a href="#contract">The frozen contract</a>
       <a href="#branches">Parallel branch tasks</a>
@@ -552,6 +553,50 @@ Podsufitka trzeba spomiędzy forteli zrobić</pre>
       <p>Slice boundaries are a real design decision, not bookkeeping: an agent only ever sees its own slice, so two requirements that contradict each other land in different runs and neither notices. That is concern <strong>D3</strong> — and slicing is where it is created.</p>
     </section>
 
+    <section id="citations">
+      <h2>Citations, edits, and structure</h2>
+      <div class="h2-rule"></div>
+
+      <h3>Citations must quote, not point</h3>
+      <p>A reference like <code>manifest.txt → R-04</code> tells the client nothing. They did not write <code>R-04</code>; they wrote <code>2x podsufitka</code>. A justification is auditable only if it carries the words that actually drove the decision.</p>
+      <p>Three assertions, all enforced by the fixture: every quote is a <strong>literal substring</strong> of the manifest — a citation the client cannot find in their own words is worse than none, because it looks like evidence and isn't; the cited line number is where the quote really appears; and every required span is present, not just one.</p>
+      <div class="tw col">
+        <table>
+          <thead><tr><th>Req</th><th>Must cite</th><th>Why both</th></tr></thead>
+          <tbody>
+            <tr><td class="id">R-01</td><td><code>16 zdjęć</code> + <code>Pod maską</code></td><td>The repeated line is why two are expected; the client's stated total of 16 is why that reading wins</td></tr>
+            <tr><td class="id">R-04</td><td><code>2x podsufitka</code> + <code>Podsufitka trzeba spomiędzy forteli zrobić</code></td><td>Cite only the first and the client cannot see why two supplied photos failed</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>Cite one span where two were needed and the comment becomes unanswerable. Dropping R-04's constraint citation, paraphrasing it rather than quoting, or citing it against the wrong line all fail the fixture.</p>
+
+      <h3>In net-new, everything arrives as an edit</h3>
+      <p>Req 14 says edits are line-targeted with no full regeneration. That constrains net-new more than it first appears: <strong>the scaffold generator does not get to emit finished content.</strong></p>
+      <p>It emits structure only — headings, field labels, empty content slots — declaring its regions as it goes: structure locked, slots editable. Every piece of actual content then arrives through the same <code>Edit(line_id, new_text, requirement_id)</code> path derivative uses.</p>
+      <ul>
+        <li><strong>Provenance is total.</strong> <code>Artifact.edits</code> becomes the complete account of how the document came to exist. Req 10 asks net-new comments to show how each requirement was realised — this is what makes that answerable rather than asserted.</li>
+        <li><strong>One apply path.</strong> <code>APPLY_EDITS</code> is identical in both modes, so locked-region enforcement is exercised by both and cannot rot in the mode that "doesn't need it".</li>
+        <li><strong>The invariant is checkable:</strong> every character outside the generated scaffold must be attributable to an <code>Edit</code> carrying a <code>requirement_id</code>. Content with no edit behind it is a bug, however well it reads.</li>
+      </ul>
+
+      <h3>Service structure</h3>
+      <p>Nine agents in parallel will each invent a layout unless one is written down. Both services use the same shape:</p>
+      <pre class="code">services/&lt;name&gt;/src/&lt;pkg&gt;/
+  main.py           <span class="c"># app factory + lifespan; nothing else</span>
+  api/
+    routers/        <span class="c"># thin HTTP layer, one module per resource</span>
+    deps.py         <span class="c"># Depends providers — settings, repos, clients</span>
+    schemas.py      <span class="c"># HTTP shapes, NOT the wire contracts</span>
+  services/         <span class="c"># business logic</span>
+  &lt;domain&gt;/         <span class="c"># machine/, agents/, llm/, store/, transport/</span></pre>
+      <div class="callout">
+        <span class="tag">The load-bearing rule</span>
+        <p><code>services/</code> must not import <code>fastapi</code> — enforced by import-linter, not review. That is what lets the state machine be driven from a test, the eval harness or a CLI with no HTTP anywhere, and it is why the entire Tier-A suite runs without starting a server.</p>
+      </div>
+      <p>Three more: <strong>routers hold no business logic</strong> (a router containing a domain <code>if</code> is in the wrong file); <strong>dependencies arrive through <code>Depends</code></strong>, never module-level singletons, so tests can inject the in-memory repository and the fake transport; and <strong><code>ffx-contracts</code> is the wire contract while <code>api/schemas.py</code> is HTTP-only</strong> — leak one into the other and the frozen package stops being frozen in practice.</p>
+    </section>
+
     <section id="state">
       <h2>State &amp; persistence</h2>
       <div class="h2-rule"></div>
@@ -622,7 +667,12 @@ Podsufitka trzeba spomiędzy forteli zrobić</pre>
     verdict: Literal["pass", "fail", "realised", "unverified"]
     justification: str      <span class="c"># req 16: every answer justified</span>
     suggestion: str | None  <span class="c"># required when verdict == "fail"</span>
-    source_reference: str   <span class="c"># req 16: must resolve to a real source</span>
+    citations: list[Citation]  <span class="c"># the client's own words, quoted</span>
+
+<span class="k">class</span> Citation(BaseModel):
+    quote: str              <span class="c"># VERBATIM substring of manifest_raw</span>
+    line: int               <span class="c"># 1-indexed line it appears on</span>
+    start: int; end: int    <span class="c"># manifest_raw[start:end] == quote</span>
 
 <span class="k">class</span> JobAccepted(BaseModel):  <span class="c"># the 202 — req 7 quotes exactly this</span>
     job_id: str

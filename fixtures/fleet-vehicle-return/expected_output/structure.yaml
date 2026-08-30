@@ -51,8 +51,12 @@ common:
       every_comment_has_justification: true        # non-empty "Uzasadnienie:"
       failing_comment_has_suggestion: true         # req 10
       passing_comment_has_no_suggestion: true      # a pass needs no remedy
-      every_comment_has_source_reference: true     # "Źródło:" present
-      every_source_reference_resolves: true        # names a real R-nn
+      every_comment_cites_the_manifest: true       # "Źródło — manifest klienta:" present
+      every_citation_is_verbatim: true             # each quote is a literal substring
+                                                   # of manifest.txt — a citation the
+                                                   # client cannot find in their own
+                                                   # words is worse than none
+      cited_line_numbers_correct: true             # the quote really is on that line
       comment_anchored_to_governing_section: true  # not dumped at the document end
 
     # The verdict set the run must arrive at. This is the correctness gate:
@@ -88,6 +92,22 @@ common:
   # R-04 is the case that separates a real checker from a counter. The count is
   # satisfied (2 of 2) and the requirement still fails. Any implementation that
   # scores photo_coverage on counts alone passes R-04 and is wrong.
+  # A citation must carry the words that actually drove the decision. R-01 and
+  # R-04 each need two spans: cite only "2x podsufitka" and the client cannot see
+  # why two supplied photos failed; cite only "Pod maską" and they cannot see why
+  # two were expected.
+  required_citations:
+    R-01: ["16 zdjęć", "Pod maską"]
+    R-02: ["4x fotele"]
+    R-03: ["2 przekatne pojazdu"]
+    R-04: ["2x podsufitka", "Podsufitka trzeba spomiędzy forteli zrobić"]
+    R-05: ["Przednia szyba że środka i zewnątrz"]
+    R-06: ["Przednia szyba że środka i zewnątrz"]
+    R-07: ["Bieżnik opony"]
+    R-08: ["zdjęcie bagażnika + wyposażenia pod klapą"]
+    R-09: ["zdjęcie bagażnika + wyposażenia pod klapą"]
+    R-10: ["i zegary"]
+
   constraint_checks:
     - requirement_id: R-04
       kind: camera_position
