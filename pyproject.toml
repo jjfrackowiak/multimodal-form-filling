@@ -19,6 +19,14 @@ dev = [
     "ruff>=0.7",
     "mypy>=1.13",
     "import-linter>=2.1",
+    # fixtures/fleet-vehicle-return/check_output.py (the reference evaluator every
+    # brief is told to run) imports docx directly. It is a standalone dev-time
+    # script, not a package, so this is a workspace dev dependency rather than
+    # something any single package should carry — mirrors pytest/ruff/mypy above.
+    # Not a violation of the "mff_contracts depends on pydantic and nothing else" /
+    # "python-docx must not appear in the editor" rules: those bind package source
+    # under packages/ and services/, not this repo-root dev tooling group.
+    "python-docx>=1.1",
 ]
 
 # ---------------------------------------------------------------------------
