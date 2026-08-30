@@ -46,9 +46,9 @@ MANIFEST = (FIXTURE / "manifest.txt").read_text(encoding="utf-8")
 MANIFEST_LINES = MANIFEST.split("\n")
 
 # Same regexes as fixtures/fleet-vehicle-return/check_output.py's check_delivery().
-_CITE_RE = re.compile(r'wiersz\s+(\d+):\s*"([^"]+)"')
+_CITE_RE = re.compile(r'line\s+(\d+):\s*"([^"]+)"')
 _REQ_LINE_RE = re.compile(r"^\s*(R-\d{2})\s{2,}(.+)$", re.M)
-_MARKER = "ODCZYTANE WYMAGANIA"
+_MARKER = "PARSED REQUIREMENTS"
 
 
 def _check_delivery_shape(
@@ -95,9 +95,9 @@ def _check_delivery_shape(
     # A naive `str(n) in body` substring check (what check_delivery() in
     # check_output.py does) is fooled by a mutated count that still happens to appear
     # elsewhere — "2" collides with "R-02" and half the cited line numbers. Found by
-    # mutation-testing this checker; scope to the "Wynik:" line and require each count
+    # mutation-testing this checker; scope to the "Result:" line and require each count
     # as a whole number, not a substring anywhere in the body.
-    summary_line_match = re.search(r"^Wynik:.*$", body, re.M)
+    summary_line_match = re.search(r"^Result:.*$", body, re.M)
     summary_line = summary_line_match.group(0) if summary_line_match else ""
     if not summary_line:
         violations.append("delivery has no summary line")
@@ -189,7 +189,7 @@ async def test_delivery_names_both_failing_requirements_with_justification(
     assert "Two engine-bay photographs were required" in body
     assert "between the front seats" in body
     # req 10: a fail carries a remedy.
-    assert "Sugestia:" in body
+    assert "Suggestion:" in body
 
 
 async def test_delivery_attaches_the_single_reviewed_document(
@@ -230,7 +230,7 @@ async def test_mutation_paraphrasing_a_quoted_span_is_caught(
     golden_message: GoldenMessageBuilder,
 ) -> None:
     body, requirements, _comments = await golden_message()
-    mutated = body.replace('"4x fotele"', '"four seats please"')
+    mutated = body.replace('"4x seats"', '"four seats please"')
     violations = _check_delivery_shape(
         mutated,
         requirements=requirements,
@@ -246,7 +246,7 @@ async def test_mutation_wrong_summary_counts_is_caught(
     golden_message: GoldenMessageBuilder,
 ) -> None:
     body, requirements, _comments = await golden_message()
-    mutated = body.replace("8 spełnionych, 2 niespełnionych", "9 spełnionych, 1 niespełnionych")
+    mutated = body.replace("8 passed, 2 failed", "9 passed, 1 failed")
     violations = _check_delivery_shape(
         mutated,
         requirements=requirements,

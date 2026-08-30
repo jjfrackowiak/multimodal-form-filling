@@ -21,12 +21,12 @@ async def test_get_missing_returns_none(request_repo: object) -> None:
 
 
 async def test_manifest_survives_non_ascii_bytes(request_repo: object) -> None:
-    """The manifest is real, client-written Polish text — never normalise it, and never
+    """The manifest is real client text — never normalise it, and never
     let it come back mangled through the store."""
-    record = make_request_record("req-polish")
+    record = make_request_record("req-manifest")
     await request_repo.put(record)  # type: ignore[attr-defined]
 
-    loaded = await request_repo.get("req-polish")  # type: ignore[attr-defined]
+    loaded = await request_repo.get("req-manifest")  # type: ignore[attr-defined]
     assert loaded is not None
-    assert "zdjęć" in loaded.manifest_raw
-    assert "maską" in loaded.manifest_raw
+    assert "photos" in loaded.manifest_raw
+    assert "Under the bonnet" in loaded.manifest_raw

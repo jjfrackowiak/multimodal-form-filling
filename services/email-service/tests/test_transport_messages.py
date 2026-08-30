@@ -13,8 +13,8 @@ def _inbound(**over: object) -> InboundMessage:
     base: dict[str, object] = {
         "message_id": "<abc@example.test>",
         "sender": "jot@example.test",
-        "subject": "Walidacja",
-        "body": "16 zdjęć,\nPod maską",
+        "subject": "Validation",
+        "body": "16 photos,\nUnder the bonnet",
         "received_at": datetime(2026, 8, 30, 12, 0, tzinfo=UTC),
     }
     return InboundMessage.model_validate({**base, **over})
@@ -23,14 +23,14 @@ def _inbound(**over: object) -> InboundMessage:
 def test_body_carries_the_manifest_verbatim() -> None:
     """The manifest is the body, never an attachment — including its newlines."""
     msg = _inbound()
-    assert msg.body == "16 zdjęć,\nPod maską"
+    assert msg.body == "16 photos,\nUnder the bonnet"
     assert msg.attachments == []
 
 
 def test_attachment_filename_survives_utf8() -> None:
     """MIME may deliver this RFC 2047 encoded; by the time it is an Attachment it is decoded."""
-    a = Attachment(filename="protokół.docx", content_type=DOCX, data=b"PK\x03\x04")
-    assert a.filename == "protokół.docx"
+    a = Attachment(filename="protocol.docx", content_type=DOCX, data=b"PK\x03\x04")
+    assert a.filename == "protocol.docx"
     assert a.data.startswith(b"PK")
 
 
@@ -44,7 +44,7 @@ def test_reply_threads_on_the_original_message() -> None:
     """in_reply_to is the CLIENT's id, never our own confirmation's."""
     out = OutboundMessage(
         to="jot@example.test",
-        subject="Wynik walidacji",
+        subject="Validation result",
         body="…",
         in_reply_to="<abc@example.test>",
         references=["<abc@example.test>"],

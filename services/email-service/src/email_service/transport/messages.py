@@ -28,7 +28,7 @@ class Attachment(BaseModel):
     """One attached file, already decoded.
 
     `filename` is the decoded name — MIME may carry it RFC 2047 encoded
-    (`=?UTF-8?B?...?=`), and `protokół.docx` arriving as gibberish would fail an
+    (`=?UTF-8?B?...?=`), and `protocol.docx` arriving as gibberish would fail an
     extension check on a perfectly valid file.
     """
 
@@ -55,6 +55,7 @@ class OutboundMessage(BaseModel):
     to: str
     subject: str
     body: str
+    html_body: str | None = None  # optional multipart/alternative; plaintext stays canonical
     attachments: list[Attachment] = Field(default_factory=list)
     in_reply_to: str | None = None  # the client's Message-ID
     references: list[str] = Field(default_factory=list)

@@ -244,7 +244,7 @@ cd mock-firestore-app && docker compose up --build
 curl -s http://localhost:8083/health
 ```
 
-Compose builds `services/cv/Dockerfile` from the repo root, mounts ADC for Vertex, and
+Compose builds `docker/cv.Dockerfile` from the repo root, mounts ADC for Vertex, and
 sets `CV_URL=http://cv:8080` on the **editor** stub. The editor `/runs`
 endpoint is still 501 — when it is filled in, that env is already the tool
 base URL. Compose does not require identity tokens.

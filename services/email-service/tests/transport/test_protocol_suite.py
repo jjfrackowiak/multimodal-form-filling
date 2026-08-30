@@ -28,8 +28,8 @@ def _inbound(
     return InboundMessage(
         message_id=message_id or f"<{marker}@example.test>",
         sender="klient@example.test",
-        subject=f"Walidacja [{marker}]",
-        body=body or "16 zdjęć,\nPod maską",
+        subject=f"Validation [{marker}]",
+        body=body or "16 photos,\nUnder the bonnet",
         received_at=datetime(2026, 8, 30, tzinfo=UTC),
     )
 
@@ -54,7 +54,7 @@ async def test_fetch_unseen_returns_a_delivered_message(
     await transport_harness.deliver(_inbound(marker))
 
     fetched = await _fetch_marker(transport_harness, marker)
-    assert "Pod maską" in fetched.body
+    assert "Under the bonnet" in fetched.body
 
 
 async def test_mark_seen_excludes_the_message_from_a_later_fetch(
@@ -100,22 +100,20 @@ async def test_send_preserves_polish_text_and_a_docx_attachment(
     marker = uuid.uuid4().hex[:8]
     outbound = OutboundMessage(
         to=transport_harness.own_address,
-        subject=f"Wynik walidacji [{marker}]",
-        body="Formularz zawiera 4x fotele i 2 przekątne pojazdu — Pod maską OK.",
+        subject=f"Validation result [{marker}]",
+        body="The form contains 4x seats and 2 vehicle diagonals — Under the bonnet OK.",
         attachments=[
-            Attachment(
-                filename="raport.docx", content_type=DOCX, data=b"PK\x03\x04zawartosc-raportu"
-            )
+            Attachment(filename="report.docx", content_type=DOCX, data=b"PK\x03\x04report-contents")
         ],
     )
 
     await transport_harness.transport.send(outbound)
     fetched = await _fetch_marker(transport_harness, marker)
 
-    assert "przekątne" in fetched.body
-    assert "Pod maską" in fetched.body
+    assert "vehicle diagonals" in fetched.body
+    assert "Under the bonnet" in fetched.body
     assert len(fetched.attachments) == 1
-    assert fetched.attachments[0].filename == "raport.docx"
+    assert fetched.attachments[0].filename == "report.docx"
     assert fetched.attachments[0].data.startswith(b"PK\x03\x04")
 
 

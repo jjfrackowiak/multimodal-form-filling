@@ -39,7 +39,7 @@ def _comment(
 def test_attach_single_comment(derivative_docx_bytes: bytes) -> None:
     artifact = _artifact(derivative_docx_bytes)
     compiled_bytes, render_map = compile_derivative(artifact, derivative_docx_bytes)
-    heading = next(n for n in artifact.nodes if n.text == "6. Bieżnik opony")
+    heading = next(n for n in artifact.nodes if n.text == "6. Tyre tread")
 
     out_bytes, count, unanchored = attach_comments(
         compiled_bytes, [_comment("R-07", heading.id)], render_map, author=AUTHOR
@@ -59,7 +59,7 @@ def test_two_comments_on_one_span_the_r05_r06_shape(derivative_docx_bytes: bytes
     """The fixture's real case: R-05 and R-06 both target the same heading node."""
     artifact = _artifact(derivative_docx_bytes)
     compiled_bytes, render_map = compile_derivative(artifact, derivative_docx_bytes)
-    heading = next(n for n in artifact.nodes if n.text == "5. Przednia szyba")
+    heading = next(n for n in artifact.nodes if n.text == "5. Windscreen")
 
     comments = [
         _comment("R-05", heading.id),
@@ -79,7 +79,7 @@ def test_two_comments_on_one_span_the_r05_r06_shape(derivative_docx_bytes: bytes
     assert any("[R-06]" in t for t in texts)
 
     # Both comments must anchor to the SAME paragraph (the heading), not two different ones.
-    heading_paragraph = next(p for p in doc.paragraphs if p.text == "5. Przednia szyba")
+    heading_paragraph = next(p for p in doc.paragraphs if p.text == "5. Windscreen")
     xml = heading_paragraph._p.xml
     assert xml.count("commentRangeStart") == 2
     assert xml.count("commentRangeEnd") == 2
@@ -129,7 +129,7 @@ def test_unresolvable_node_id_also_falls_back_and_is_reported(derivative_docx_by
 def test_mixed_batch_counts_and_unanchored_list(derivative_docx_bytes: bytes) -> None:
     artifact = _artifact(derivative_docx_bytes)
     compiled_bytes, render_map = compile_derivative(artifact, derivative_docx_bytes)
-    heading = next(n for n in artifact.nodes if n.text == "8. Zegary")
+    heading = next(n for n in artifact.nodes if n.text == "8. Gauges")
 
     comments = [
         _comment("R-10", heading.id),
@@ -159,7 +159,7 @@ def test_mixed_batch_counts_and_unanchored_list(derivative_docx_bytes: bytes) ->
 def test_fail_verdict_carries_its_suggestion(derivative_docx_bytes: bytes) -> None:
     artifact = _artifact(derivative_docx_bytes)
     compiled_bytes, render_map = compile_derivative(artifact, derivative_docx_bytes)
-    heading = next(n for n in artifact.nodes if n.text == "1. Pod maską")
+    heading = next(n for n in artifact.nodes if n.text == "1. Under the bonnet")
 
     comment = _comment(
         "R-01", heading.id, verdict="fail", suggestion="Supply a second engine-bay photograph."
@@ -170,5 +170,5 @@ def test_fail_verdict_carries_its_suggestion(derivative_docx_bytes: bytes) -> No
     doc = OpenDocument(io.BytesIO(out_bytes))
     text = next(iter(doc.comments)).text
     assert "FAIL" in text
-    assert "Sugestia:" in text
+    assert "Suggestion:" in text
     assert "Supply a second engine-bay photograph." in text

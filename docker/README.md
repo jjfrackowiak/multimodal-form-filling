@@ -8,6 +8,7 @@ docker/
   email-service.Dockerfile
   editor-service.Dockerfile
   vision-stub.Dockerfile
+  cv.Dockerfile        # real vision service (Michal) — Vertex, not the fixture lookup
   compose.dev.yaml     # GreenMail only — B12 may add Firestore/GCS emulators here
 ```
 
@@ -78,6 +79,10 @@ marker of what makes this service a placeholder rather than a silent way for the
 | `editor-service` | 8000 | 8001 | matches `.env.example`'s `EDITOR_SERVICE_URL` |
 | `vision-stub` | 8000 | 8002 | matches `.env.example`'s `VISION_SERVICE_URL` |
 | GreenMail SMTP | 3025 | 3025 | never 25 — see `compose.yaml` header |
+
+Production CV is `docker/cv.Dockerfile` (Cloud Run port 8080). Local compose still
+runs **vision-stub** until the editor is wired; do not point `VISION_SERVICE_URL` at
+CV in `compose.yaml` yet. GCP: `infra/`.
 | GreenMail IMAP | 3143 | 3143 | |
 
 Inside the compose network, services reach each other by service name and container port

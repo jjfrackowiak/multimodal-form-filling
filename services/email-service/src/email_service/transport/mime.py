@@ -20,7 +20,7 @@ __all__ = ["build_outbound_email", "parse_inbound_message"]
 def _decode_words(value: str | None) -> str:
     """Undo RFC 2047 encoded-words (`=?UTF-8?B?...?=`).
 
-    Without this, `protokół.docx` — or a Polish subject line — arrives as gibberish.
+    Without this, `protocol.docx` — or a Polish subject line — arrives as gibberish.
     `Message.get_filename()` and header accessors hand back the raw encoded-word form;
     nothing decodes it for you.
     """
@@ -103,6 +103,8 @@ def build_outbound_email(message: OutboundMessage, *, mail_from: str) -> EmailMe
         # RFC 3834 — this is the header the loop guard on the *receiving* end checks.
         email_msg["Auto-Submitted"] = "auto-replied"
     email_msg.set_content(message.body)
+    if message.html_body:
+        email_msg.add_alternative(message.html_body, subtype="html")
     for attachment in message.attachments:
         maintype, _, subtype = attachment.content_type.partition("/")
         email_msg.add_attachment(

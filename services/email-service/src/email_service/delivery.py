@@ -47,6 +47,7 @@ from mff_contracts import (
     ReviewComment,
 )
 
+from .mail_html import render_delivery_html
 from .transport.messages import Attachment, OutboundMessage
 from .transport.protocol import MailTransport
 
@@ -73,13 +74,13 @@ SIGNED_URL_TTL_SECONDS = 7 * 24 * 60 * 60
 _OK_VERDICTS = frozenset({"pass", "realised", "not_applicable"})
 _ATTENTION_VERDICTS = frozenset({"fail", "shortfall"})
 
-_VERDICT_LABELS_PL = {
-    "pass": "spełnionych",
-    "fail": "niespełnionych",
-    "realised": "zrealizowanych",
-    "shortfall": "niedopełnionych",
-    "not_applicable": "nie dotyczy",
-    "unverified": "niezweryfikowanych",
+_VERDICT_LABELS = {
+    "pass": "passed",
+    "fail": "failed",
+    "realised": "realised",
+    "shortfall": "shortfalls",
+    "not_applicable": "not applicable",
+    "unverified": "unverified",
 }
 
 _SEPARATOR = "─" * 68
@@ -105,7 +106,7 @@ _SEPARATOR = "─" * 68
 class _LabeledDocument:
     ref: BlobRef
     form_id: str | None
-    mode_label: str  # "derivative" | "net_new" | "dokument" (unknown)
+    mode_label: str  # "derivative" | "net_new" | "document" (unknown)
 
 
 def _infer_mode_label(form_id: str) -> str:
@@ -122,7 +123,7 @@ def _label_documents(
     for ref in documents:
         job = by_uri.get(ref.uri)
         if job is None:
-            labeled.append(_LabeledDocument(ref=ref, form_id=None, mode_label="dokument"))
+            labeled.append(_LabeledDocument(ref=ref, form_id=None, mode_label="document"))
         else:
             labeled.append(
                 _LabeledDocument(
@@ -152,27 +153,27 @@ def _render_summary_line(result: RequestResult) -> str:
     for key, count in result.summary.items():
         if key == "unverified":
             continue
-        label = _VERDICT_LABELS_PL.get(key, key)
+        label = _VERDICT_LABELS.get(key, key)
         parts.append(f"{count} {label}")
-    parts.append(f"{len(result.unverified)} {_VERDICT_LABELS_PL['unverified']}")
+    parts.append(f"{len(result.unverified)} {_VERDICT_LABELS['unverified']}")
     if not parts:
-        return "Wynik: brak danych o weryfikacji."
-    return "Wynik: " + ", ".join(parts) + "."
+        return "Result: no verification data."
+    return "Result: " + ", ".join(parts) + "."
 
 
 def _render_requirement_entry(requirement: Requirement) -> str:
     lines = [f"  {requirement.id}  {requirement.text}"]
     lines.append(
-        f'        z manifestu, wiersz {requirement.source_line}: "{requirement.source_span}"'
+        f'        from the manifest, line {requirement.source_line}: "{requirement.source_span}"'
     )
     constraint = requirement.constraint
     if constraint is not None:
-        lines.append(f"        warunek: {constraint.kind} = {constraint.value}")
+        lines.append(f"        constraint: {constraint.kind} = {constraint.value}")
         lines.append(
-            f'        z manifestu, wiersz {constraint.source_line}: "{constraint.source_span}"'
+            f'        from the manifest, line {constraint.source_line}: "{constraint.source_span}"'
         )
     if requirement.ambiguity:
-        lines.append(f"        UWAGA: {requirement.ambiguity}")
+        lines.append(f"        NOTE: {requirement.ambiguity}")
     return "\n".join(lines)
 
 
@@ -180,10 +181,9 @@ def _render_requirement_list(requirements: Sequence[Requirement]) -> str:
     ordered = sorted(requirements, key=lambda r: (r.ordinal, r.text))
     entries = "\n\n".join(_render_requirement_entry(r) for r in ordered)
     return (
-        "ODCZYTANE WYMAGANIA\n\n"
-        "Komentarze w załączonym dokumencie odwołują się do poniższych numerów.\n"
-        "Przy każdym wymaganiu podano fragment Państwa manifestu, z którego\n"
-        "zostało odczytane.\n\n" + entries
+        "PARSED REQUIREMENTS\n\n"
+        "Comments in the attached document refer to the numbers below.\n"
+        "Each requirement includes the fragment of your manifest it was read from.\n\n" + entries
     )
 
 
@@ -193,10 +193,10 @@ def _render_unverified_section(
     if not result.unverified:
         return None
     lines = [
-        "NIEZWERYFIKOWANE",
+        "UNVERIFIED",
         "",
-        "System podjął trzy próby i nie zdołał ocenić poniższych wymagań.",
-        "Prosimy traktować je jako nierozstrzygnięte, nie jako spełnione:",
+        "The system tried three times and could not assess the requirements below.",
+        "Treat them as unresolved, not as passed:",
         "",
     ]
     for req_id in result.unverified:
@@ -210,10 +210,10 @@ def _render_failed_forms_section(result: RequestResult) -> str | None:
     if result.status != "partial" or not result.failed_forms:
         return None
     lines = [
-        "NIEUKOŃCZONE FORMULARZE",
+        "INCOMPLETE FORMS",
         "",
-        "Poniższe formularze nie zostały ukończone i nie są dołączone do tej",
-        "wiadomości:",
+        "The forms below were not completed and are not attached to this",
+        "message:",
         "",
     ]
     lines.extend(f"  - {form_id}" for form_id in result.failed_forms)
@@ -233,21 +233,21 @@ def _render_verdict_sections(
         for comment in sorted(attention, key=lambda c: c.requirement_id):
             block = [f"  [{comment.requirement_id}] {comment.justification}"]
             if comment.suggestion:
-                block.append(f"        Sugestia: {comment.suggestion}")
+                block.append(f"        Suggestion: {comment.suggestion}")
             blocks.append("\n".join(block))
-        sections.append("NIESPEŁNIONE\n\n" + "\n\n".join(blocks))
+        sections.append("FAILED\n\n" + "\n\n".join(blocks))
     if ok:
         ids = ", ".join(c.requirement_id for c in sorted(ok, key=lambda c: c.requirement_id))
-        sections.append(f"SPEŁNIONE\n\n  {ids}")
+        sections.append(f"PASSED\n\n  {ids}")
     if not sections:
         return None
     return "\n\n".join(sections)
 
 
-_MODE_HEADING_PL = {
-    "derivative": "sprawdzone formularze (derivative)",
-    "net_new": "utworzone dokumenty (net-new)",
-    "dokument": "dokumenty",
+_MODE_HEADING = {
+    "derivative": "reviewed forms (derivative)",
+    "net_new": "composed documents (net-new)",
+    "document": "documents",
 }
 
 
@@ -280,24 +280,24 @@ def _render_attachments_section(
 
     lines: list[str] = []
     if attached:
-        lines.append("ZAŁĄCZONE DOKUMENTY")
+        lines.append("ATTACHED DOCUMENTS")
         lines.append("")
         for mode_label, group in _group_by_mode(attached).items():
             if multi_mode:
-                lines.append(f"  {_MODE_HEADING_PL.get(mode_label, mode_label)}:")
+                lines.append(f"  {_MODE_HEADING.get(mode_label, mode_label)}:")
             for labeled, attachment in group:
                 kb = labeled.ref.size_bytes / 1024
                 lines.append(f"  - {attachment.filename} ({kb:.0f} KB)")
     if linked:
         if lines:
             lines.append("")
-        lines.append("DOKUMENTY DOSTĘPNE POD LINKIEM (przekraczają limit załącznika)")
+        lines.append("DOCUMENTS AVAILABLE VIA LINK (over the attachment limit)")
         lines.append("")
         for mode_label, link_group in _group_by_mode(linked).items():
             if multi_mode:
-                lines.append(f"  {_MODE_HEADING_PL.get(mode_label, mode_label)}:")
+                lines.append(f"  {_MODE_HEADING.get(mode_label, mode_label)}:")
             for labeled, url in link_group:
-                name = labeled.form_id or "dokument"
+                name = labeled.form_id or "document"
                 lines.append(f"  - {name}: {url}")
     return "\n".join(lines)
 
@@ -311,10 +311,10 @@ def _render_body(
 ) -> str:
     requirements_by_id = {r.id: r for r in result.requirements}
     sections: list[str] = [
-        "Dzień dobry,",
+        "Hello,",
         "",
-        "Państwa zgłoszenie zostało sprawdzone względem "
-        f"{len(result.requirements)} wymagań odczytanych z Państwa manifestu.",
+        "Your submission has been checked against "
+        f"{len(result.requirements)} requirements read from your manifest.",
         "",
         _render_summary_line(result),
     ]
@@ -341,19 +341,19 @@ def _render_body(
         "",
         _SEPARATOR,
         "",
-        "Pełne uzasadnienia znajdują się w komentarzach recenzenta w załączonym",
-        "dokumencie Word (panel Recenzja).",
+        "Full justifications are in the reviewer comments in the attached",
+        "Word document (Review pane).",
         "",
         "--",
-        "Form Validation — wiadomość wygenerowana automatycznie",
+        "Form Validation — this message was generated automatically",
     ]
     return "\n".join(sections)
 
 
 def _render_subject(result: RequestResult) -> str:
-    labels = {"done": "zakończone", "partial": "częściowo zakończone", "failed": "nieudane"}
+    labels = {"done": "complete", "partial": "partial", "failed": "failed"}
     status_label = labels.get(result.status, result.status)
-    return f"Wyniki weryfikacji — zgłoszenie {result.request_id} ({status_label})"
+    return f"Verification results — request {result.request_id} ({status_label})"
 
 
 # ---------------------------------------------------------------------------
@@ -410,10 +410,23 @@ async def deliver(
         labeled, blobs=blobs, threshold_bytes=attach_threshold_bytes
     )
     body = _render_body(result=result, comments=comments, attached=attached, linked=linked)
+    html_attached = [
+        (attachment.filename, labeled.mode_label, labeled.ref.size_bytes)
+        for labeled, attachment in attached
+    ]
+    html_linked = [
+        (labeled.form_id or "document", labeled.mode_label, url) for labeled, url in linked
+    ]
     return OutboundMessage(
         to=request.reply_to,
         subject=_render_subject(result),
         body=body,
+        html_body=render_delivery_html(
+            result=result,
+            comments=comments,
+            attached=html_attached,
+            linked=html_linked,
+        ),
         attachments=[attachment for _, attachment in attached],
         in_reply_to=request.original_message_id,
         references=[request.original_message_id],

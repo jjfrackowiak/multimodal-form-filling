@@ -45,7 +45,7 @@ Return ONLY a JSON object of this shape, no markdown fences, no commentary:
 Rules:
 - source_span must be copied character-for-character from the input text, typos included.
   It is never invented, never translated, never corrected.
-- A count like "4x fotele" is ONE requirement with expected_count 4, never four requirements.
+- A count like "4x seats" is ONE requirement with expected_count 4, never four requirements.
 - One sentence can name two separately checkable things (for example a windscreen shot
   "from inside and outside") — emit two requirements, each anchored to the same source_span.
 - A constraint stated elsewhere in the text can qualify an item named earlier or later in

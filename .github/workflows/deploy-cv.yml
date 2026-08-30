@@ -1,0 +1,82 @@
+name: deploy-cv
+
+on:
+  workflow_dispatch:
+  push:
+    # feat/gcp is the rollout branch so CD can smoke before this file exists on main.
+    # Drop it in the merge commit (workflow_dispatch then works from main).
+    branches: [main, feat/gcp]
+    paths:
+      - services/cv/**
+      - docker/cv.Dockerfile
+      - docker/cloudbuild-cv.yaml
+      - infra/**
+      - packages/**
+      - pyproject.toml
+      - uv.lock
+      - .github/workflows/deploy-cv.yml
+
+permissions:
+  contents: read
+  id-token: write
+
+env:
+  PROJECT_ID: linen-badge-507111-r6
+  REGION: europe-central2
+
+jobs:
+  deploy:
+    if: github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/feat/gcp'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: google-github-actions/auth@v2
+        with:
+          project_id: ${{ env.PROJECT_ID }}
+          workload_identity_provider: projects/19550183464/locations/global/workloadIdentityPools/github/providers/github-oidc
+          service_account: github-deploy@linen-badge-507111-r6.iam.gserviceaccount.com
+
+      - uses: google-github-actions/setup-gcloud@v2
+
+      - name: Build CV image
+        id: image
+        run: |
+          IMG="${REGION}-docker.pkg.dev/${PROJECT_ID}/app/cv:${GITHUB_SHA}"
+          echo "img=$IMG" >> "$GITHUB_OUTPUT"
+          gcloud builds submit \
+            --region="$REGION" \
+            --config docker/cloudbuild-cv.yaml \
+            --gcs-source-staging-dir="gs://${PROJECT_ID}-build/source" \
+            --gcs-log-dir="gs://${PROJECT_ID}-build/logs" \
+            --substitutions=_IMAGE="$IMG" \
+            .
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.5.7"
+          terraform_wrapper: false
+
+      - name: terraform apply
+        id: tf
+        working-directory: infra
+        env:
+          TF_IN_AUTOMATION: "true"
+          TF_INPUT: "false"
+        run: |
+          terraform init
+          terraform apply -auto-approve -var="cv_image=${{ steps.image.outputs.img }}"
+          echo "url=$(terraform output -raw cv_url)" >> "$GITHUB_OUTPUT"
+
+      - name: GET /health
+        env:
+          URL: ${{ steps.tf.outputs.url }}
+        run: |
+          ACCESS="$(gcloud auth print-access-token)"
+          RESP="$(curl -sS -X POST \
+            -H "Authorization: Bearer ${ACCESS}" \
+            -H "Content-Type: application/json" \
+            "https://iamcredentials.googleapis.com/v1/projects/-/serviceAccounts/github-deploy@${PROJECT_ID}.iam.gserviceaccount.com:generateIdToken" \
+            -d "{\"audience\":\"${URL}\"}")"
+          TOKEN="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["token"])' <<<"${RESP}")"
+          curl -fsS -H "Authorization: Bearer ${TOKEN}" "${URL}/health"

@@ -33,9 +33,9 @@ without executing it, and separately checks a fresh interpreter's `sys.modules` 
    line-at-a-time splitter can never let a model make that link.
 2. **`extractor.extract`** — one small model call per chunk, behind
    `RequirementExtractor`. Does the one thing a splitter cannot: decide how many discrete,
-   individually-checkable requirements a chunk names (a count like `4x fotele` is **one**
+   individually-checkable requirements a chunk names (a count like `4x seats` is **one**
    requirement with `expected_count: 4`, never four), link a stranded constraint back to
-   its subject, and surface a genuine ambiguity (`Pod maską`, appearing on both line 2 and
+   its subject, and surface a genuine ambiguity (`Under the bonnet`, appearing on both line 2 and
    line 5) rather than silently resolving it.
 
 `parse_manifest` never trusts what the extractor says about `ordinal`, `source_line` or
@@ -108,7 +108,7 @@ MFF_MANIFEST_LIVE_EVAL=1 GOOGLE_API_KEY=... \
 
 Scoring is structural (`SpanRecallPrecision` in `test_live_eval.py`), never an LLM judge:
 requirements are matched to `golden.GOLDEN_REQUIREMENTS` by verbatim `source_span`
-overlap, with a per-span count comparison so that an over-split `4x fotele` costs
+overlap, with a per-span count comparison so that an over-split `4x seats` costs
 precision rather than passing for free. `test_env_flag_skips_cleanly_without_a_live_call`
 is the one assertion this file makes in a normal `make check` run: without the flag, the
 module never imports `google.genai` at all.
@@ -128,7 +128,7 @@ accurate:
 
 ## What is genuinely ambiguous here
 
-`golden.py`'s `GOLDEN_REQUIREMENTS` resolves R-01 (`Pod maską`, lines 2 and 5) to
+`golden.py`'s `GOLDEN_REQUIREMENTS` resolves R-01 (`Under the bonnet`, lines 2 and 5) to
 `expected_count: 2`, on the strength of the client's own stated total (16 photos, line 1)
 — not because a repeated mention is obviously two photographs rather than one restated.
 That is a real judgement call baked into the golden fixture, not a fact this package

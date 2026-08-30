@@ -36,6 +36,11 @@ def test_every_requirement_id_and_text_round_trips() -> None:
     for requirement in requirements:
         assert requirement.id in out.body
         assert requirement.text in out.body
+        assert out.html_body is not None
+        assert requirement.id in out.html_body
+        assert requirement.text in out.html_body
+    assert out.html_body is not None
+    assert "width=device-width" in out.html_body
 
 
 def test_source_span_and_line_are_quoted() -> None:

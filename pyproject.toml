@@ -255,6 +255,10 @@ forbidden_modules = ["pydantic_ai", "anthropic", "openai", "google", "vertexai",
 # they depend on the *result* of building an agent (via the SliceRunner callable
 # in api/deps.py), never on google.adk directly, and /healthz (api.routers.health,
 # settings.py) must stay import-clean of it entirely -- see the brief, DoD 7.
+#
+# ignore_imports must name `google`, not `google.adk` / `google.genai`: same collapse
+# as the B12 note above. `unmatched_ignore_imports_alerting` defaults to error, so a
+# dotted ignore that never matches fails CI even when the contract itself is kept.
 ignore_imports = [
     "mff_store.firestore_store -> google",
     "mff_store.gcs -> google",

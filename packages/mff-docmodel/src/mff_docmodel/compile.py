@@ -57,7 +57,7 @@ def compile_netnew(artifact: NetNewArtifact) -> tuple[bytes, RenderMap]:
                 # No bytes to embed: compiling here has no network access and receives
                 # only a content-addressed `BlobRef`, never the blob itself. Recording the
                 # reference in text keeps it visible instead of silently dropping it.
-                paragraph.add_run(f"  [zdjęcie: {image.sha256[:12]}]")
+                paragraph.add_run(f"  [image: {image.sha256[:12]}]")
             paragraph_index = len(document.paragraphs) - 1
             spans[entry.id] = RunSpan(
                 paragraph_index=paragraph_index,

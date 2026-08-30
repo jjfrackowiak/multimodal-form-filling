@@ -37,7 +37,7 @@ def _full_pipeline_output(source: bytes) -> bytes:
     comments = [
         ReviewComment(
             requirement_id="R-05",
-            anchor=Anchor(kind="node", target_id=headings[4].id),  # "5. Przednia szyba"
+            anchor=Anchor(kind="node", target_id=headings[4].id),  # "5. Windscreen"
             verdict="pass",
             justification="Windscreen photographed from the cabin, dashboard visible.",
         ),
@@ -92,7 +92,7 @@ def test_mutation_changed_visible_text_is_caught(derivative_docx_bytes: bytes) -
     before, after = _bodies(derivative_docx_bytes)
     assert before == after  # baseline: real output passes
 
-    mutated = after.replace(b"Komora silnika", b"Komora silnika ZMIENIONA")
+    mutated = after.replace(b"Engine bay", b"Engine bay CHANGED")
     assert mutated != before
 
 
@@ -100,7 +100,7 @@ def test_mutation_removed_paragraph_text_is_caught(derivative_docx_bytes: bytes)
     before, after = _bodies(derivative_docx_bytes)
     assert before == after
 
-    mutated = after.replace("<w:t>Bagażnik</w:t>".encode(), b"<w:t></w:t>", 1)
+    mutated = after.replace(b"<w:t>Boot</w:t>", b"<w:t></w:t>", 1)
     assert mutated != before
 
 
@@ -110,7 +110,7 @@ def test_mutation_swapped_captions_is_caught(derivative_docx_bytes: bytes) -> No
     assert before == after
 
     placeholder = b"__SWAP__"
-    mutated = after.replace(b"Fotel kierowcy", placeholder)
-    mutated = mutated.replace("Fotel pasażera".encode(), b"Fotel kierowcy")
-    mutated = mutated.replace(placeholder, "Fotel pasażera".encode())
+    mutated = after.replace(b"Driver seat", placeholder)
+    mutated = mutated.replace(b"Passenger seat", b"Driver seat")
+    mutated = mutated.replace(placeholder, b"Passenger seat")
     assert mutated != before

@@ -47,7 +47,7 @@ def test_intake_verdict_carries_actionable_problems() -> None:
 def test_request_record_owns_delivery_threading() -> None:
     record = RequestRecord(
         request_id="req-1",
-        manifest_raw="Pod maską",
+        manifest_raw="Under the bonnet",
         reply_to="client@example.com",
         original_message_id="<msg-1@mail>",
         status="running",
@@ -67,18 +67,18 @@ def test_job_request_derivative_carries_form_and_no_inputs() -> None:
 
 def test_job_request_net_new_carries_inputs_and_no_form() -> None:
     inputs = ClientInputs(
-        set_id="folder-1", texts={"notes.txt": "Pojazd zwrócony w stanie dobrym."}
+        set_id="folder-1", texts={"notes.txt": "Vehicle returned in good condition."}
     )
     request = JobRequest(
         job_id="j-1", request_id="req-1", mode=Mode.NET_NEW, form_id="folder-1", inputs=inputs
     )
     assert request.form is None
     assert request.inputs is not None
-    assert request.inputs.texts["notes.txt"] == "Pojazd zwrócony w stanie dobrym."
+    assert request.inputs.texts["notes.txt"] == "Vehicle returned in good condition."
 
 
 def test_client_inputs_round_trips_utf8_text() -> None:
-    polish = "Na desce rozdzielczej widoczny komunikat o awarii skrzyni biegów."
+    polish = "The dashboard shows a gearbox-fault message."
     inputs = ClientInputs(set_id="folder-1", texts={"notes.txt": polish})
     dumped = inputs.model_dump_json()
     restored = ClientInputs.model_validate_json(dumped)
@@ -125,14 +125,14 @@ def test_mixed_request_covers_derivative_and_net_new_jobs_together() -> None:
             request_id="req-1",
             mode=Mode.NET_NEW,
             form_id=f"folder-{i}",
-            inputs=ClientInputs(set_id=f"folder-{i}", texts={"notes.txt": "treść"}),
+            inputs=ClientInputs(set_id=f"folder-{i}", texts={"notes.txt": "body text"}),
         )
         for i in range(4)
     ]
     all_jobs = derivative_jobs + net_new_jobs
     record = RequestRecord(
         request_id="req-1",
-        manifest_raw="Pod maską",
+        manifest_raw="Under the bonnet",
         job_ids=[job.job_id for job in all_jobs],
         reply_to="client@example.com",
         original_message_id="<msg-1@mail>",

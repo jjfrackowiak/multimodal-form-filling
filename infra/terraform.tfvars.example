@@ -1,0 +1,4 @@
+# Copy to terraform.tfvars (gitignored) or pass -var=cv_image=...
+# project_id = "linen-badge-507111-r6"
+# region     = "europe-central2"
+cv_image = "europe-central2-docker.pkg.dev/linen-badge-507111-r6/app/cv:v1"

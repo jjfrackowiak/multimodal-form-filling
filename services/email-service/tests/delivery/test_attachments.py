@@ -41,7 +41,7 @@ async def test_document_at_exactly_the_threshold_is_attached() -> None:
     message = await deliver(result, _request(), blobs=blobs, attach_threshold_bytes=100)
     assert len(message.attachments) == 1
     assert message.attachments[0].data == b"x" * 100
-    assert "DOSTĘPNE POD LINKIEM" not in message.body
+    assert "AVAILABLE VIA LINK" not in message.body
 
 
 async def test_document_one_byte_over_the_threshold_is_linked_not_attached() -> None:
@@ -52,7 +52,7 @@ async def test_document_one_byte_over_the_threshold_is_linked_not_attached() -> 
     )
     message = await deliver(result, _request(), blobs=blobs, attach_threshold_bytes=100)
     assert message.attachments == []
-    assert "DOSTĘPNE POD LINKIEM" in message.body
+    assert "AVAILABLE VIA LINK" in message.body
     # InMemoryBlobStore.signed_url is a stable, inspectable stand-in built from the uri.
     assert ref.uri in message.body
 
@@ -90,7 +90,7 @@ async def test_three_forms_clearing_gmails_ceiling_are_all_linked() -> None:
     )
     message = await deliver(result, _request(), blobs=blobs, attach_threshold_bytes=8_000_000)
     assert message.attachments == []
-    assert message.body.count("DOSTĘPNE POD LINKIEM") == 1
+    assert message.body.count("AVAILABLE VIA LINK") == 1
     for ref in refs:
         assert ref.uri in message.body
 
@@ -127,7 +127,7 @@ async def test_no_unverified_requirements_omits_the_section() -> None:
         request_id="req-1", status="done", documents=[], requirements=[], summary={"pass": 1}
     )
     message = await deliver(result, _request(), blobs=blobs)
-    assert "NIEZWERYFIKOWANE" not in message.body
+    assert "UNVERIFIED" not in message.body
 
 
 # ---------------------------------------------------------------------------
@@ -150,13 +150,10 @@ async def test_partial_status_names_failed_forms_and_attaches_only_successes() -
     )
     message = await deliver(result, _request(), blobs=blobs)
     assert len(message.attachments) == 1
-    assert "NIEUKOŃCZONE FORMULARZE" in message.body
+    assert "INCOMPLETE FORMS" in message.body
     assert "broken-form.docx" in message.body
     # never an internal id such as a job_id or a blob sha256
-    assert (
-        good_ref.sha256
-        not in message.body.split("NIEUKOŃCZONE FORMULARZE", 1)[-1].split("\n\n\n")[0]
-    )
+    assert good_ref.sha256 not in message.body.split("INCOMPLETE FORMS", 1)[-1].split("\n\n\n")[0]
 
 
 async def test_done_status_omits_the_failed_forms_section_even_if_present() -> None:
@@ -172,7 +169,8 @@ async def test_done_status_omits_the_failed_forms_section_even_if_present() -> N
         failed_forms=["should-not-appear.docx"],
     )
     message = await deliver(result, _request(), blobs=blobs)
-    assert "NIEUKOŃCZONE FORMULARZE" not in message.body
+    assert "INCOMPLETE FORMS" not in message.body
+    assert "INCOMPLETE FORMS" not in message.body
 
 
 # ---------------------------------------------------------------------------

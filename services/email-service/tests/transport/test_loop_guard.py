@@ -11,8 +11,8 @@ def _inbound(**headers: str) -> InboundMessage:
     return InboundMessage(
         message_id="<msg@example.test>",
         sender="someone@example.test",
-        subject="Walidacja",
-        body="treść",
+        subject="Validation",
+        body="body text",
         received_at=datetime(2026, 8, 30, tzinfo=UTC),
         headers=headers,
     )

@@ -1,35 +1,21 @@
 # Cloud Run — CV tool
 
-Editor calls `POST /v1/inventory` (JSON). Runtime SA needs Vertex + Storage.
-Contract: [`integration_guide_CV.md`](integration_guide_CV.md).
+Canonical deploy is GitHub Actions (`.github/workflows/deploy-cv.yml`): Cloud Build
+then Terraform. This file is the laptop equivalent.
 
-Build from **repo root** (Dockerfile copies `services/cv`):
+Editor calls `POST /v1/inventory`. Runtime SA needs Vertex + Storage object viewer.
+Contract: [`integration_guide_CV.md`](integration_guide_CV.md).
 
 ```bash
 PROJECT=linen-badge-507111-r6
 REGION=europe-central2
-REPO=app
-IMG=$REGION-docker.pkg.dev/$PROJECT/$REPO/cv:v1
+IMG=$REGION-docker.pkg.dev/$PROJECT/app/cv:$(git rev-parse HEAD)
 
-gcloud builds submit --tag "$IMG" -f services/cv/Dockerfile .
-
-gcloud run deploy cv \
-  --image "$IMG" \
-  --region "$REGION" \
-  --no-allow-unauthenticated \
-  --memory 2Gi \
-  --cpu 2 \
-  --timeout 300 \
-  --concurrency 4 \
-  --set-env-vars GOOGLE_CLOUD_PROJECT=$PROJECT,GOOGLE_CLOUD_LOCATION=global,CV_MAX_WORKERS=12,CV_MAX_IMAGES=64
+gcloud builds submit --region="$REGION" --config docker/cloudbuild-cv.yaml \
+  --gcs-source-staging-dir="gs://$PROJECT-build/source" \
+  --gcs-log-dir="gs://$PROJECT-build/logs" \
+  --substitutions=_IMAGE="$IMG" .
+terraform -chdir=infra apply -var="cv_image=$IMG"
 ```
 
-Runtime SA:
-
-- `roles/aiplatform.user`
-- `roles/storage.objectViewer`
-
-Editor SA: `roles/run.invoker` on this service. Set `CV_URL` to the Cloud Run URL.
-
-Do not set `ENABLE_JOB_ADAPTER` in production. That path is only for a local
-mock that still POSTs `{jobId}` at `/process`.
+`cv_image` is required. Do not set `ENABLE_JOB_ADAPTER` in production.

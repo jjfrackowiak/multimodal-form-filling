@@ -39,7 +39,7 @@ EDITOR_IMG=$REGION-docker.pkg.dev/$PROJECT/$REPO/editor:v1
 gcloud builds submit ./api --tag $API_IMG
 gcloud builds submit ./fn-prepare --tag $PREPARE_IMG
 # from repo root:
-gcloud builds submit --tag $CV_IMG -f services/cv/Dockerfile .
+gcloud builds submit --tag $CV_IMG -f docker/cv.Dockerfile .
 gcloud builds submit ./services/email --tag $EMAIL_IMG
 gcloud builds submit ./services/editor --tag $EDITOR_IMG
 
