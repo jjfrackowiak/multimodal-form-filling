@@ -25,7 +25,6 @@ starts to feel like a substitute for a live eval — it is not one, and is not m
 from __future__ import annotations
 
 from collections.abc import AsyncGenerator, Sequence
-from typing import Union
 
 from google.adk.models.base_llm import BaseLlm
 from google.adk.models.llm_request import LlmRequest
@@ -38,7 +37,7 @@ __all__ = ["FakeLlm"]
 # A scripted turn: raw text returned verbatim, a pydantic model serialised to the JSON an
 # `output_schema` run would produce, or a fully-formed `LlmResponse` for a test that needs
 # control over fields `FakeLlm` would not otherwise set (e.g. `usage_metadata`).
-ScriptedResponse = Union[str, BaseModel, LlmResponse]
+ScriptedResponse = str | BaseModel | LlmResponse
 
 
 class FakeLlm(BaseLlm):

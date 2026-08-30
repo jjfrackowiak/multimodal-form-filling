@@ -10,13 +10,15 @@ from __future__ import annotations
 
 import ast
 from pathlib import Path
+from typing import Any
 
 import pytest
 from google.adk.agents import LlmAgent
+from google.adk.events.event import Event
 from google.adk.models.llm_request import LlmRequest
 from google.adk.models.llm_response import LlmResponse
 from google.adk.runners import InMemoryRunner
-from google.adk.tools import FunctionTool
+from google.adk.tools.function_tool import FunctionTool
 from google.genai import types
 from pydantic import BaseModel
 
@@ -37,7 +39,16 @@ def _user_turn(text: str) -> types.Content:
     return types.Content(role="user", parts=[types.Part(text=text)])
 
 
-async def _run(agent: LlmAgent, *, app_name: str = "t") -> tuple[list, dict]:
+def _text_parts(events: list[Event]) -> list[str]:
+    return [
+        part.text
+        for event in events
+        for part in ((event.content.parts or []) if event.content else [])
+        if part.text
+    ]
+
+
+async def _run(agent: LlmAgent, *, app_name: str = "t") -> tuple[list[Event], dict[str, Any]]:
     """Runs `agent` once through `InMemoryRunner` and returns (events, final_state)."""
     runner = InMemoryRunner(agent=agent, app_name=app_name)
     session = await runner.session_service.create_session(app_name=app_name, user_id="u1")
@@ -50,6 +61,7 @@ async def _run(agent: LlmAgent, *, app_name: str = "t") -> tuple[list, dict]:
     final = await runner.session_service.get_session(
         app_name=app_name, user_id="u1", session_id=session.id
     )
+    assert final is not None, "session vanished between create and get"
     return events, dict(final.state)
 
 
@@ -64,13 +76,7 @@ async def test_scripted_text_response_is_returned() -> None:
 
     events, _ = await _run(agent)
 
-    texts = [
-        part.text
-        for event in events
-        for part in (event.content.parts if event.content else [])
-        if part.text
-    ]
-    assert "the answer is 42" in texts
+    assert "the answer is 42" in _text_parts(events)
 
 
 # --------------------------------------------------------------------------- #
@@ -101,20 +107,13 @@ async def test_multiple_basemodels_yielded_in_script_order() -> None:
 
 
 async def test_llmresponse_item_passes_through_untouched() -> None:
-    canned = LlmResponse(
-        content=types.Content(role="model", parts=[types.Part(text="verbatim")])
-    )
+    canned = LlmResponse(content=types.Content(role="model", parts=[types.Part(text="verbatim")]))
     fake = FakeLlm.script([canned])
     agent = LlmAgent(name="t", model=fake)
 
     events, _ = await _run(agent)
 
-    assert any(
-        part.text == "verbatim"
-        for event in events
-        for part in (event.content.parts if event.content else [])
-        if part.text
-    )
+    assert "verbatim" in _text_parts(events)
 
 
 # --------------------------------------------------------------------------- #
