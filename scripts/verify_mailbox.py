@@ -31,6 +31,22 @@ from email.message import EmailMessage
 def _flag(name: str, default: str = "false") -> bool:
     return os.environ.get(name, default).strip().lower() in {"1", "true", "yes", "on"}
 
+
+def _tls_context() -> ssl.SSLContext:
+    """Trust store that works on a stock macOS Python and inside a slim container.
+
+    Python installed from python.org does not use the system keychain and ships a
+    CA path that only exists once "Install Certificates.command" has been run —
+    which nobody remembers. Slim container images often carry no CA bundle at
+    all. certifi covers both, so prefer it and fall back to system defaults.
+    """
+    try:
+        import certifi
+
+        return ssl.create_default_context(cafile=certifi.where())
+    except ImportError:
+        return ssl.create_default_context()
+
 IMAP_HOST = os.environ.get("IMAP_HOST", "localhost")
 IMAP_PORT = int(os.environ.get("IMAP_PORT", "3143"))
 SMTP_HOST = os.environ.get("SMTP_HOST", "localhost")
@@ -53,7 +69,7 @@ POLL_INTERVAL = 0.5
 
 def _imap() -> imaplib.IMAP4:
     if IMAP_TLS:
-        return imaplib.IMAP4_SSL(IMAP_HOST, IMAP_PORT, ssl_context=ssl.create_default_context())
+        return imaplib.IMAP4_SSL(IMAP_HOST, IMAP_PORT, ssl_context=_tls_context())
     return imaplib.IMAP4(IMAP_HOST, IMAP_PORT)
 
 
@@ -82,7 +98,7 @@ def send(marker: str) -> None:
     )
     with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=15) as s:
         if SMTP_TLS:
-            s.starttls(context=ssl.create_default_context())
+            s.starttls(context=_tls_context())
             s.login(SMTP_USER, SMTP_PASSWORD)
         s.send_message(msg)
 
