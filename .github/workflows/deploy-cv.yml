@@ -68,15 +68,15 @@ jobs:
           terraform apply -auto-approve -var="cv_image=${{ steps.image.outputs.img }}"
           echo "url=$(terraform output -raw cv_url)" >> "$GITHUB_OUTPUT"
 
-      # WIF ADC cannot gcloud auth print-identity-token --audiences (SA-key only).
-      - uses: google-github-actions/auth@v2
-        id: oidc
-        with:
-          project_id: ${{ env.PROJECT_ID }}
-          workload_identity_provider: projects/19550183464/locations/global/workloadIdentityPools/github/providers/github-oidc
-          service_account: github-deploy@linen-badge-507111-r6.iam.gserviceaccount.com
-          token_format: id_token
-          id_token_audience: ${{ steps.tf.outputs.url }}
-
       - name: GET /health
-        run: curl -fsS -H "Authorization: Bearer ${{ steps.oidc.outputs.id_token }}" "${{ steps.tf.outputs.url }}/health"
+        env:
+          URL: ${{ steps.tf.outputs.url }}
+        run: |
+          ACCESS="$(gcloud auth print-access-token)"
+          RESP="$(curl -sS -X POST \
+            -H "Authorization: Bearer ${ACCESS}" \
+            -H "Content-Type: application/json" \
+            "https://iamcredentials.googleapis.com/v1/projects/-/serviceAccounts/github-deploy@${PROJECT_ID}.iam.gserviceaccount.com:generateIdToken" \
+            -d "{\"audience\":\"${URL}\"}")"
+          TOKEN="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["token"])' <<<"${RESP}")"
+          curl -fsS -H "Authorization: Bearer ${TOKEN}" "${URL}/health"

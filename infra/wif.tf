@@ -31,6 +31,12 @@ resource "google_service_account_iam_member" "github_deploy_wif" {
   member             = "principalSet://iam.googleapis.com/${google_iam_workload_identity_pool.github.name}/attribute.repository/${var.github_repository}"
 }
 
+resource "google_service_account_iam_member" "github_deploy_self_token" {
+  service_account_id = google_service_account.github_deploy.name
+  role               = "roles/iam.serviceAccountTokenCreator"
+  member             = "serviceAccount:${google_service_account.github_deploy.email}"
+}
+
 resource "google_project_iam_member" "github_deploy" {
   for_each = toset([
     "roles/serviceusage.serviceUsageAdmin",
