@@ -16,9 +16,9 @@ __all__ = ["ArtifactRepository", "BlobStore", "JobRepository", "RequestRepositor
 
 
 class ArtifactRepository(Protocol):
-    async def save(
-        self, artifact: Artifact, cursor: JobCursor, *, expected_version: int
-    ) -> int: ...
+    async def save(self, artifact: Artifact, cursor: JobCursor, *, expected_version: int) -> int:
+        """Persist `artifact` at `artifact.job_id`, the key `load` later reads by."""
+        ...
 
     async def load(self, job_id: str) -> tuple[Artifact, JobCursor, int]: ...
 

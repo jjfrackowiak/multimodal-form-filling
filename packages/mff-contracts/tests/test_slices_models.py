@@ -43,7 +43,7 @@ def test_slice_request_carries_no_retry_state() -> None:
         slice_id="slice-01",
         mode=Mode.DERIVATIVE,
         requirements=[_requirement()],
-        artifact=DerivativeArtifact(form_id="form-1", source=SOURCE),
+        artifact=DerivativeArtifact(job_id="j-1", form_id="form-1", source=SOURCE),
         scope_ids=["n-1"],
     )
     assert request.scope_ids == ["n-1"]

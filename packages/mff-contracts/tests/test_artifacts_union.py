@@ -17,14 +17,16 @@ _ADAPTER: TypeAdapter[Artifact] = TypeAdapter(Artifact)
 
 
 def test_derivative_artifact_round_trips_through_the_union() -> None:
-    artifact: Artifact = DerivativeArtifact(form_id="form-1", source=SOURCE)
+    artifact: Artifact = DerivativeArtifact(job_id="j-1", form_id="form-1", source=SOURCE)
     restored = _ADAPTER.validate_json(_ADAPTER.dump_json(artifact))
     assert isinstance(restored, DerivativeArtifact)
+    assert restored.job_id == "j-1"
     assert restored.form_id == "form-1"
 
 
 def test_net_new_artifact_round_trips_through_the_union() -> None:
-    artifact: Artifact = NetNewArtifact(form_id="form-1", draft=FormDraft())
+    artifact: Artifact = NetNewArtifact(job_id="j-1", form_id="form-1", draft=FormDraft())
     restored = _ADAPTER.validate_json(_ADAPTER.dump_json(artifact))
     assert isinstance(restored, NetNewArtifact)
+    assert restored.job_id == "j-1"
     assert restored.draft.schema_version == 1

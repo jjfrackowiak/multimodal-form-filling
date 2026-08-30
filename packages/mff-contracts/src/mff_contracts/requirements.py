@@ -18,7 +18,7 @@ from __future__ import annotations
 
 from pydantic import BaseModel, Field
 
-__all__ = ["Manifest", "Requirement", "SlicePlan"]
+__all__ = ["Constraint", "Manifest", "Requirement", "SlicePlan"]
 
 # Slicing is plain chunking: sort by ordinal, take consecutive groups of at most this
 # many. Any grouping by content (e.g. by a `scope`-like key) is a guess about which
@@ -27,6 +27,21 @@ __all__ = ["Manifest", "Requirement", "SlicePlan"]
 # output anywhere in its path. There is no minimum: the last chunk is whatever is left
 # over, including a chunk of one.
 _MAX_SLICE_SIZE = 6
+
+
+class Constraint(BaseModel):
+    """A qualifier on a requirement — what makes a supplied item count as satisfying it.
+
+    Structured rather than a formatted string: the consumer needs `value` to decide a
+    verdict, and a string forces every producer to invent an encoding and every consumer
+    to parse it back.
+    """
+
+    kind: str  # "camera_position"
+    value: str  # "between_front_seats" — decides the verdict; never lose this
+    source_span: str  # VERBATIM substring of Manifest.raw, like Requirement.source_span
+    source_line: int  # 1-indexed
+    note: str | None = None
 
 
 class Requirement(BaseModel):
@@ -39,7 +54,7 @@ class Requirement(BaseModel):
     source_line: int  # 1-indexed, for the delivered requirement list
     applies_to: list[str] = Field(default_factory=list)  # form ids; empty = all forms
     expected_count: int = 1  # "4x fotele" is ONE requirement with count 4
-    constraint: str | None = None  # e.g. "camera position: between_front_seats"
+    constraint: Constraint | None = None
     ambiguity: str | None = None  # recorded, never silently resolved
 
 
