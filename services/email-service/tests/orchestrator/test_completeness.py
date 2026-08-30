@@ -10,6 +10,7 @@ requirements. The orchestrator, seeing all ten after the last slice, must.
 from __future__ import annotations
 
 from factories import load_requirements, load_review_comments, make_deps, make_derivative_job
+
 from email_service.orchestrator.completeness import missing_requirement_ids
 from email_service.orchestrator.job import run_job
 from email_service.runner.fake import FakeSliceRunner

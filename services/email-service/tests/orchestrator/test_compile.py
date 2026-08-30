@@ -5,12 +5,12 @@ than silently dropped.
 
 from __future__ import annotations
 
-from mff_contracts import Anchor, DerivativeArtifact, NetNewArtifact, ReviewComment
-from mff_store.memory import InMemoryBlobStore
-
 from factories import make_derivative_job, make_netnew_job
+
 from email_service.orchestrator.artifacts import build_initial_artifact
 from email_service.orchestrator.compile import compile_job
+from mff_contracts import Anchor, DerivativeArtifact, NetNewArtifact, ReviewComment
+from mff_store.memory import InMemoryBlobStore
 
 
 async def test_compile_derivative_with_real_anchors_reports_nothing_unanchored() -> None:

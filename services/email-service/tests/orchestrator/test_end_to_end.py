@@ -5,11 +5,11 @@ HTTP, no model.
 
 from __future__ import annotations
 
-from mff_contracts import DerivativeArtifact
-
 from factories import load_review_comments, make_deps, make_derivative_job
+
 from email_service.orchestrator.job import run_job
 from email_service.runner.fake import FakeSliceRunner
+from mff_contracts import DerivativeArtifact
 
 
 async def test_full_derivative_job_two_slices_ten_requirements() -> None:

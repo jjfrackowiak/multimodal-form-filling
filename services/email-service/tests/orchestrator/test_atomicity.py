@@ -10,12 +10,12 @@ retried `run_job` call runs cleanly from scratch.
 from __future__ import annotations
 
 import pytest
-from mff_contracts import DerivativeArtifact
-from mff_store.errors import NotFoundError
-
 from factories import load_review_comments, make_deps, make_derivative_job
+
 from email_service.orchestrator.job import run_job
 from email_service.runner.fake import FakeSliceRunner
+from mff_contracts import DerivativeArtifact
+from mff_store.errors import NotFoundError
 
 
 async def test_crash_between_artifact_and_cursor_write_leaves_neither() -> None:

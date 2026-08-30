@@ -8,11 +8,11 @@ run, on the other side of the HTTP boundary this branch never crosses.
 
 from __future__ import annotations
 
-from mff_contracts import Anchor, ReviewComment
-
 from factories import load_requirements, load_review_comments, make_deps, make_derivative_job
+
 from email_service.orchestrator.job import run_job
 from email_service.runner.fake import FakeSliceRunner
+from mff_contracts import Anchor, ReviewComment
 
 
 async def test_unverified_report_is_accepted_and_never_redispatched() -> None:

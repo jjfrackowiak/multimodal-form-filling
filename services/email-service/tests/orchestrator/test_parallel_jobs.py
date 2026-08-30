@@ -9,6 +9,10 @@ from __future__ import annotations
 import asyncio
 from collections.abc import Awaitable, Callable
 
+from factories import load_requirements, make_deps, make_derivative_job, make_netnew_job
+
+from email_service.orchestrator.request import run_request
+from email_service.runner.fake import FakeSliceRunner
 from mff_contracts import (
     Anchor,
     DerivativeArtifact,
@@ -18,10 +22,6 @@ from mff_contracts import (
     SliceReport,
     SliceRequest,
 )
-
-from factories import load_requirements, make_deps, make_derivative_job, make_netnew_job
-from email_service.orchestrator.request import run_request
-from email_service.runner.fake import FakeSliceRunner
 
 
 def _tracking_handler(

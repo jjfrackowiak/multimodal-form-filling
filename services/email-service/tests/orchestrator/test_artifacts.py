@@ -4,15 +4,15 @@ and what a slice's `scope_ids` are for each mode.
 
 from __future__ import annotations
 
-from mff_contracts import DerivativeArtifact, NetNewArtifact
-from mff_store.memory import InMemoryBlobStore
-
 from factories import make_derivative_job, make_netnew_job
+
 from email_service.orchestrator.artifacts import (
     NET_NEW_ROOT_SECTION_ID,
     build_initial_artifact,
     scope_ids_for,
 )
+from mff_contracts import DerivativeArtifact, NetNewArtifact
+from mff_store.memory import InMemoryBlobStore
 
 
 async def test_build_initial_derivative_artifact_parses_real_nodes() -> None:

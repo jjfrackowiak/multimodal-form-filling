@@ -5,12 +5,12 @@ full `NetNewArtifact` job through slices, completeness and compile.
 
 from __future__ import annotations
 
-from mff_contracts import Anchor, DraftOp, NetNewArtifact, ReviewComment, SliceReport, SliceRequest
-
 from factories import load_requirements, make_deps, make_netnew_job
+
 from email_service.orchestrator.artifacts import NET_NEW_ROOT_SECTION_ID
 from email_service.orchestrator.job import run_job
 from email_service.runner.fake import FakeSliceRunner
+from mff_contracts import Anchor, DraftOp, NetNewArtifact, ReviewComment, SliceReport, SliceRequest
 
 
 async def test_net_new_job_composes_entries_and_completes() -> None:

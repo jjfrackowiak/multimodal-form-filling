@@ -15,10 +15,16 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 import yaml
+
+from email_service.orchestrator.deps import OrchestratorDeps
+from email_service.runner.protocol import SliceRunner
 from mff_contracts import (
     Anchor,
+    ArtifactRepository,
+    BlobStore,
     ClientInputs,
     Constraint,
+    JobRepository,
     JobRequest,
     Mode,
     Requirement,
@@ -32,12 +38,9 @@ from mff_store.memory import (
     InMemoryJobRepository,
 )
 
-from email_service.orchestrator.deps import OrchestratorDeps
-from email_service.runner.protocol import SliceRunner
-
 __all__ = [
-    "FIXTURE",
     "DOCX_CONTENT_TYPE",
+    "FIXTURE",
     "RoutingSliceRunner",
     "load_requirements",
     "load_review_comments",
@@ -103,9 +106,7 @@ def load_review_comments() -> dict[str, ReviewComment]:
     atomicity, completeness, the barrier) depends on where a comment is anchored.
     Anchoring specific runs is the editor's job (B6/B7/B8), not this branch's.
     """
-    data = yaml.safe_load(
-        (FIXTURE / "expected_output" / "review.yaml").read_text(encoding="utf-8")
-    )
+    data = yaml.safe_load((FIXTURE / "expected_output" / "review.yaml").read_text(encoding="utf-8"))
     comments: dict[str, ReviewComment] = {}
     for entry in data["verdicts"]:
         comments[entry["requirement_id"]] = ReviewComment(
@@ -119,7 +120,7 @@ def load_review_comments() -> dict[str, ReviewComment]:
 
 
 async def make_derivative_job(
-    blob_store: InMemoryBlobStore,
+    blob_store: BlobStore,
     *,
     job_id: str = "job-derivative-1",
     request_id: str = "req-1",
@@ -180,9 +181,9 @@ class RoutingSliceRunner:
 def make_deps(
     *,
     runner: SliceRunner,
-    artifact_repo: InMemoryArtifactRepository | None = None,
-    job_repo: InMemoryJobRepository | None = None,
-    blob_store: InMemoryBlobStore | None = None,
+    artifact_repo: ArtifactRepository | None = None,
+    job_repo: JobRepository | None = None,
+    blob_store: BlobStore | None = None,
     max_concurrent_jobs: int = 4,
 ) -> OrchestratorDeps:
     return OrchestratorDeps(

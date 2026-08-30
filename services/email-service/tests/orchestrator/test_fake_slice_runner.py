@@ -5,10 +5,10 @@ end-to-end test) run the orchestrator against.
 from __future__ import annotations
 
 import pytest
-from mff_contracts import Anchor, DraftOp, Mode, ReviewComment, SliceReport, SliceRequest
-
 from factories import load_requirements
+
 from email_service.runner.fake import FakeSliceRunner
+from mff_contracts import Anchor, DraftOp, Mode, ReviewComment, SliceReport, SliceRequest
 
 
 def _pass_comment(requirement_id: str) -> ReviewComment:
@@ -21,7 +21,7 @@ def _pass_comment(requirement_id: str) -> ReviewComment:
 
 
 def _slice_request(requirement_ids: list[str]) -> SliceRequest:
-    from mff_contracts import DerivativeArtifact, BlobRef
+    from mff_contracts import BlobRef, DerivativeArtifact
 
     requirements = [r for r in load_requirements() if r.id in requirement_ids]
     artifact = DerivativeArtifact(
@@ -43,13 +43,18 @@ def test_needs_exactly_one_of_comments_or_handler() -> None:
     with pytest.raises(ValueError, match="exactly one"):
         FakeSliceRunner()
     with pytest.raises(ValueError, match="exactly one"):
-        FakeSliceRunner(comments={"R-01": _pass_comment("R-01")}, handler=lambda r: SliceReport(
-            slice_id=r.slice_id, comments=[], ops=[], unverified=[], attempts_used=1
-        ))
+        FakeSliceRunner(
+            comments={"R-01": _pass_comment("R-01")},
+            handler=lambda r: SliceReport(
+                slice_id=r.slice_id, comments=[], ops=[], unverified=[], attempts_used=1
+            ),
+        )
 
 
 async def test_table_driven_run_records_calls_and_answers_only_requested_requirements() -> None:
-    runner = FakeSliceRunner(comments={"R-01": _pass_comment("R-01"), "R-02": _pass_comment("R-02")})
+    runner = FakeSliceRunner(
+        comments={"R-01": _pass_comment("R-01"), "R-02": _pass_comment("R-02")}
+    )
     request = _slice_request(["R-01", "R-02"])
 
     report = await runner.run(request)

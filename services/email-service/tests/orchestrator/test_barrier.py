@@ -9,8 +9,6 @@ becomes part of `documents`.
 
 from __future__ import annotations
 
-from mff_contracts import RequestRecord
-
 from factories import (
     RoutingSliceRunner,
     load_requirements,
@@ -18,8 +16,10 @@ from factories import (
     make_deps,
     make_derivative_job,
 )
+
 from email_service.orchestrator.request import run_request
 from email_service.runner.fake import FakeSliceRunner
+from mff_contracts import RequestRecord
 
 
 async def test_two_done_one_failed_settles_partial() -> None:
@@ -66,3 +66,37 @@ async def test_two_done_one_failed_settles_partial() -> None:
     assert job_c_record.status == "failed"
     assert job_c_record.failure_detail is not None
     assert "R-05" in job_c_record.failure_detail
+
+
+async def test_every_job_failed_settles_failed_not_partial() -> None:
+    requirements = load_requirements()
+    dropped_comments = {rid: c for rid, c in load_review_comments().items() if rid != "R-05"}
+
+    router = RoutingSliceRunner()
+    deps = make_deps(runner=router)
+    job_a = await make_derivative_job(
+        deps.blob_store, job_id="job-a", form_id="form-a.docx", requirements=requirements
+    )
+    job_b = await make_derivative_job(
+        deps.blob_store, job_id="job-b", form_id="form-b.docx", requirements=requirements
+    )
+    router.by_job_id = {
+        job_a.job_id: FakeSliceRunner(comments=dropped_comments),
+        job_b.job_id: FakeSliceRunner(comments=dropped_comments),
+    }
+
+    record = RequestRecord(
+        request_id="req-all-failed",
+        manifest_raw="irrelevant to this test",
+        requirements=requirements,
+        job_ids=[job_a.job_id, job_b.job_id],
+        reply_to="client@example.test",
+        original_message_id="<abc@example.test>",
+        status="running",
+    )
+
+    result = await run_request(record, [job_a, job_b], deps)
+
+    assert result.status == "failed"
+    assert sorted(result.failed_forms) == ["form-a.docx", "form-b.docx"]
+    assert result.documents == []

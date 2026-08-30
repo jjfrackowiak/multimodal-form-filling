@@ -12,11 +12,11 @@ from __future__ import annotations
 from collections.abc import Callable
 
 import pytest
-from mff_contracts import DerivativeArtifact, SliceReport, SliceRequest
-
 from factories import load_review_comments, make_deps, make_derivative_job
+
 from email_service.orchestrator.job import run_job
 from email_service.runner.fake import FakeSliceRunner
+from mff_contracts import DerivativeArtifact, SliceReport, SliceRequest
 
 
 def _crash_on_second_call() -> tuple[list[SliceRequest], Callable[[SliceRequest], SliceReport]]:

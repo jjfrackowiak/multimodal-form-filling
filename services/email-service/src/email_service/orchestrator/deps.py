@@ -9,9 +9,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from mff_contracts import ArtifactRepository, BlobStore, JobRepository
-
 from email_service.runner import SliceRunner
+from mff_contracts import ArtifactRepository, BlobStore, JobRepository
 
 __all__ = ["OrchestratorDeps"]
 
