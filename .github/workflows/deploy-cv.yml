@@ -44,7 +44,13 @@ jobs:
         run: |
           IMG="${REGION}-docker.pkg.dev/${PROJECT_ID}/app/cv:${GITHUB_SHA}"
           echo "img=$IMG" >> "$GITHUB_OUTPUT"
-          gcloud builds submit --config docker/cloudbuild-cv.yaml --substitutions=_IMAGE="$IMG" .
+          gcloud builds submit \
+            --region="$REGION" \
+            --config docker/cloudbuild-cv.yaml \
+            --gcs-source-staging-dir="gs://${PROJECT_ID}-build/source" \
+            --gcs-log-dir="gs://${PROJECT_ID}-build/logs" \
+            --substitutions=_IMAGE="$IMG" \
+            .
 
       - uses: hashicorp/setup-terraform@v3
         with:

@@ -11,7 +11,10 @@ PROJECT=linen-badge-507111-r6
 REGION=europe-central2
 IMG=$REGION-docker.pkg.dev/$PROJECT/app/cv:$(git rev-parse HEAD)
 
-gcloud builds submit --config docker/cloudbuild-cv.yaml --substitutions=_IMAGE="$IMG" .
+gcloud builds submit --region="$REGION" --config docker/cloudbuild-cv.yaml \
+  --gcs-source-staging-dir="gs://$PROJECT-build/source" \
+  --gcs-log-dir="gs://$PROJECT-build/logs" \
+  --substitutions=_IMAGE="$IMG" .
 terraform -chdir=infra apply -var="cv_image=$IMG"
 ```
 

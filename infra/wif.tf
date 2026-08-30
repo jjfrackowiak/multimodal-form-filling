@@ -77,3 +77,9 @@ resource "google_storage_bucket_iam_member" "github_deploy_cloudbuild" {
   role   = "roles/storage.admin"
   member = "serviceAccount:${google_service_account.github_deploy.email}"
 }
+
+resource "google_storage_bucket_iam_member" "github_deploy_build" {
+  bucket = google_storage_bucket.build.name
+  role   = "roles/storage.admin"
+  member = "serviceAccount:${google_service_account.github_deploy.email}"
+}
