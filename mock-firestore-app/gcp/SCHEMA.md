@@ -4,12 +4,13 @@ Document in collection `jobs/{jobId}`:
 
 ```
 id            string
-status        uploaded | queued | running | done | failed
+status        uploaded | queued | prepared | processing | done | failed
+step          null | prepare | process
 createdAt     ISO timestamp
 updatedAt     ISO timestamp
 file.bucket   bucket name
 file.path     object in the bucket, e.g. uploads/{jobId}/report.pdf
-file.gsUri    gs://bucket/path   ← this is the file reference
+file.gsUri    gs://bucket/path   ← file reference
 file.originalName
 file.contentType
 file.sizeBytes
@@ -20,5 +21,4 @@ error         string or null
 Rule: **file in Cloud Storage, metadata and status in Firestore.**
 Never store a PDF/image as a document field.
 
-Index: the worker query `status == queued` needs a composite/single-field index
-(the emulator creates it; in production Firestore will suggest a link on the first query).
+`step` is which unit last ran or failed. A crash in CV does not erase the job; it stays `processing`/`failed` until you retry that step.

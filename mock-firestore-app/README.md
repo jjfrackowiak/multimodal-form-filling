@@ -1,74 +1,72 @@
-# Mock: Cloud Run (2 containers) + Firestore + bucket
+# Mock: job API + prepare function + 3 services
 
-Local skeleton for the GCP lane:
+Local skeleton. No always-on polling worker.
 
-- **`api` container** — HTTP, file upload, writes a document to Firestore
-- **`worker` container** — polls `queued` jobs, reads the file path from Firestore, “processes” the file from the bucket
-- **Firestore** — holds records and **pointers** `gs://...`, not file bytes
-- **bucket** — holds bytes
+**Product services (Cloud Run):**
 
-On GCP: API → Cloud Run **service**, worker → Cloud Run **worker pool** (or a service with `min-instances=1`), database → **Firestore**, files → **Cloud Storage**.
+| Service | Port | Owner | Now |
+|---|---|---|---|
+| `cv` | 8083 | Michal | Dummy process step (later real image tools) |
+| `email` | 8084 | Janek | Stub |
+| `editor` | 8085 | Janek | Stub |
+
+**Job pipeline:**
+
+| Piece | Port | Role |
+|---|---|---|
+| `api` | 8081 | Upload file, start job, read status |
+| `fn-prepare` | 8082 | Confirm object exists in the bucket, set `prepared`, call CV |
+| Firestore emulator | 8080 | Job records + `gs://` pointers |
+| Fake GCS | 4443 | File bytes |
+
+```
+POST /files        → uploaded
+POST /jobs/:id/start → queued, HTTP to fn-prepare
+fn-prepare         → prepared, HTTP to cv
+cv /process        → processing → done
+```
+
+On GCP: `fn-prepare` is a Cloud Run **function** (or small service). `cv`, `email`, `editor` are Cloud Run **services**. Glue between steps should be Cloud Tasks in production; locally it is HTTP.
 
 ## 1. Run locally
-
-You need Docker.
 
 ```bash
 cd mock-firestore-app
 docker compose up --build
 ```
 
-Wait until the Firestore emulator is up (log: `Dev App Server is now running`). Compose waits on a healthcheck — without that the worker can hang on its first query and the job stays `queued`.
+Wait until the Firestore emulator is healthy (`Dev App Server is now running`).
 
 ## 2. Flow
 
 ```bash
-# upload a file → you get a job id
 curl -F "file=@README.md" http://localhost:8081/files
-
-# start processing (status: queued)
 curl -X POST http://localhost:8081/jobs/JOB_ID/start
-
-# wait 2–3 s, worker updates status
 curl http://localhost:8081/jobs/JOB_ID
+
+curl http://localhost:8083/health   # cv
+curl http://localhost:8084/health   # email stub
+curl http://localhost:8085/health   # editor stub
 ```
 
-Expected document:
+Expected job when finished:
 
 ```json
 {
   "id": "...",
   "status": "done",
+  "step": "process",
   "file": {
-    "bucket": "mock-files",
-    "path": "uploads/.../README.md",
-    "gsUri": "gs://mock-files/uploads/.../README.md",
-    "originalName": "README.md",
-    "sizeBytes": 1234
+    "gsUri": "gs://mock-files/uploads/.../README.md"
   },
   "result": { "bytes": 1234, "preview": "..." }
 }
 ```
 
-## 3. What lives where
+`status` / `step` tell you which unit failed (`prepare` vs `process`).
 
-| File | Role |
-|---|---|
-| `api/` | HTTP image |
-| `worker/` | polling-loop image |
-| `docker-compose.yml` | 4 services: Firestore emulator, fake GCS, api, worker |
-| `gcp/SCHEMA.md` | document shape and what to carry to the real project |
-
-## 4. Real GCP
+## 3. Real GCP
 
 Project: `all-things-agentic-google` / `linen-badge-507111-r6`.
 
-1. Console: **Firestore** → create a database (Native mode, region e.g. `europe-central2`).
-2. **Cloud Storage** → bucket e.g. `linen-badge-files`.
-3. Build and push both images to Artifact Registry.
-4. Deploy `api` as a Cloud Run service, `worker` as a second service (min instances 1) or a worker pool.
-5. Env: `GCP_PROJECT`, `FIRESTORE_COLLECTION=jobs`, `BUCKET=...`
-6. IAM: Cloud Run SA gets `roles/datastore.user` + `roles/storage.objectAdmin`.
-7. Add Janek in **IAM & Admin** (not via this chat — Grok is not logged into your GCP).
-
-Command details: `gcp/DEPLOY.md`.
+Details: `gcp/DEPLOY.md`. Firestore Native + bucket + Artifact Registry. Do not put file bytes in Firestore. Grok is not logged into your GCP.

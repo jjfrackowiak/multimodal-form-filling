@@ -11,6 +11,8 @@ Two owners. Do not cross the line unless asked.
 
 Stay here. Interfaces that the editor will call should be small, documented, and stable.
 
+`services/email` and `services/editor` are **stubs** (health + 501). Do not fill in Janek’s logic unless asked.
+
 ## Janek (`jjfrackowiak`)
 
 - Email service (Part 1).

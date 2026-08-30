@@ -1,4 +1,8 @@
+import json
 import os
+import threading
+import urllib.error
+import urllib.request
 import uuid
 from datetime import datetime, timezone
 
@@ -8,10 +12,16 @@ from google.cloud import firestore, storage
 PROJECT = os.environ.get("GCP_PROJECT", "mock-project")
 BUCKET = os.environ.get("BUCKET", "mock-files")
 COLLECTION = os.environ.get("COLLECTION", "jobs")
+PREPARE_URL = os.environ.get("PREPARE_URL", "")
 PORT = int(os.environ.get("PORT", "8080"))
 
 db = firestore.Client(project=PROJECT)
 gcs = storage.Client(project=PROJECT)
+app = Flask(__name__)
+
+
+def now():
+    return datetime.now(timezone.utc).isoformat()
 
 
 def ensure_bucket():
@@ -21,12 +31,37 @@ def ensure_bucket():
     return bucket
 
 
-app = Flask(__name__)
+def post_json(url, payload, timeout=30):
+    data = json.dumps(payload).encode()
+    req = urllib.request.Request(
+        url,
+        data=data,
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    with urllib.request.urlopen(req, timeout=timeout) as resp:
+        return json.loads(resp.read().decode() or "{}")
+
+
+def invoke_prepare(job_id):
+    if not PREPARE_URL:
+        return
+    try:
+        post_json(PREPARE_URL, {"jobId": job_id})
+    except Exception as e:
+        db.collection(COLLECTION).document(job_id).update(
+            {
+                "status": "failed",
+                "step": "prepare",
+                "error": f"prepare invoke failed: {e}",
+                "updatedAt": now(),
+            }
+        )
 
 
 @app.get("/health")
 def health():
-    return {"ok": True}
+    return {"ok": True, "service": "api"}
 
 
 @app.post("/files")
@@ -48,8 +83,9 @@ def upload():
     doc = {
         "id": job_id,
         "status": "uploaded",
-        "createdAt": datetime.now(timezone.utc).isoformat(),
-        "updatedAt": datetime.now(timezone.utc).isoformat(),
+        "step": None,
+        "createdAt": now(),
+        "updatedAt": now(),
         "file": {
             "bucket": BUCKET,
             "path": object_path,
@@ -74,9 +110,12 @@ def start(job_id):
     ref.update(
         {
             "status": "queued",
-            "updatedAt": datetime.now(timezone.utc).isoformat(),
+            "step": "prepare",
+            "error": None,
+            "updatedAt": now(),
         }
     )
+    threading.Thread(target=invoke_prepare, args=(job_id,), daemon=True).start()
     return jsonify(ref.get().to_dict())
 
 
@@ -95,4 +134,4 @@ def list_jobs():
 
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=PORT)
+    app.run(host="0.0.0.0", port=PORT, threaded=True)

@@ -11,7 +11,7 @@ Email-driven form validation / composition. Spec: [`multimodal-form-filling/emai
 | Image / CV tools (processing, understanding, cropping) | Michal | req. 13 |
 | GCP deployment | Michal | — |
 
-Local GCP mock (api + worker + Firestore emulator + fake GCS): [`mock-firestore-app/`](mock-firestore-app/). App on Cloud Run, Gemini on Vertex, files in the bucket, job records in Firestore.
+Local GCP mock: [`mock-firestore-app/`](mock-firestore-app/). Job API + `fn-prepare` + three services (`cv`, `email` stub, `editor` stub). Files in the bucket, job records in Firestore. No polling worker.
 
 ## What it is
 
