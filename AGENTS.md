@@ -9,7 +9,7 @@ Two owners. Do not cross the line unless asked.
 - Image / CV tools (req. 13): image processing, image understanding, cropping.
 - GCP deployment.
 
-**CV is its own service** (`cv` / Cloud Run). It is **not** a package inside the AI editor. The editor calls it over HTTP (BlobRef in, labels/crops out). Do not implement `VisionTool` under `editor-service`.
+**CV is its own service** (`cv/`). It is **not** inside the AI editor. For now the deliverable is **`inventory.yaml`** (depicts + headliner `shot_from`). Cropping is deferred. Duplicates are sha256, not the model.
 
 Stay here. Interfaces the editor will call should be small, documented, and stable.
 

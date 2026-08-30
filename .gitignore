@@ -5,6 +5,7 @@
 __pycache__/
 *.pyc
 .venv/
+cv/.venv/
 venv/
 node_modules/
 mock-firestore-app.zip

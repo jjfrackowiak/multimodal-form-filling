@@ -8,7 +8,7 @@ Email-driven form validation / composition. Spec: [`multimodal-form-filling/emai
 |------|--------|------|
 | Email service (intake, confirmation / rejection replies, handoff) | Janek | Part 1 |
 | AI editor (scoped agent runs, document state, line edits, Pydantic retry) | Janek | Part 2 |
-| Image / CV tools — **separate `cv` service**, not inside the editor (processing, understanding, cropping) | Michal | req. 13 |
+| Image / CV — separate `cv/` service: produce `inventory.yaml` (cropping deferred) | Michal | req. 13 |
 | GCP deployment | Michal | — |
 
 Local GCP mock: [`mock-firestore-app/`](mock-firestore-app/). Job API + `fn-prepare` + three services (`cv`, `email` stub, `editor` stub). Files in the bucket, job records in Firestore. No polling worker.
