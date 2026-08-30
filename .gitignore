@@ -1,14 +1,27 @@
+# Order matters: a negation must follow the pattern it excepts, so this file
+# must never be sorted. (It was, once, which silently un-tracked .env.example.)
 .DS_Store
+
+# Secrets
 .env
 .env.*
 !.env.example
+# Python
 __pycache__/
 *.pyc
+*.egg-info/
+.pytest_cache/
 .venv/
 cv/.venv/
 venv/
-node_modules/
-mock-firestore-app.zip
 .venv-fixture/
+.coverage
+.coverage.*
+.mypy_cache/
+.ruff_cache/
+# Node
+node_modules/
+.claude/worktrees/
+mock-firestore-app.zip
 **/inventory.generated.yaml
 *.HEIC

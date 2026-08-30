@@ -1,0 +1,37 @@
+# Local development mail server.
+#
+# GreenMail, not Mailpit. Mailpit is SMTP-only for receiving and speaks no IMAP,
+# so the IMAP poller (B4) cannot be developed against it — which is the whole
+# inbound half of the email service. GreenMail serves both protocols.
+#
+#   docker compose -f docker/compose.dev.yaml up -d
+#   python scripts/verify_mailbox.py
+#
+# Ports carry GreenMail's standard +3000 offset, so nothing collides with a real
+# mail client or a system MTA on the same machine.
+
+services:
+  greenmail:
+    image: greenmail/standalone:2.1.8
+    container_name: mff-greenmail
+    ports:
+      - "3025:3025"   # SMTP
+      - "3143:3143"   # IMAP
+      - "3465:3465"   # SMTPS
+      - "3993:3993"   # IMAPS
+      - "8080:8080"   # REST API — useful for asserting in tests
+    environment:
+      # auth.disabled lets any user/password combination authenticate and
+      # auto-creates the mailbox on first use, so there is no account setup step.
+      # Never carry this flag anywhere near a real deployment.
+      GREENMAIL_OPTS: >-
+        -Dgreenmail.setup.test.all
+        -Dgreenmail.hostname=0.0.0.0
+        -Dgreenmail.auth.disabled
+        -Dgreenmail.verbose
+    healthcheck:
+      test: ["CMD-SHELL", "timeout 2 bash -c '</dev/tcp/127.0.0.1/3143' || exit 1"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 10s

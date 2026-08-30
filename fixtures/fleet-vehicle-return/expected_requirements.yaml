@@ -9,6 +9,8 @@ expected_total_photos: 16   # stated by the client on line 1
 
 requirements:
   - id: R-01
+    ordinal: 11          # manifest_raw.index(source_span) — the ordering key
+    source_line: 2
     text: "A photograph of the engine bay, taken with the bonnet open."
     source_span: "Pod maską"
     scope: exterior_mechanical
@@ -20,18 +22,24 @@ requirements:
     ambiguity: repeated_verbatim_in_manifest
 
   - id: R-02
+    ordinal: 22          # manifest_raw.index(source_span) — the ordering key
+    source_line: 3
     text: "Four photographs of the seats."
     source_span: "4x fotele"
     scope: interior
     expected_count: 4
 
   - id: R-03
+    ordinal: 34          # manifest_raw.index(source_span) — the ordering key
+    source_line: 3
     text: "Two photographs of the vehicle taken on the diagonal."
     source_span: "2 przekatne pojazdu"
     scope: exterior_body
     expected_count: 2
 
   - id: R-04
+    ordinal: 56          # manifest_raw.index(source_span) — the ordering key
+    source_line: 4
     text: >
       Two photographs of the headliner. Each must be taken from between
       the front seats.
@@ -49,6 +57,8 @@ requirements:
       note: "'forteli' is a typo for 'foteli' (seats) in the client's original."
 
   - id: R-05
+    ordinal: 84          # manifest_raw.index(source_span) — the ordering key
+    source_line: 6
     text: "A photograph of the windscreen taken from inside the cabin."
     source_span: "Przednia szyba że środka i zewnątrz"
     scope: glass
@@ -56,30 +66,40 @@ requirements:
     note: "'że' is a typo for 'ze'. One span yields two requirements (R-05, R-06)."
 
   - id: R-06
+    ordinal: 84          # manifest_raw.index(source_span) — the ordering key
+    source_line: 6
     text: "A photograph of the windscreen taken from outside the vehicle."
     source_span: "Przednia szyba że środka i zewnątrz"
     scope: glass
     expected_count: 1
 
   - id: R-07
+    ordinal: 120          # manifest_raw.index(source_span) — the ordering key
+    source_line: 7
     text: "A photograph of the tyre tread."
     source_span: "Bieżnik opony"
     scope: tyres
     expected_count: 1
 
   - id: R-08
+    ordinal: 135          # manifest_raw.index(source_span) — the ordering key
+    source_line: 8
     text: "A photograph of the boot."
     source_span: "zdjęcie bagażnika + wyposażenia pod klapą"
     scope: boot
     expected_count: 1
 
   - id: R-09
+    ordinal: 135          # manifest_raw.index(source_span) — the ordering key
+    source_line: 8
     text: "A photograph of the equipment stowed under the boot lid/floor."
     source_span: "zdjęcie bagażnika + wyposażenia pod klapą"
     scope: boot
     expected_count: 1
 
   - id: R-10
+    ordinal: 178          # manifest_raw.index(source_span) — the ordering key
+    source_line: 9
     text: "A photograph of the instrument cluster."
     source_span: "i zegary"
     scope: interior

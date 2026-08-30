@@ -1,0 +1,45 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    # No secrets used anywhere in this job: everything here runs offline.
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+        with:
+          version: "0.7.14"
+          enable-cache: true
+
+      - name: Set up Python
+        run: uv python install 3.11
+
+      - name: Sync workspace
+        run: uv sync --all-packages
+
+      - name: ruff format --check
+        run: uv run ruff format --check packages services
+
+      - name: ruff check
+        run: uv run ruff check packages services
+
+      - name: mypy --strict
+        run: uv run mypy packages services
+
+      - name: import-linter
+        run: uv run lint-imports
+
+      - name: pytest (per-package coverage)
+        run: make test
+
+      - name: fixture evaluator (156/156)
+        run: |
+          uv run python fixtures/fleet-vehicle-return/check_output.py \
+            fixtures/fleet-vehicle-return/expected_output/report_reviewed.docx

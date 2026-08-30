@@ -8,22 +8,45 @@ manifest, used as golden data for the L1, L2, L3 and E1 evals.
 ## Files
 
 ```
-manifest.txt                        shared input — the client's text, verbatim
-images/                             shared source material — 17 files as delivered
-inventory.yaml                      human labels; stands in for vision until B11
+manifest.txt                        THE EMAIL BODY — the client's text, verbatim
+inventory.yaml                      human labels; stands in for vision until the real service
 expected_requirements.yaml          L1 ground truth — the golden manifest parse
 
 input/
-  derivative/form_supplied.docx     the report as the client submitted it
-  netnew/client_inputs.yaml         the same submission, with no document
+  derivative/form_supplied.docx     one DERIVATIVE job — photos embedded in the .docx
+  netnew/WN-7020U/                  one NET-NEW job — the folder IS the set of inputs
+    dane-pojazdu.txt                  }  ClientInputs.texts
+    uwagi.txt                         }
+    *.jpg                             17 files, 15 distinct — JobRequest.images
 
 expected_output/
   report_reviewed.docx              the golden OUTPUT — 10 real Word comments
+  delivery.txt                      the results email — where provenance lives
   review.yaml                       the review layer, as data
-  structure.yaml                    THE EVAL TARGET — structural completeness spec
+  structure.yaml                    THE EVAL TARGET
 
 check_output.py                     the reference evaluator — deterministic, offline
 ```
+
+## The two modes, as a client actually sends them
+
+The **manifest is the email body**, never an attachment. Attachments are work items:
+
+| | Derivative | Net-new |
+|---|---|---|
+| Arrives as | a `.docx`, in a `derivative.zip` | a **folder**, in a `net-new.zip` |
+| Photos | embedded in the document | loose in the folder |
+| Text | in the document | `.txt` files in the folder |
+| `form_id` | the filename | **the folder name** — the client's own label |
+
+`WN-7020U` is the registration, because that is what a person would name the folder.
+
+**Containment is how a client says what belongs to what.** An image in `WN-7020U/` belongs
+to the `WN-7020U` job — no naming convention, no metadata file.
+
+An earlier version of this fixture had `client_inputs.yaml`, a single structured file with
+`vehicle:` and `notes:` keys. It was invented before the real shape was known and described
+something no client would send. Replaced.
 
 ## One output, two inputs
 
@@ -43,6 +66,19 @@ derivative must preserve their body verbatim while net-new authors ours. What is
 invariant across modes in every case is the **review layer**: the same ten
 requirements, the same two failures, the same justifications and suggestions.
 
+## Comments cite numbers; the delivery explains them
+
+Comments carry `[R-04]` and nothing more. An earlier version repeated verbatim manifest
+spans inside every comment, on the argument that a bare requirement id tells the client
+nothing — which holds only if the id is never explained.
+
+`delivery.txt` explains them. It carries every requirement's text alongside the manifest
+span and line it was read from, including R-04's constraint six lines from its subject and
+R-01's recorded ambiguity. Stated once, rather than repeated in ten comments.
+
+The evaluator asserts both halves, and **a comment containing a verbatim citation now
+fails** — otherwise the fixture would go on quietly asserting the superseded rule.
+
 ## The evaluator is structural, not a judge
 
 `expected_output/structure.yaml` is what the eval actually asserts — not similarity
@@ -51,10 +87,11 @@ justification while passing a document with the wrong verdicts.
 
 ```
 $ python check_output.py expected_output/report_reviewed.docx      # needs python-docx>=1.2
-PASS  88/88 checks passed
+PASS  156/156 checks passed
 ```
 
-88 assertions, no API key, no model. The pipeline that produces the document is
+156 assertions, no API key, no model. They cover the document, the review layer, inline
+anchoring, the computed slice ordinals, and the delivery email. The pipeline that produces the document is
 non-deterministic; whether the document is complete in every aspect is not.
 
 ### The checker is mutation-tested
@@ -64,17 +101,24 @@ Five deliberate regressions, all caught:
 
 | Mutation | Result |
 |---|---|
-| `R-04` flipped `fail` → `pass` | caught — 84/88 |
-| `R-01` fails with no suggestion | caught — 87/88 |
-| `R-06` justification cut to one character | caught — 87/88 |
-| `R-03` passes but carries a suggestion | caught — 87/88 |
-| `R-08` comment removed entirely | caught — 80/83 |
-| *golden output (control)* | **passes — 88/88** |
+| A comment carries a verbatim citation *(the old contract)* | caught |
+| `R-04` flipped `fail` → `pass` | caught |
+| A failing requirement loses its suggestion | caught |
+| `R-04`'s ordinal no longer matches its manifest offset | caught |
+| A delivery quote paraphrased instead of quoted | caught |
+| A requirement dropped from the delivery list | caught |
+| *golden output (control)* | **passes — 156/156** |
 
-The third one earned its keep: it originally **passed**. The field extractor split on
-`Uzasadnienie:` and took everything to the end of the comment, so a one-character
-justification still measured over ten characters. Fixed by bounding each field at the
-next field marker. Nothing but mutation testing would have found it.
+**Two of these originally passed**, and both were real holes in the checker.
+
+An earlier round: the field extractor split on `Uzasadnienie:` and took everything to the
+end of the comment, so a one-character justification still measured over ten. Fixed by
+bounding each field at the next marker.
+
+This round: the delivery check tested whether a requirement id appeared *anywhere* in the
+email — and every id also appears in the pass/fail summary, so dropping one from the
+requirement list still passed. Now scoped to the list section, and each entry must carry
+the manifest span it was read from.
 
 > **`python-docx` must be pinned `>=1.2`.** Verified here: 1.1.0 has no comment support
 > at all, and 1.2.0 provides `Document.add_comment(runs, text, author, initials)` and an

@@ -1,0 +1,161 @@
+[project]
+name = "mff-workspace"
+version = "0.0.0"
+description = "Multimodal form filling — uv workspace root (virtual, no code of its own)."
+requires-python = ">=3.11"
+dependencies = []
+
+[tool.uv]
+package = false
+
+[tool.uv.workspace]
+members = ["packages/*", "services/*"]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3",
+    "pytest-asyncio>=0.24",
+    "pytest-cov>=5.0",
+    "ruff>=0.7",
+    "mypy>=1.13",
+    "import-linter>=2.1",
+]
+
+# ---------------------------------------------------------------------------
+# ruff — one shared config, no per-package overrides
+# ---------------------------------------------------------------------------
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+src = ["packages", "services"]
+# Only packages/ and services/ are ours to lint/format in B0. docs/, fixtures/, and
+# scripts/ predate this branch and are out of scope — never reformat them, even if `ruff`
+# is accidentally invoked at the repo root instead of via `make check`. Markdown is
+# excluded everywhere: ruff can reformat fenced ```python blocks in *.md, but READMEs
+# outside our own new packages are not ours to rewrite.
+extend-exclude = ["docs", "fixtures", "scripts", "multimodal-form-filling", "*.md"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "C4", "SIM", "RUF", "TID"]
+ignore = []
+
+[tool.ruff.lint.flake8-bugbear]
+# FastAPI's dependency-injection idiom is `param: X = Depends(...)`; B008 otherwise flags it
+# as a mutable-default-style footgun, which it is not in FastAPI's calling convention.
+extend-immutable-calls = ["fastapi.Depends", "fastapi.Query", "fastapi.Path", "fastapi.Body"]
+
+[tool.ruff.lint.flake8-tidy-imports.banned-api]
+# Import-linter can only forbid a module, not a symbol inside one -- `pydantic_evals` as a
+# whole is needed by every eval suite (Case, Dataset, Evaluator). This targets the one
+# symbol the plan actually forbids.
+"pydantic_evals.evaluators.LLMJudge".msg = "Evaluators here are structural, never LLM-as-judge. See the evals section of docs/app-implementation-plan.md."
+
+[tool.ruff.lint.isort]
+known-first-party = [
+    "mff_contracts",
+    "mff_vision",
+    "mff_docmodel",
+    "mff_manifest",
+    "mff_applier",
+    "mff_store",
+    "email_service",
+    "editor_service",
+    "vision_stub",
+]
+
+# ---------------------------------------------------------------------------
+# mypy --strict across the workspace
+# ---------------------------------------------------------------------------
+[tool.mypy]
+# Invoked per package (see Makefile `typecheck`): each package's `src` and `tests` are
+# type-checked in their own mypy run, so a `tests/test_x.py` basename shared by two
+# packages (every skeleton has one) is never a "duplicate module" collision.
+python_version = "3.11"
+strict = true
+plugins = ["pydantic.mypy"]
+explicit_package_bases = true
+namespace_packages = true
+
+[[tool.mypy.overrides]]
+module = "yaml.*"
+ignore_missing_imports = true
+
+# ---------------------------------------------------------------------------
+# import-linter — the highest-value gate in the repo
+# ---------------------------------------------------------------------------
+[tool.importlinter]
+include_external_packages = true
+root_packages = [
+    "mff_contracts",
+    "mff_vision",
+    "mff_docmodel",
+    "mff_manifest",
+    "mff_applier",
+    "mff_store",
+    "email_service",
+    "editor_service",
+    "vision_stub",
+]
+
+[[tool.importlinter.contracts]]
+name = "services depend on packages depend on mff_contracts, never sideways or upward"
+type = "layers"
+layers = [
+    "email_service | editor_service | vision_stub",
+    "mff_vision | mff_docmodel | mff_manifest | mff_applier | mff_store",
+    "mff_contracts",
+]
+
+[[tool.importlinter.contracts]]
+name = "mff_contracts depends on pydantic and nothing else"
+type = "forbidden"
+source_modules = ["mff_contracts"]
+forbidden_modules = [
+    "pydantic_ai",
+    "httpx",
+    "docx",
+    "yaml",
+    "fastapi",
+    "starlette",
+    "PIL",
+    "mff_vision",
+    "mff_docmodel",
+    "mff_manifest",
+    "mff_applier",
+    "mff_store",
+    "email_service",
+    "editor_service",
+    "vision_stub",
+]
+
+[[tool.importlinter.contracts]]
+name = "no module outside llm/ and agents/ imports a model library"
+type = "forbidden"
+source_modules = [
+    "mff_contracts",
+    "mff_vision",
+    "mff_docmodel",
+    "mff_manifest",
+    "mff_applier",
+    "mff_store",
+    "email_service",
+    "editor_service",
+    "vision_stub",
+]
+forbidden_modules = ["pydantic_ai", "anthropic", "openai", "google", "vertexai"]
+# NOTE: this repo has no `llm/` or `agents/` subpackages yet (out of scope for B0).
+# When a branch introduces one, exempt it here with `ignore_imports`, e.g.:
+#   ignore_imports = ["editor_service.agents.reviewer -> pydantic_ai"]
+# rather than removing this contract.
+
+# ---------------------------------------------------------------------------
+# coverage — per-package, not global (see Makefile). Protocol method bodies
+# (`...`, no implementation to exercise — B0 defines shapes, not adapters) are
+# excluded; everything else must be exercised by a real test.
+# ---------------------------------------------------------------------------
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "^\\s*\\.\\.\\.\\s*$",
+]
+

@@ -23,6 +23,12 @@ from docx import Document
 
 HERE = Path(__file__).parent
 SPEC = HERE / "expected_output" / "structure.yaml"
+MANIFEST = (HERE / "manifest.txt").read_text(encoding="utf-8")
+MANIFEST_LINES = MANIFEST.split("\n")
+
+# 'wiersz 4: "2x podsufitka"'  ->  ("4", "2x podsufitka")  — used on the DELIVERY, not comments
+CITE_RE = re.compile(r'wiersz\s+(\d+):\s*"([^"]+)"')
+REQ_LINE_RE = re.compile(r'^\s*(R-\d{2})\s{2,}(.+)$', re.M)
 
 REQ_RE = re.compile(r"\[(R-\d{2})\]")
 VERDICT_RE = re.compile(r"\[R-\d{2}\]\s+(\w+)")
@@ -33,7 +39,6 @@ VERDICT_RE = re.compile(r"\[R-\d{2}\]\s+(\w+)")
 FIELD_RE = {
     "justification": re.compile(r"Uzasadnienie:\s*(.*?)(?=\n\s*(?:Sugestia:|Źródło:)|\Z)", re.S),
     "suggestion":    re.compile(r"Sugestia:\s*(.*?)(?=\n\s*(?:Uzasadnienie:|Źródło:)|\Z)", re.S),
-    "source":        re.compile(r"Źródło:\s*(.*?)(?=\n\s*(?:Uzasadnienie:|Sugestia:)|\Z)", re.S),
 }
 MIN_JUSTIFICATION = 20
 
@@ -137,13 +142,16 @@ def check_review(doc, spec: dict, r: Report) -> None:
         if verdict == "pass" and inv.get("passing_comment_has_no_suggestion"):
             r.check(not has_sugg, f"{req} passes but carries a suggestion")
 
-        src = field(text, "source")
-        if inv.get("every_comment_has_source_reference"):
-            r.check(bool(src), f"{req} has no source reference")
-        if inv.get("every_source_reference_resolves"):
-            named = src.split("\u2192")[-1].strip()
-            r.check(named in rv["requirement_ids"],
-                    f"{req} source reference does not resolve: {named!r}")
+        if inv.get("every_comment_names_its_requirement"):
+            r.check(bool(REQ_RE.search(text)), f"{req} comment does not name its requirement")
+
+        # Provenance moved to the delivery list. A comment repeating verbatim manifest
+        # spans is the OLD contract and must fail, or the fixture silently keeps
+        # asserting a rule the system no longer follows.
+        if inv.get("no_verbatim_citation_in_comments"):
+            stray = CITE_RE.findall(text)
+            r.check(not stray,
+                    f"{req} carries a verbatim citation block: {stray[:1]}")
 
     counts: dict[str, int] = {}
     for text in seen.values():
@@ -157,6 +165,83 @@ def check_review(doc, spec: dict, r: Report) -> None:
     unver = counts.get("unverified", 0)
     r.check(unver <= rv["unverified_allowed"],
             f"unverified {unver} > {rv['unverified_allowed']}")
+
+
+def check_anchoring(doc, spec: dict, r: Report) -> None:
+    """Comments must attach to the section they judge, not sit at the document end."""
+    if not spec["review"]["invariants"].get("comment_anchored_inline"):
+        return
+    anchored = 0
+    for p in doc.paragraphs:
+        if "commentRangeStart" in p._p.xml:
+            anchored += len(re.findall(r'commentRangeStart', p._p.xml))
+    r.check(anchored == spec["review"]["total_comments"],
+            f"{anchored} inline anchors for {spec['review']['total_comments']} comments")
+
+
+def check_ordinals(spec: dict, r: Report) -> None:
+    """The ordering rule is itself an assertion: offset of source_span in the manifest."""
+    expected = spec.get("expected_ordinals", {})
+    if not expected:
+        return
+    reqs = yaml.safe_load((HERE / "expected_requirements.yaml").read_text(encoding="utf-8"))
+    by_id = {x["id"]: x for x in reqs["requirements"]}
+    for rid, want in expected.items():
+        got = by_id.get(rid, {}).get("ordinal")
+        r.check(got == want, f"{rid} ordinal {got} != {want}")
+        span = by_id.get(rid, {}).get("source_span", "")
+        r.check(span and MANIFEST.index(span) == want,
+                f"{rid} ordinal is not the offset of its source_span")
+
+
+def check_delivery(spec: dict, r: Report) -> None:
+    """Comments cite numbers; the delivery is where those numbers are explained."""
+    d = spec.get("delivery")
+    if not d:
+        return
+    path = HERE.parent.parent / d["file"] if not (HERE / d["file"]).exists() else HERE / d["file"]
+    if not path.exists():
+        r.check(False, f"delivery fixture missing: {d['file']}")
+        return
+    body = path.read_text(encoding="utf-8")
+
+    if d.get("lists_every_requirement"):
+        # Scope to the requirement-list section. Checking "rid in body" is too weak:
+        # every id also appears in the pass/fail summary, so dropping one from the
+        # list still passed. Found by mutation testing.
+        marker = "ODCZYTANE WYMAGANIA"
+        r.check(marker in body, "delivery has no requirement-list section")
+        section = body.split(marker, 1)[-1] if marker in body else ""
+        listed = {m.group(1) for m in REQ_LINE_RE.finditer(section)}
+        for rid in spec["review"]["requirement_ids"]:
+            r.check(rid in listed,
+                    f"delivery requirement list is missing {rid}")
+            # and it must carry the span it was read from, not just the number
+            entry = re.search(rf"{rid}\s{{2,}}.+?\n(.*?)(?=\n\s*R-\d{{2}}\s{{2,}}|\Z)",
+                              section, re.S)
+            r.check(bool(entry and CITE_RE.search(entry.group(1))),
+                    f"delivery lists {rid} without the manifest span it came from")
+
+    cited = CITE_RE.findall(body)
+    r.check(bool(cited), "delivery quotes no manifest spans")
+    for line_no, quote in cited:
+        if d.get("quotes_are_verbatim"):
+            r.check(quote in MANIFEST,
+                    f"delivery quote is not verbatim: {quote[:40]!r}")
+        if d.get("cited_line_numbers_correct"):
+            idx = int(line_no) - 1
+            ok = 0 <= idx < len(MANIFEST_LINES) and quote in MANIFEST_LINES[idx]
+            r.check(ok, f"delivery cites line {line_no} but {quote[:30]!r} is not there")
+
+    if d.get("states_the_summary"):
+        n_pass = spec["review"]["verdict_counts"]["pass"]
+        n_fail = spec["review"]["verdict_counts"]["fail"]
+        r.check(str(n_pass) in body and str(n_fail) in body,
+                "delivery does not state the pass/fail counts")
+    if d.get("names_failing_requirements"):
+        for rid, v in spec["review"]["expected_verdicts"].items():
+            if v == "fail":
+                r.check(rid in body, f"delivery does not name failing {rid}")
 
 
 def check_coverage(spec: dict, r: Report) -> None:
@@ -176,6 +261,9 @@ def main(argv: list[str]) -> int:
     r = Report()
     check_document(doc, spec, r)
     check_review(doc, spec, r)
+    check_anchoring(doc, spec, r)
+    check_ordinals(spec, r)
+    check_delivery(spec, r)
     check_coverage(spec, r)
 
     print(r)

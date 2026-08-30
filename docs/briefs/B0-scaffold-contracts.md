@@ -1,0 +1,165 @@
+# B0 · Scaffold and frozen contracts
+
+**Branch:** `feat/scaffold-contracts` → PR into `main`
+**Blocks:** every other branch. Nothing in Layer 1 can start until this merges.
+**Needs:** no API key, no GCP account, no mailbox. Everything here runs offline.
+
+
+**Read [`CONTEXT.md`](CONTEXT.md) first** — what the system does, what B0 left on disk,
+the contract surface, and the fixture. This brief assumes it.
+
+---
+
+## What you are building
+
+The workspace and the frozen contract package that all ten Layer-1 branches build
+against. No application logic, no agents, no HTTP handlers — those are other people's
+branches and you must not write them.
+
+Read `docs/app-implementation-plan.md` first. Its **"The contract to freeze first"**
+section is the specification for this work; the models there are not a sketch.
+
+---
+
+## Requirements you own
+
+None of the spec's 17 directly. You own the *shape* every other branch expresses them in,
+which is why getting this wrong is expensive: a mistake here is rework across ten
+branches, not one.
+
+---
+
+## Directories you own
+
+```
+pyproject.toml                    uv workspace root
+Makefile
+.github/workflows/ci.yml
+packages/mff-contracts/**         ← the real deliverable
+```
+
+You may create **empty** package and service skeletons so later branches only add files:
+
+```
+packages/mff-docmodel/     packages/mff-manifest/     packages/mff-applier/
+packages/mff-store/        services/email-service/    services/editor-service/
+```
+
+Each gets a `pyproject.toml`, a `src/<pkg>/__init__.py`, and a `tests/` directory. **Do
+not put logic in them.**
+
+Already on `main` and **not yours to touch**: `packages/mff-vision`,
+`services/vision-stub`, `fixtures/`, `scripts/`, `docker/`, `docs/`.
+
+---
+
+## The contract
+
+Transcribe the models from the plan's contract section exactly. They are grouped as:
+
+1. **Manifest and requirements** — `Requirement`, `Manifest`
+2. **Blobs and images** — `BlobRef`, `ImageAnalysis`, `RequirementSpec`, `JobImage`
+   (no `BoundingBox` — cropping is out of scope, see the plan)
+3. **Document models** — `Node`; `Entry`, `Section`, `FormDraft`, `DraftOp`
+4. **Review** — `Anchor`, `ReviewComment`
+5. **Artifacts** — `DerivativeArtifact`, `NetNewArtifact`, `Artifact` union
+6. **Slices** — `SlicePlan`, `SliceRequest`, `SliceReport`
+7. **Compile** — `RunSpan`, `RenderMap`, `CompiledForm`
+8. **Job lifecycle** — `Mode`, `IntakeProblem`, `IntakeVerdict`, `RequestRecord`,
+   `JobRequest`, `RequestAccepted`, `JobCursor`, `JobRecord`, `RequestResult`
+9. **Repositories** — `ArtifactRepository`, `JobRepository`, `RequestRepository`,
+   `BlobStore` (Protocols only — no implementations)
+
+### Non-negotiable
+
+**`mff-contracts` depends on pydantic and nothing else.** Not `pydantic-ai`, not
+`python-docx`, not `httpx`, not `mff-vision`. Two specific traps, both of which were
+caught in review and will be caught again by CI:
+
+- `ImageAnalysis` and `RequirementSpec` **live here**, not in `mff-vision`; `mff-vision`
+  imports them from you. Owning them there would make the frozen package depend on a
+  service client.
+- `SliceRequest.history` and `SliceReport.history` are **`list[dict[str, Any]]`**, not
+  `list[ModelMessage]`. Typing them would drag the whole agent framework into the package
+  everything else depends on.
+
+---
+
+## Validators to write
+
+These are the contract's teeth. Each needs a passing and a failing test:
+
+| Rule | Why |
+|---|---|
+| `suggestion` is required **iff** `verdict == "fail"` | req 10; a failure with no remedy is useless, a pass with one is noise |
+| `Anchor.target_id` is set unless `kind == "document"` | an unanchored comment cannot exist in OOXML |
+| `justification` is non-empty on every comment | req 16 |
+| `DraftOp` field combinations are valid per `kind` | `append` needs `section_id`, `set`/`delete` need `entry_id` |
+| `schema_version` is present on both artifacts | these persist and the shape has already changed twice |
+
+Also provide `Manifest.slices()` returning `list[SlicePlan]`. It is **plain chunking and
+nothing else**: sort by `ordinal` ascending, take consecutive chunks of **at most 6**.
+
+No grouping by `scope`, no splitting, no merging — and `Requirement` has **no `scope`
+field**, since with chunking the owning slice is determined by position. There is no
+minimum size; the last chunk is whatever remains, including one.
+
+Any grouping strategy is a guess about which requirements belong together, and a wrong
+guess costs a whole slice run to discover. Prefer the dumb, obvious implementation.
+
+---
+
+## Tooling
+
+- **uv workspace**, Python ≥ 3.11.
+- **ruff** lint + format, one shared config, no per-package overrides.
+- **mypy `--strict`** across the workspace. A `type: ignore` needs an error code and a
+  reason.
+- **import-linter**, and this is the highest-value gate in the repo. Contracts:
+  1. `services → packages → mff-contracts`. Never sideways, never upward.
+  2. `mff-contracts` imports nothing but `pydantic`.
+  3. No module outside `llm/` and `agents/` imports a model library.
+  4. **`pydantic_evals.evaluators.LLMJudge` is forbidden anywhere.** Every evaluator in
+     this repo is structural.
+- **pytest**, `asyncio_mode = auto` (already set in `pytest.ini`).
+- Per-package coverage ≥ 85%, measured per package — a global number lets one
+  well-tested package hide four untested ones.
+
+`make check` runs all of it and must pass offline with no credentials.
+
+---
+
+## Wire in what already exists
+
+`packages/mff-vision` and `services/vision-stub` are on `main` and currently install
+standalone. Bring them into the workspace, and **move `ImageAnalysis` into
+`mff-contracts`**, updating `mff-vision` to import it. Their 13 tests must still pass.
+
+The fixture's evaluator must also still pass:
+
+```
+.venv-fixture/bin/python fixtures/fleet-vehicle-return/check_output.py \
+    fixtures/fleet-vehicle-return/expected_output/report_reviewed.docx
+→ PASS  156/156 checks passed
+```
+
+---
+
+## Definition of done
+
+1. `make check` green: ruff, mypy --strict, import-linter, pytest — offline, no keys.
+2. Every validator above has a passing **and** a failing test.
+3. `Manifest.slices()` tested against the fleet fixture's 10 requirements: exactly **2
+   slices of 6 and 4**, ids running R-01…R-06 then R-07…R-10, and ordinals matching
+   `expected_ordinals` in `expected_output/structure.yaml`.
+4. The existing 13 vision tests pass with `ImageAnalysis` imported from contracts.
+5. `check_output.py` still returns 156/156.
+6. An import-linter test that **fails** if someone adds `pydantic-ai` to
+   `mff-contracts` — prove the gate works rather than assuming it.
+
+## Out of scope — do not write these
+
+Manifest parsing, the docmodel, the applier, the store adapters, the orchestrator, the
+runner, agents, prompts, HTTP handlers, Dockerfiles. Those are B1–B14. If the contract
+seems to need a change, **say so in the PR description rather than changing it** — ten
+branches are about to depend on this shape.
