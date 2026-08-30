@@ -444,7 +444,7 @@ html{scroll-behavior:smooth}
 <li><strong>Shared state</strong> (req 12) = a <code>deps</code> dataclass holding the <code>Artifact</code> python object. Tools mutate it in place; it outlives every run.</li>
 <li><strong>Gemini</strong>: <code>GoogleModel(&lt;model-id&gt;, provider=GoogleProvider(api_key=...))</code>, plus <code>HttpRetryOptions</code> for transport-level retry and <code>UsageLimits</code> per slice.</li>
 <li><strong>Validation/retry</strong> (reqs 16–17): <code>@agent.output_validator</code> raising <code>ModelRetry</code> handles cheap in-run structural fixes; the <strong>3-attempt cap and the mark-unverified terminal state live in our outer loop</strong>, because req 17 requires a durable terminal outcome, not an exception.</li>
-<li><strong>Evals</strong>: <code>pydantic-evals</code> ships with Pydantic AI — <code>Case</code>/<code>Dataset</code>/<code>Evaluator</code>, plus built-in <code>LLMJudge</code>, <code>IsInstance</code>, <code>Contains</code> and <strong><code>MaxDuration(seconds=...)</code></strong>. <code>EvaluatorContext</code> exposes <code>ctx.duration</code>, <code>ctx.metrics</code> and <code>ctx.span_tree</code>, so correctness, latency and token cost all come out of a single run. Agents are <code>pydantic-ai</code>; evals are <code>pydantic-evals</code>.</li>
+<li><strong>Evals</strong>: <code>pydantic-evals</code> ships with Pydantic AI — <code>Case</code>/<code>Dataset</code>/<code>Evaluator</code>, plus built-in <code>IsInstance</code>, <code>Contains</code> and <strong><code>MaxDuration(seconds=...)</code></strong>. <code>EvaluatorContext</code> exposes <code>ctx.duration</code>, <code>ctx.metrics</code> and <code>ctx.span_tree</code>, so correctness, latency and token cost all come out of a single run. Agents are <code>pydantic-ai</code>; evals are <code>pydantic-evals</code>. <strong><code>LLMJudge</code> exists in that library and we do not use it</strong> — see the evals section.</li>
 <li><strong>Comments</strong>: <code>document.add_comment(runs=..., text=..., author=..., initials=...)</code> and <code>document.comments</code> are supported in <code>python-docx</code> ≥ 1.2.</li>
 </ul>
 <h2 id="architecture">Architecture</h2>
@@ -1212,6 +1212,18 @@ class ReviewComment(BaseModel):
     justification: str              # req 16: never empty
     suggestion: str | None          # required iff verdict == &quot;fail&quot;
 </code></pre>
+<p><strong>Every comment is anchored inline, in both modes.</strong> This is a requirement, not an
+implementation detail: a review comment that is not attached to the content it judges is
+a footnote, and the client has to reconstruct what it refers to. Req 10 asks for one
+comment per requirement <em>on the form</em> — a summary list at the end would not satisfy it.</p>
+<ul>
+<li><strong>Derivative</strong> anchors to a <code>Node.id</code> in the client's untouched document.</li>
+<li><strong>Net-new</strong> anchors to an <code>Entry.id</code>, mapped to real runs as the compiler emits it.</li>
+</ul>
+<p><code>kind="document"</code> is the <strong>only</strong> exception and exists solely for <code>unverified</code>, where the
+agent may never have identified a target — often that is precisely why it failed.
+<code>CompiledForm.unanchored</code> counts these, so a run that quietly starts dumping comments at
+the document level is visible rather than silent.</p>
 <p><code>Anchor</code> gives <code>unverified</code> somewhere to live: a requirement that exhausted its retries may
 never have identified a target — often that is <em>why</em> it failed — and an unanchored comment
 cannot exist in OOXML.</p>
@@ -1524,7 +1536,7 @@ class BlobStore(Protocol):
 <p><strong>B9 · fleet-vehicle-return example + e2e</strong> — <code>fixtures/fleet-vehicle-return/**</code> (manifest free-text, a supplied Word form for derivative, client inputs for net-new, golden expected comments) and an end-to-end test that drives a real email through the fake transport into both modes. This is the demo.</p>
 <h2 id="evals-latency-budgets">Evals &amp; latency budgets</h2>
 <p><strong>Every branch ships an eval suite. A PR without one does not merge.</strong> "It works" is not a claim any subagent gets to make on its own recognisance — each stage must produce a number.</p>
-<p>We use <strong><code>pydantic-evals</code></strong> (ships with Pydantic AI, same ecosystem): <code>Case</code> / <code>Dataset</code> / <code>Evaluator</code>, the built-in <code>IsInstance</code>, <code>Contains</code>, <code>LLMJudge</code>, and — directly answering the latency requirement — <strong><code>MaxDuration(seconds=...)</code></strong> as a first-class assertion. <code>EvaluatorContext</code> exposes <code>ctx.duration</code>, <code>ctx.metrics</code> and <code>ctx.span_tree</code>, so correctness, latency and token cost come out of one run.</p>
+<p>We use <strong><code>pydantic-evals</code></strong> (ships with Pydantic AI, same ecosystem): <code>Case</code> / <code>Dataset</code> / <code>Evaluator</code>, the built-in <code>IsInstance</code> and <code>Contains</code>, and — directly answering the latency requirement — <strong><code>MaxDuration(seconds=...)</code></strong> as a first-class assertion. <strong><code>LLMJudge</code> is available in that library and is banned here</strong>; a branch importing it fails review. <code>EvaluatorContext</code> exposes <code>ctx.duration</code>, <code>ctx.metrics</code> and <code>ctx.span_tree</code>, so correctness, latency and token cost come out of one run.</p>
 <h3 id="two-tiers">Two tiers</h3>
 <p><strong>Tier A — deterministic components</strong> (no model anywhere): docmodel, intake rules, transport, contracts, the store. Golden assertions plus a wall-clock budget. Runs in CI on every push.</p>
 <p><strong>Tier B — pipeline evals</strong>: the system under test calls a live model, so it costs money and runs nightly or on demand rather than on every push. CI substitutes <code>TestModel</code>.</p>
@@ -1678,6 +1690,9 @@ class BlobStore(Protocol):
 <li><strong><code>mff-contracts</code> has no third-party dependency but <code>pydantic</code>.</strong> It's the seam; it stays boring.</li>
 <li><strong>Per-package coverage ≥ 85%</strong>, measured per package, not globally — a global number lets one well-tested package hide four untested ones.</li>
 <li><strong>No model call outside <code>llm/</code> and <code>agents/</code>.</strong> Enforced by import-linter.</li>
+<li><strong><code>pydantic_evals.evaluators.LLMJudge</code> is forbidden</strong>, enforced as an import-linter rule
+  rather than left to review. Every evaluator here is structural — the pipeline is
+  non-deterministic and whether its output is complete is not.</li>
 </ul>
 <p><strong>Conventions (in the PR template, checked by review):</strong></p>
 <ul>

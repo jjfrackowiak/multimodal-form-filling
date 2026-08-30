@@ -23,7 +23,7 @@ Not in scope for v1: image tooling (req 13) ships as a **stubbed interface only*
 - **Shared state** (req 12) = a `deps` dataclass holding the `Artifact` python object. Tools mutate it in place; it outlives every run.
 - **Gemini**: `GoogleModel(<model-id>, provider=GoogleProvider(api_key=...))`, plus `HttpRetryOptions` for transport-level retry and `UsageLimits` per slice.
 - **Validation/retry** (reqs 16–17): `@agent.output_validator` raising `ModelRetry` handles cheap in-run structural fixes; the **3-attempt cap and the mark-unverified terminal state live in our outer loop**, because req 17 requires a durable terminal outcome, not an exception.
-- **Evals**: `pydantic-evals` ships with Pydantic AI — `Case`/`Dataset`/`Evaluator`, plus built-in `LLMJudge`, `IsInstance`, `Contains` and **`MaxDuration(seconds=...)`**. `EvaluatorContext` exposes `ctx.duration`, `ctx.metrics` and `ctx.span_tree`, so correctness, latency and token cost all come out of a single run. Agents are `pydantic-ai`; evals are `pydantic-evals`.
+- **Evals**: `pydantic-evals` ships with Pydantic AI — `Case`/`Dataset`/`Evaluator`, plus built-in `IsInstance`, `Contains` and **`MaxDuration(seconds=...)`**. `EvaluatorContext` exposes `ctx.duration`, `ctx.metrics` and `ctx.span_tree`, so correctness, latency and token cost all come out of a single run. Agents are `pydantic-ai`; evals are `pydantic-evals`. **`LLMJudge` exists in that library and we do not use it** — see the evals section.
 - **Comments**: `document.add_comment(runs=..., text=..., author=..., initials=...)` and `document.comments` are supported in `python-docx` ≥ 1.2.
 
 ## Architecture
@@ -868,6 +868,19 @@ class ReviewComment(BaseModel):
     suggestion: str | None          # required iff verdict == "fail"
 ```
 
+**Every comment is anchored inline, in both modes.** This is a requirement, not an
+implementation detail: a review comment that is not attached to the content it judges is
+a footnote, and the client has to reconstruct what it refers to. Req 10 asks for one
+comment per requirement *on the form* — a summary list at the end would not satisfy it.
+
+- **Derivative** anchors to a `Node.id` in the client's untouched document.
+- **Net-new** anchors to an `Entry.id`, mapped to real runs as the compiler emits it.
+
+`kind="document"` is the **only** exception and exists solely for `unverified`, where the
+agent may never have identified a target — often that is precisely why it failed.
+`CompiledForm.unanchored` counts these, so a run that quietly starts dumping comments at
+the document level is visible rather than silent.
+
 `Anchor` gives `unverified` somewhere to live: a requirement that exhausted its retries may
 never have identified a target — often that is *why* it failed — and an unanchored comment
 cannot exist in OOXML.
@@ -1102,7 +1115,7 @@ Directory ownership is **disjoint per branch** — that is what keeps 7 concurre
 
 **Every branch ships an eval suite. A PR without one does not merge.** "It works" is not a claim any subagent gets to make on its own recognisance — each stage must produce a number.
 
-We use **`pydantic-evals`** (ships with Pydantic AI, same ecosystem): `Case` / `Dataset` / `Evaluator`, the built-in `IsInstance`, `Contains`, `LLMJudge`, and — directly answering the latency requirement — **`MaxDuration(seconds=...)`** as a first-class assertion. `EvaluatorContext` exposes `ctx.duration`, `ctx.metrics` and `ctx.span_tree`, so correctness, latency and token cost come out of one run.
+We use **`pydantic-evals`** (ships with Pydantic AI, same ecosystem): `Case` / `Dataset` / `Evaluator`, the built-in `IsInstance` and `Contains`, and — directly answering the latency requirement — **`MaxDuration(seconds=...)`** as a first-class assertion. **`LLMJudge` is available in that library and is banned here**; a branch importing it fails review. `EvaluatorContext` exposes `ctx.duration`, `ctx.metrics` and `ctx.span_tree`, so correctness, latency and token cost come out of one run.
 
 ### Two tiers
 
@@ -1180,6 +1193,9 @@ Seven agents writing in parallel is exactly how a codebase turns to mud. The def
 - **`mff-contracts` has no third-party dependency but `pydantic`.** It's the seam; it stays boring.
 - **Per-package coverage ≥ 85%**, measured per package, not globally — a global number lets one well-tested package hide four untested ones.
 - **No model call outside `llm/` and `agents/`.** Enforced by import-linter.
+- **`pydantic_evals.evaluators.LLMJudge` is forbidden**, enforced as an import-linter rule
+  rather than left to review. Every evaluator here is structural — the pipeline is
+  non-deterministic and whether its output is complete is not.
 
 **Conventions (in the PR template, checked by review):**
 
