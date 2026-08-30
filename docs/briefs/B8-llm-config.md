@@ -2,8 +2,9 @@
 
 **Branch:** `feat/llm-config` → PR into `main`
 **Depends on:** B0 (merged), B15 (`mff-fakes`).
-**Needs:** `GOOGLE_API_KEY` for the one live smoke test. Everything else runs on
-`FakeLlm`.
+**Needs:** Application Default Credentials (`gcloud auth application-default login`) plus
+`GOOGLE_CLOUD_PROJECT`, for the one live smoke test. **No API key anywhere.** Everything
+else runs on `FakeLlm`.
 
 
 **Read [`CONTEXT.md`](CONTEXT.md) first** — what the system does, what B0 left on disk,
@@ -92,10 +93,31 @@ from google.adk.sessions import InMemorySessionService
 from google.genai import types
 
 model = Gemini(
-    model=settings.model_id,
+    model=settings.editor_model_id,
     retry_options=types.HttpRetryOptions(attempts=3),
 )
 ```
+
+**Auth is ADC, and it is deliberately invisible in this snippet.** There is no `api_key=`
+argument and there must not be one. `google-genai` resolves credentials itself, in order:
+`GOOGLE_APPLICATION_CREDENTIALS`, then the gcloud ADC file, then the metadata server. Your
+settings object carries `GOOGLE_CLOUD_PROJECT`, `GOOGLE_CLOUD_LOCATION` and
+`GOOGLE_GENAI_USE_ENTERPRISE=true` — which routes through Vertex — and **nothing in our
+code branches on which credential source won.** That is the whole point: the same code runs
+against a developer's gcloud login and against workload identity in Cloud Run.
+
+Two consequences worth stating, because they change what your tests can assume:
+
+- **A missing credential is not a startup error.** Settings validation can check that
+  `GOOGLE_CLOUD_PROJECT` is set; it cannot check that ADC will resolve. That failure
+  surfaces on the first call, which is why `/healthz` must not make one (DoD 7).
+- **`settings.py` must not read `GOOGLE_API_KEY`.** If you find yourself adding it back as
+  a fallback, the two-auth-path problem the repo just removed is growing back.
+
+**Two models, two jobs.** `EDITOR_MODEL_ID` (`gemini-2.5-flash`) reviews and composes;
+`PARSER_MODEL_ID` (`gemma-4-26b-a4b-it`) does B2's structural extraction. Gemma 4 26B A4B
+is served on Vertex as **MaaS — serverless, standard `generateContent` path**, so it needs
+no Model Garden deployment and both models sit behind the same ADC. Pin both explicitly.
 
 **Pin the model id explicitly in settings**, never an alias. An upstream default change
 would silently move every eval baseline — and under ADK it now moves a *capability* too:
@@ -212,16 +234,23 @@ problem, and it should be visible without reading logs.
 6. `POST /slices:run` round-trips a real `SliceRequest` from the fixture.
 7. `/healthz` does not construct a model client — a health check must not cost a token or
    fail on a bad key.
-8. A test that an `LlmAgent` carrying **both** `output_schema` and a non-empty `tools` list
+8. A settings test asserting `GOOGLE_API_KEY` is **never** read, and that a missing
+   `GOOGLE_CLOUD_PROJECT` fails loudly at construction rather than on the first model call.
+9. A test that an `LlmAgent` carrying **both** `output_schema` and a non-empty `tools` list
    produces a request in which the real tools survive — assert against
    `FakeLlm.requests[-1]`. This is the one ADK behaviour the whole design rests on; prove
    it rather than trusting the release notes.
-9. Rule 2 tested directly: a requirement that passes on attempt 1 and whose answer the
+10. Rule 2 tested directly: a requirement that passes on attempt 1 and whose answer the
    model *changes* on attempt 2 must keep its attempt-1 verdict. `FakeLlm` makes this
    scriptable, and it is what keeps E1's exact-match assertion sound.
-10. `UsagePlugin` totals asserted against a scripted `usage_metadata`, and a slice that
+11. `UsagePlugin` totals asserted against a scripted `usage_metadata`, and a slice that
     exceeds its budget short-circuits in `before_model_callback` rather than calling out.
-11. One live Gemini smoke test behind an env flag, run manually, never in CI.
+12. One live smoke test behind an env flag, run manually, never in CI. It runs on **ADC,
+    with no key in the environment** — that is what proves the switch actually works. Hit
+    **both** models: the editor's Gemini and the parser's Gemma. This test is also what
+    settles the parser's exact model-id string (Google's docs say `gemma-4-26b-a4b-it`;
+    some integrations show a `-maas` suffix) — resolve it once here and pin it in
+    `.env.example`.
 
 ## Out of scope
 

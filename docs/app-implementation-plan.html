@@ -1283,6 +1283,14 @@ the failure this causes, and it looks exactly like "no mail arrived".</p>
 <p><strong>Credentials are injected, never baked.</strong> The App Password arrives as an environment
 variable or a mounted secret at runtime. An image with a working password inside it is a
 credential leak wearing a Dockerfile.</p>
+<p><strong>The model credential is not injected either — there isn't one.</strong> The editor authenticates
+by <strong>Application Default Credentials</strong>, the same mechanism <code>mff-store</code> already uses for
+Firestore and GCS, so the repo has one auth story rather than two. ADC resolves
+<code>GOOGLE_APPLICATION_CREDENTIALS</code>, then the gcloud login file, then the metadata server, and
+no code of ours branches on which won. Locally that is a read-only mount of the developer's
+<code>application_default_credentials.json</code>; in Cloud Run it is workload identity with <strong>no file
+to mount, rotate or leak</strong>. <code>GOOGLE_GENAI_USE_ENTERPRISE=true</code> routes <code>google-genai</code> through
+Vertex. After this change the mailbox App Password is the only real secret in the system.</p>
 <h3 id="getting-a-mailbox-without-a-phone-number">Getting a mailbox without a phone number</h3>
 <p>Gmail's App Passwords require 2-Step Verification, and enabling that on a <em>new</em>
 account normally means phone verification. Three ways round it, in order of effort.</p>

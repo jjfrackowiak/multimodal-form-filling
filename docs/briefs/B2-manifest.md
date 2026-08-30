@@ -2,8 +2,11 @@
 
 **Branch:** `feat/manifest` → PR into `main`
 **Depends on:** B0 (merged), B15 (`mff-fakes`).
-**Needs:** `GOOGLE_API_KEY` for the live eval only. CI and every unit test run on
-`FakeLlm` with no network.
+**Needs:** Application Default Credentials for the live eval only — no API key. CI and
+every unit test run on `FakeLlm` with no network. Your model is `PARSER_MODEL_ID`
+(`gemma-4-26b-a4b-it`), served on Vertex as MaaS behind the same ADC as the editor's
+Gemini; you never construct the client yourself, so this is the editor service's problem
+and not yours.
 
 
 **Read [`CONTEXT.md`](CONTEXT.md) first** — what the system does, what B0 left on disk,
