@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import pytest
 
+from mff_contracts import RequirementHit
 from mff_vision import (
     Constraint,
     ImageAnalysis,
@@ -30,7 +31,7 @@ REQS = [
 ]
 
 
-def _hit(row: ImageAnalysis, rid: str):
+def _hit(row: ImageAnalysis, rid: str) -> RequirementHit:
     return next(h for h in row.hits if h.id == rid)
 
 

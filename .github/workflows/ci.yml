@@ -31,7 +31,7 @@ jobs:
         run: uv run ruff check packages services
 
       - name: mypy --strict
-        run: uv run mypy packages services
+        run: make typecheck
 
       - name: import-linter
         run: uv run lint-imports

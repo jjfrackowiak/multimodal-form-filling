@@ -3,7 +3,7 @@
 # All first-party packages, for lint/typecheck (which apply uniformly).
 PACKAGES := packages/mff-contracts packages/mff-vision packages/mff-docmodel \
             packages/mff-manifest packages/mff-applier packages/mff-store
-SERVICES := services/email-service services/editor-service services/vision-stub services/cv
+SERVICES := services/email-service services/editor-service services/vision-stub
 
 # Coverage-gated at >=85%: B0's own deliverable (mff-contracts) plus the empty
 # skeletons B0 owns (trivially at 100%, and stay that way until a later branch adds

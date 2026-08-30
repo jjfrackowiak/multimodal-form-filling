@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
+from typing import Any
 
 import yaml
 
@@ -50,7 +51,7 @@ def default_inventory() -> Path:
     return Path(__file__).resolve().parents[-1] / _RELATIVE
 
 
-def _hits(entry: dict) -> list[RequirementHit]:
+def _hits(entry: dict[str, Any]) -> list[RequirementHit]:
     return [RequirementHit.model_validate(h) for h in entry.get("hits") or []]
 
 
