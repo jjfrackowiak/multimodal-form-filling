@@ -1,8 +1,8 @@
 """`GET /healthz` — must never construct a model client (B8 brief, DoD 7).
 
-Imports nothing from `editor_service.llm` and nothing from `editor_service.settings`: a
-health check must not cost a token, and must not fail because ADC or `GOOGLE_CLOUD_PROJECT`
-are misconfigured on a box that is otherwise up.
+This module imports neither the package that builds agents nor the one that resolves
+configuration: a health check must not cost a token, and must not fail because ADC or a
+project id are misconfigured on a box that is otherwise up.
 """
 
 from __future__ import annotations
