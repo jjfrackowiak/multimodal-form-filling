@@ -1,19 +1,8 @@
-"""Pydantic contracts for CV.
-
-The look-fors come from the *manifest*, not a frozen car ontology.
-Vertex fills these via response_schema.
-"""
+"""Pydantic contracts for CV. Look-fors come from expected_requirements."""
 
 from __future__ import annotations
 
-from typing import Literal
-
-from pydantic import BaseModel, Field, field_validator
-
-
-class DisplayWarning(BaseModel):
-    text: str = Field(description="Verbatim text on the cluster, original language.")
-    meaning: str = Field(default="", description="Short English gloss.")
+from pydantic import BaseModel, Field
 
 
 class ManifestRequirement(BaseModel):
@@ -25,7 +14,7 @@ class ManifestRequirement(BaseModel):
     expected_count: int = Field(default=1, ge=1)
     constraint: str | None = Field(
         default=None,
-        description="Extra constraint if the manifest states one, e.g. camera between front seats.",
+        description="Extra constraint if stated, e.g. camera between front seats.",
     )
 
 
@@ -34,49 +23,43 @@ class ParsedManifest(BaseModel):
     requirements: list[ManifestRequirement]
 
 
-class ImageLabel(BaseModel):
-    """One photo, scored against the requirements passed in the request."""
+class Finding(BaseModel):
+    """Anything visible that a comment might cite. Not a fixed vehicle-field list."""
 
+    what: str = Field(
+        description=(
+            "Kind of observation, in the photo's own terms: odometer, check-engine lamp, "
+            "oil pressure lamp, coolant, registration plate, bumper misalignment, scratch, …"
+        )
+    )
+    value: str = Field(
+        description="State or reading: on/off, 59650 km, illuminated, shifted left, plate text, …"
+    )
+    evidence: str = Field(default="", description="Optional short visual support.")
+
+
+class ImageLabel(BaseModel):
     requirement_ids: list[str] = Field(
         default_factory=list,
-        description="Zero or more requirement ids from the manifest that this photo actually depicts.",
+        description="Requirement ids from the checklist this photo actually supports.",
     )
     constraint_ok: bool | None = Field(
         default=None,
         description=(
-            "If a tagged requirement has a constraint (e.g. headliner from between the seats): "
-            "true if this photo satisfies it, false if it is the right subject but wrong pose. "
-            "null if no constraint applies."
+            "If a tagged requirement has a constraint: true if this photo satisfies it, "
+            "false if the subject is right but the constraint is not. null if none applies."
         ),
     )
-    note: str = Field(default="", description="Short English caption.")
-    odometer_km: int | None = Field(
+    constraint_evidence: str | None = Field(
         default=None,
-        description="Integer km from the cluster if readable (e.g. 59650).",
+        description="Why constraint_ok is true or false, from what is in the frame.",
     )
-    warnings: list[DisplayWarning] = Field(
+    note: str = Field(default="", description="Short caption of the picture.")
+    findings: list[Finding] = Field(
         default_factory=list,
-        description="Cluster warning messages, original language + English meaning.",
+        description=(
+            "Maximum documentary detail visible: lamps, gauges, fluids, identifiers, "
+            "damage, alignment. Do not limit yourself to a preset form. If the photo is "
+            "a cluster, report every lit indicator and every readable value."
+        ),
     )
-    registration: str | None = Field(
-        default=None,
-        description="Number plate if clearly readable.",
-    )
-    seat_side: Literal["driver", "passenger", "both"] | None = None
-    pose_evidence: str | None = Field(
-        default=None,
-        description="Visual proof for constraint_ok when a pose constraint exists.",
-    )
-
-    @field_validator("odometer_km", mode="before")
-    @classmethod
-    def parse_km(cls, v):
-        if v is None or v == "":
-            return None
-        if isinstance(v, int):
-            return v
-        s = str(v).lower().replace("km", "").replace(" ", "").replace(",", "")
-        try:
-            return int(s)
-        except ValueError:
-            return None

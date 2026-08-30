@@ -7,8 +7,10 @@ def label_task(requirements: list, manifest_text: str | None) -> str:
         "The checklist is what information must be extracted from the photos.",
         "Tag the photo with requirement ids from the checklist that it actually supports.",
         "A photo may satisfy more than one id, or none.",
-        "If a tagged requirement has a constraint, set constraint_ok and pose_evidence.",
-        "Cite odometer_km, warnings, registration in the typed fields when visible.",
+        "If a tagged requirement has a constraint, set constraint_ok and constraint_evidence.",
+        "Put every documentary detail you can read or see in findings[]: warning lamps",
+        "(check engine, oil, battery, …) on or off, gauge readings, plate text, damage,",
+        "misalignment. Do not only fill a few named vehicle fields — interpret the image.",
         "",
         "Checklist (extract these):",
     ]

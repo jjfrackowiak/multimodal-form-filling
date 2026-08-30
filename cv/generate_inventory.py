@@ -137,19 +137,17 @@ def requirements_embed_manifest(parsed: ParsedManifest) -> bool:
 
 def observations_from(label: ImageLabel) -> dict:
     obs: dict = {}
-    if label.odometer_km is not None:
-        obs["odometer_km"] = label.odometer_km
-    if label.registration:
-        obs["registration"] = label.registration
-    if label.seat_side:
-        obs["seat_side"] = label.seat_side
-    if label.pose_evidence:
-        obs["pose_evidence"] = label.pose_evidence
     if label.constraint_ok is not None:
         obs["constraint_ok"] = label.constraint_ok
-    warnings = [w.model_dump() for w in label.warnings if w.text or w.meaning]
-    if warnings:
-        obs["warnings"] = warnings
+    if label.constraint_evidence:
+        obs["constraint_evidence"] = label.constraint_evidence
+    findings = [
+        {k: v for k, v in f.model_dump().items() if v not in (None, "")}
+        for f in label.findings
+        if f.what or f.value
+    ]
+    if findings:
+        obs["findings"] = findings
     return obs
 
 
@@ -183,21 +181,19 @@ def dump_yaml(parsed: ParsedManifest, images: list[dict], pairs: list[list[str]]
             lines.append("    observations:")
             if obs.get("constraint_ok") is not None:
                 lines.append(f"      constraint_ok: {str(obs['constraint_ok']).lower()}")
-            if obs.get("odometer_km") is not None:
-                lines.append(f"      odometer_km: {obs['odometer_km']}")
-            if obs.get("registration"):
-                lines.append(f'      registration: "{obs["registration"]}"')
-            if obs.get("seat_side"):
-                lines.append(f"      seat_side: {obs['seat_side']}")
-            if obs.get("pose_evidence"):
-                lines.append(f"      pose_evidence: {json.dumps(obs['pose_evidence'], ensure_ascii=False)}")
-            warnings = obs.get("warnings") or []
-            if warnings:
-                lines.append("      warnings:")
-                for w in warnings:
-                    lines.append(f'        - text: {json.dumps(w.get("text") or "", ensure_ascii=False)}')
-                    if w.get("meaning"):
-                        lines.append(f'          meaning: {json.dumps(w["meaning"], ensure_ascii=False)}')
+            if obs.get("constraint_evidence"):
+                lines.append(
+                    f"      constraint_evidence: {json.dumps(obs['constraint_evidence'], ensure_ascii=False)}"
+                )
+            findings = obs.get("findings") or []
+            if findings:
+                lines.append("      findings:")
+                for f in findings:
+                    lines.append(f'        - what: {json.dumps(f.get("what") or "", ensure_ascii=False)}')
+                    if f.get("value"):
+                        lines.append(f'          value: {json.dumps(f["value"], ensure_ascii=False)}')
+                    if f.get("evidence"):
+                        lines.append(f'          evidence: {json.dumps(f["evidence"], ensure_ascii=False)}')
         if img.get("exact_duplicate_of"):
             lines.append(f'    exact_duplicate_of: "{img["exact_duplicate_of"]}"')
     lines.append("")
