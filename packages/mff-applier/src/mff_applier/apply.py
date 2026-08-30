@@ -51,9 +51,7 @@ def _apply_derivative(artifact: DerivativeArtifact, report: SliceReport) -> Appl
         ]
         return ApplyResult(artifact=artifact, overwrites=[], rejected=rejected)
 
-    updated = artifact.model_copy(
-        update={"comments": [*artifact.comments, *report.comments]}
-    )
+    updated = artifact.model_copy(update={"comments": [*artifact.comments, *report.comments]})
     return ApplyResult(artifact=updated, overwrites=[], rejected=[])
 
 
@@ -124,9 +122,7 @@ def _apply_append(
 
     section = _find_section(draft, section_id)
     if section is None:
-        rejected.append(
-            Rejection(reason=f"append targets unknown section {section_id!r}", op=op)
-        )
+        rejected.append(Rejection(reason=f"append targets unknown section {section_id!r}", op=op))
         return
 
     last_order = section.entries[-1].order if section.entries else None
@@ -161,8 +157,7 @@ def _apply_set(
         rejected.append(
             Rejection(
                 reason=(
-                    f"set targets entry {entry_id!r} in section {section.id!r}, "
-                    "outside scope_ids"
+                    f"set targets entry {entry_id!r} in section {section.id!r}, outside scope_ids"
                 ),
                 op=op,
             )
