@@ -24,8 +24,7 @@ COPY pyproject.toml uv.lock ./
 COPY packages packages
 COPY services services
 
-RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync --frozen --no-dev --no-editable --package cv
+RUN uv sync --frozen --no-dev --no-editable --package cv
 
 # ---------------------------------------------------------------------------------------
 # runtime

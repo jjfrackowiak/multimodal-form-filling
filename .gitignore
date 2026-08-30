@@ -39,3 +39,4 @@ example_images/
 *.tfstate.*
 *.tfvars
 !*.tfvars.example
+tfplan
