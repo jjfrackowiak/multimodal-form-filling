@@ -1,9 +1,12 @@
 #!/usr/bin/env python3
-"""Build inventory.yaml from checklist + provided-image list + photos.
+"""Build inventory.yaml from a documentation checklist + photos.
+
+If expected_requirements.yaml already has ids and source_span on every
+requirement, that file already carries the relevant bits of the manifest —
+--manifest is not read. Otherwise pass --manifest.
 
     python cv/generate_inventory.py fixtures/fleet-vehicle-return/images \\
         --requirements fixtures/fleet-vehicle-return/expected_requirements.yaml \\
-        --manifest fixtures/fleet-vehicle-return/manifest.txt \\
         --out cv/inventory.generated.yaml
 """
 
@@ -121,6 +124,17 @@ def load_requirements_yaml(path: Path) -> ParsedManifest:
     )
 
 
+def requirements_embed_manifest(parsed: ParsedManifest) -> bool:
+    """True when ids + source_span are complete, so raw manifest.txt is redundant."""
+    reqs = parsed.requirements
+    if not reqs:
+        return False
+    ids = [r.id.strip() for r in reqs if r.id and str(r.id).strip()]
+    if len(ids) != len(reqs) or len(set(ids)) != len(reqs):
+        return False
+    return all((r.source_span or "").strip() for r in reqs)
+
+
 def observations_from(label: ImageLabel) -> dict:
     obs: dict = {}
     if label.odometer_km is not None:
@@ -231,8 +245,8 @@ def main() -> int:
     parser.add_argument(
         "--manifest",
         type=Path,
-        required=True,
-        help="manifest.txt — list of images the client says they provided",
+        default=None,
+        help="manifest.txt — only used if the checklist lacks ids or source_span",
     )
     parser.add_argument("--out", type=Path, default=Path("inventory.generated.yaml"))
     args = parser.parse_args()
@@ -243,9 +257,19 @@ def main() -> int:
     print(f"Vertex project={PROJECT} location={LOCATION} model={MODEL}", flush=True)
 
     parsed = load_requirements_yaml(args.requirements)
-    manifest_text = args.manifest.read_text()
     print(f"checklist {len(parsed.requirements)} reqs from {args.requirements}", flush=True)
-    print(f"provided-shot list {args.manifest}", flush=True)
+    if requirements_embed_manifest(parsed):
+        manifest_text = None
+        print("ids + source_span present — not reading manifest.txt", flush=True)
+    else:
+        if not args.manifest:
+            print(
+                "checklist is missing ids or source_span; pass --manifest",
+                file=sys.stderr,
+            )
+            return 2
+        manifest_text = args.manifest.read_text()
+        print(f"incomplete checklist — reading {args.manifest}", flush=True)
 
     folder = args.images.resolve()
     all_files = list_images(folder)
