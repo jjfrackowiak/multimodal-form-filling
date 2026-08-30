@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>CV dual-run report — gold vs unseen</title>
+  <style>
+    :root {
+      --bg: #0e1116; --card: #181d26; --ink: #e9eef5; --muted: #97a3b3;
+      --line: #2a3340; --ok: #3dba7a; --bad: #e05a5a; --warn: #e0b45a; --accent: #7db0ff;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; font: 17px/1.55 Palatino, "Palatino Linotype", serif; background: var(--bg); color: var(--ink); }
+    header, main { max-width: 1120px; margin: 0 auto; padding: 0 1.4rem; }
+    header { padding-top: 2.4rem; padding-bottom: 1rem; }
+    .kicker { font-family: ui-sans-serif, system-ui, sans-serif; font-size: .72rem; letter-spacing: .14em; text-transform: uppercase; color: var(--accent); margin: 0 0 .4rem; }
+    h1 { font-size: 2rem; font-weight: 600; line-height: 1.2; margin: 0 0 .6rem; }
+    h2 { font-size: 1.3rem; margin: 0 0 .7rem; }
+    h3 { font-size: 1.02rem; margin: 1rem 0 .4rem; }
+    p, li { color: var(--ink); }
+    .muted { color: var(--muted); }
+    section { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 1.25rem 1.4rem; margin: 0 0 1.1rem; }
+    .scores { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+    @media (max-width: 800px) { .scores, .pair { grid-template-columns: 1fr !important; } }
+    .score { background: #10151c; border: 1px solid var(--line); border-radius: 10px; padding: 1rem; }
+    .score .n { font-size: 2.2rem; font-weight: 700; font-family: ui-sans-serif, system-ui, sans-serif; }
+    .ok { color: var(--ok); } .bad { color: var(--bad); } .warn { color: var(--warn); }
+    .tag { display: inline-block; font-family: ui-sans-serif, system-ui, sans-serif; font-size: .7rem; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; padding: .18rem .42rem; border-radius: 4px; margin-right: .3rem; }
+    .tag.ok { background: #1c3d2c; color: var(--ok); }
+    .tag.bad { background: #3d1c1c; color: var(--bad); }
+    .tag.warn { background: #3d3420; color: var(--warn); }
+    .tag.neu { background: #243044; color: var(--accent); }
+    table { width: 100%; border-collapse: collapse; font-family: ui-sans-serif, system-ui, sans-serif; font-size: .86rem; }
+    th, td { text-align: left; padding: .42rem .45rem; border-bottom: 1px solid var(--line); vertical-align: top; }
+    th { color: var(--muted); }
+    .pair { display: grid; grid-template-columns: 1fr 1fr; gap: .9rem; }
+    figure { margin: 0; background: #10151c; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+    figure img { width: 100%; display: block; max-height: 280px; object-fit: cover; }
+    figcaption { padding: .65rem .8rem .85rem; font-family: ui-sans-serif, system-ui, sans-serif; font-size: .82rem; color: var(--muted); }
+    .gallery { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: .65rem; }
+    .gallery figure img { max-height: 120px; }
+    pre { background: #10151c; border: 1px solid var(--line); border-radius: 8px; padding: .85rem; font: 12.5px/1.45 ui-monospace, Menlo, monospace; overflow-x: auto; white-space: pre-wrap; color: #d5deea; }
+    ul.tight { margin: .3rem 0 .6rem; padding-left: 1.15rem; }
+    footer { max-width: 1120px; margin: 0 auto; padding: 0 1.4rem 2.5rem; color: var(--muted); font-size: .9rem; }
+  </style>
+</head>
+<body>
+  <header>
+    <p class="kicker">CV module · dual run · gemini-2.5-flash · ADC · no code change between runs</p>
+    <h1>Gold fixture vs unseen damage set</h1>
+    <p class="muted">
+      Same module: checklist YAML + photos → inventory with <code>requirement_ids</code> and generic <code>findings[]</code>.
+      Gold has a human answer key. Unseen does not — interpretation is against the checklist we wrote from the shot list.
+    </p>
+  </header>
+  <main>
+
+  <section>
+    <h2>Score at a glance</h2>
+    <div class="scores">
+      <div class="score">
+        <div class="muted">A · Gold (Qashqai return)</div>
+        <div class="n bad">43<span class="muted" style="font-size:1.1rem">/45</span></div>
+        <p>Eval vs <code>review.yaml</code>. Two misses: R-04 pose on <code>(5).jpg</code>, and outside windscreen tagged as inside (R-05 instead of R-06). Dupes and engine-count (1 of 2) are correct.</p>
+      </div>
+      <div class="score">
+        <div class="muted">B · Unseen (Aygo damage)</div>
+        <div class="n warn">No gold eval</div>
+        <p>7/7 files labelled. Coverage: R-01…R-03 and R-05…R-07 appear. <strong>R-04 (right side spared) never tagged.</strong> Findings are rich (plate, bumper damage, leak).</p>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>How to read the two tests</h2>
+    <table>
+      <thead>
+        <tr><th></th><th>Gold Qashqai</th><th>Unseen Aygo</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>Job</td><td>Photo completeness vs a 16-shot inspection list</td><td>Document crash damage vs a 7-shot list</td></tr>
+        <tr><td>Checklist</td><td><code>expected_requirements.yaml</code> (10 ids, L1 golden)</td><td>Our 7-id yaml from the swear-y shot list</td></tr>
+        <tr><td>Manifest</td><td>Skipped (ids + source_span already there)</td><td>Skipped for the same reason</td></tr>
+        <tr><td>Truth to compare</td><td>Human <code>inventory.yaml</code> + <code>review.yaml</code></td><td>None — we judge by eye against the checklist</td></tr>
+        <tr><td>Hard trick</td><td>Headliner <em>pose</em> (count looks fine, constraint fails)</td><td>Right flank “spared” vs left damaged; bumper “from above”</td></tr>
+      </tbody>
+    </table>
+    <p class="muted" style="margin-bottom:0">
+      Comparison is not “which score is higher.” It is: does the same engine (tag ids + dump whatever you see) hold when the car, language, and job type change?
+    </p>
+  </section>
+
+  <section>
+    <h2>A · Gold — what matched, what did not</h2>
+    <h3>The two eval misses</h3>
+    <div class="pair">
+      <figure>
+        <img src="../fixtures/fleet-vehicle-return/images/IMG_20260830_132755%20(5).jpg" alt="Bad headliner pose" />
+        <figcaption>
+          <span class="tag bad">Miss 1 · R-04 pose</span>
+          Golden: headliner, <strong>not</strong> from between the seats.
+          Model: <code>R-04</code>, <code>constraint_ok: true</code>.
+          Still the designed trap. Findings (clean lining, light on) are fine; the <em>constraint</em> is wrong.
+        </figcaption>
+      </figure>
+      <figure>
+        <img src="../fixtures/fleet-vehicle-return/images/IMG_20260830_132754%20(1).jpg" alt="Windscreen from outside" />
+        <figcaption>
+          <span class="tag bad">Miss 2 · R-06 vs R-05</span>
+          Golden: windscreen from <strong>outside</strong> (R-06). Occupant visible through glass.
+          Model tagged <code>R-05</code> (from inside). It described the cabin and pumps well, then assigned the wrong id.
+        </figcaption>
+      </figure>
+    </div>
+    <h3>Where gold is strong (richer than the human YAML)</h3>
+    <div class="pair">
+      <figure>
+        <img src="../fixtures/fleet-vehicle-return/images/IMG_20260830_132754%20(2).jpg" alt="Cluster" />
+        <figcaption>
+          <span class="tag ok">R-10</span>
+          Golden note was a short gearbox line. This run extracted odometer <strong>59650 km</strong>,
+          gearbox warning in Polish, <strong>check engine, oil, battery, TPMS, coolant</strong> lamps all “lit”,
+          range 621 km, P, CVT. That is what “findings, not a frozen field list” was for.
+        </figcaption>
+      </figure>
+      <figure>
+        <img src="../fixtures/fleet-vehicle-return/images/IMG_20260830_132754%20(4).jpg" alt="Engine bay" />
+        <figcaption>
+          <span class="tag warn">R-01 · 1 of 2</span>
+          Correctly the only engine-bay file. Fail is delivery (manifest asked for two), not detection.
+          Extra: dusty bay, brake/coolant between MIN/MAX, Nissan battery.
+        </figcaption>
+      </figure>
+    </div>
+    <p>
+      Dupes still collapsed (boot + under-floor kit). Under-floor shot was also tagged R-07 (tyre) because a spare is a tyre — sloppy id overlap, not scored.
+    </p>
+  </section>
+
+  <section>
+    <h2>B · Unseen — does it generalise?</h2>
+    <p>
+      White Toyota Aygo, plate <strong>WI 022LC</strong>, front-left impact. Checklist R-01…R-07.
+      No second human inventory; we compare tags to what the photos actually are.
+    </p>
+    <div class="gallery">
+      <figure>
+        <img src="../example_images/test_not_prev_seen/IMG_1171.jpg" alt="Front" />
+        <figcaption><span class="tag neu">1171</span> R-01, R-05, R-06 — front + plate + bumper. Sensible multi-tag.</figcaption>
+      </figure>
+      <figure>
+        <img src="../example_images/test_not_prev_seen/IMG_1172.jpg" alt="Left side" />
+        <figcaption><span class="tag ok">1172</span> R-02 left flank + damage. Right.</figcaption>
+      </figure>
+      <figure>
+        <img src="../example_images/test_not_prev_seen/IMG_1173.jpg" alt="Rear" />
+        <figcaption><span class="tag ok">1173</span> R-03 rear, plate, “no visible rear impact.” Right.</figcaption>
+      </figure>
+      <figure>
+        <img src="../example_images/test_not_prev_seen/IMG_1174.jpg" alt="Other side" />
+        <figcaption><span class="tag bad">1174</span> Tagged <strong>R-02 (left)</strong>. This is the <strong>right</strong> side (R-04, “spared”). Id miss.</figcaption>
+      </figure>
+      <figure>
+        <img src="../example_images/test_not_prev_seen/IMG_1175.jpg" alt="Bumper with plate" />
+        <figcaption><span class="tag ok">1175</span> R-01/05/06, plate WI 022LC, constraint_ok true (plate readable).</figcaption>
+      </figure>
+      <figure>
+        <img src="../example_images/test_not_prev_seen/IMG_1176.jpg" alt="Bumper close-up" />
+        <figcaption><span class="tag warn">1176</span> Close-up bumper R-06. Plate only a “C” — still marked constraint_ok true for plate.</figcaption>
+      </figure>
+      <figure>
+        <img src="../example_images/test_not_prev_seen/IMG_1177.jpg" alt="Bumper from above" />
+        <figcaption><span class="tag ok">1177</span> R-06 + R-07 from above; clips proud, fluid stain on stones. Closest to “shifted bumper.”</figcaption>
+      </figure>
+    </div>
+    <h3>Interpretation</h3>
+    <ul class="tight">
+      <li><strong>Subject tagging mostly transfers.</strong> Front / left / rear / bumper close-ups land on the right ids without a Qashqai-specific enum.</li>
+      <li><strong>R-04 never appears</strong> on any file. The “right side spared” shot (1174) was called left. Same class of error as gold R-05/R-06: viewpoint/side confusion.</li>
+      <li><strong>Findings generalise well.</strong> Damage, plate, Toyota/Aygo, leak, Mercedes frame on a Toyota — documentary detail the checklist did not name, which is what we asked for.</li>
+      <li><strong>constraint_ok is still one bit per photo.</strong> 1171 sets it false talking about R-07 “from above” while also claiming R-05 (plate). A photo that serves two constrained ids cannot store two answers in one flag.</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>Side-by-side: same failure family</h2>
+    <table>
+      <thead>
+        <tr><th>Pattern</th><th>Gold</th><th>Unseen</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Counts the right <em>kind</em> of photo</td>
+          <td>Mostly yes (43/45)</td>
+          <td>Mostly yes (6 of 7 ids used)</td>
+        </tr>
+        <tr>
+          <td>Camera / side / inside-outside</td>
+          <td>Headliner pose; outside glass → inside id</td>
+          <td>Right side → left id; plate constraint smeared across photos</td>
+        </tr>
+        <tr>
+          <td>Rich readings</td>
+          <td>Cluster lamps + 59650 km + gearbox text</td>
+          <td>WI 022LC, bumper gouges, leak, Aygo badge</td>
+        </tr>
+        <tr>
+          <td>Over-tagging</td>
+          <td>Spare kit also R-07 (tyre)</td>
+          <td>Front shots get R-01+R-05+R-06 together — often fair</td>
+        </tr>
+      </tbody>
+    </table>
+    <p>
+      So: the module <strong>does</strong> generalise as a “describe this photo against a checklist” engine.
+      It does <strong>not</strong> yet generalise the hard spatial judgements (between seats, inside vs outside, left vs right, true overhead).
+      Those are exactly the constraints that decide pass/fail when the folder already “looks complete.”
+    </p>
+  </section>
+
+  <section>
+    <h2>Cluster findings (gold) — sample of the new dump shape</h2>
+    <pre>findings:
+  - what: Odometer                    value: 59650 km
+  - what: Main Warning Message        value: Awaria skrzyni biegów …
+  - what: Oil Pressure Warning Lamp   value: lit
+  - what: Check Engine Lamp           value: lit
+  - what: Battery Warning Lamp        value: lit
+  - what: TPMS Warning Lamp           value: lit</pre>
+    <p class="muted" style="margin-bottom:0">That is the intended contrast with the old hardcoded <code>odometer_km</code> / <code>warnings:</code> block.</p>
+  </section>
+
+  </main>
+  <footer>
+    Dumps: <code>cv/inventory.generated.yaml</code> ·
+    <code>example_images/test_not_prev_seen/inventory.generated.yaml</code>
+    · this page: <code>cv/test-report.html</code> (open from disk so images load)
+  </footer>
+</body>
+</html>
