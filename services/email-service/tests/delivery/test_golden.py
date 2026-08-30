@@ -16,7 +16,7 @@ purpose and shown caught (CONTEXT.md, "mutation-test your evaluator").
 from __future__ import annotations
 
 import re
-from collections.abc import Sequence
+from collections.abc import Awaitable, Callable, Sequence
 from pathlib import Path
 
 import pytest
@@ -117,9 +117,13 @@ def _check_delivery_shape(
 # Building the scenario from fixture data
 # ---------------------------------------------------------------------------
 
+GoldenMessageBuilder = Callable[[], Awaitable[tuple[str, list[Requirement], list[ReviewComment]]]]
+
 
 @pytest.fixture
-def golden_message(fixture_requirements: list[Requirement], fixture_comments: list[ReviewComment]):
+def golden_message(
+    fixture_requirements: list[Requirement], fixture_comments: list[ReviewComment]
+) -> GoldenMessageBuilder:
     async def _build() -> tuple[str, list[Requirement], list[ReviewComment]]:
         blobs = InMemoryBlobStore()
         blob_ref = await blobs.put(
@@ -163,7 +167,7 @@ def golden_message(fixture_requirements: list[Requirement], fixture_comments: li
     return _build
 
 
-async def test_delivery_matches_the_golden_shape(golden_message) -> None:
+async def test_delivery_matches_the_golden_shape(golden_message: GoldenMessageBuilder) -> None:
     body, requirements, _comments = await golden_message()
     violations = _check_delivery_shape(
         body,
@@ -177,7 +181,7 @@ async def test_delivery_matches_the_golden_shape(golden_message) -> None:
 
 
 async def test_delivery_names_both_failing_requirements_with_justification(
-    golden_message,
+    golden_message: GoldenMessageBuilder,
 ) -> None:
     body, _requirements, _comments = await golden_message()
     assert "[R-01]" in body
@@ -188,7 +192,9 @@ async def test_delivery_names_both_failing_requirements_with_justification(
     assert "Sugestia:" in body
 
 
-async def test_delivery_attaches_the_single_reviewed_document(golden_message) -> None:
+async def test_delivery_attaches_the_single_reviewed_document(
+    golden_message: GoldenMessageBuilder,
+) -> None:
     body, _requirements, _comments = await golden_message()
     assert "form_supplied.docx" in body
 
@@ -198,7 +204,9 @@ async def test_delivery_attaches_the_single_reviewed_document(golden_message) ->
 # ---------------------------------------------------------------------------
 
 
-async def test_mutation_dropping_a_requirement_from_the_list_is_caught(golden_message) -> None:
+async def test_mutation_dropping_a_requirement_from_the_list_is_caught(
+    golden_message: GoldenMessageBuilder,
+) -> None:
     body, requirements, _comments = await golden_message()
     marker = _MARKER
     head, section = body.split(marker, 1)
@@ -218,7 +226,9 @@ async def test_mutation_dropping_a_requirement_from_the_list_is_caught(golden_me
     assert any("missing R-07" in v for v in violations)
 
 
-async def test_mutation_paraphrasing_a_quoted_span_is_caught(golden_message) -> None:
+async def test_mutation_paraphrasing_a_quoted_span_is_caught(
+    golden_message: GoldenMessageBuilder,
+) -> None:
     body, requirements, _comments = await golden_message()
     mutated = body.replace('"4x fotele"', '"four seats please"')
     violations = _check_delivery_shape(
@@ -232,7 +242,9 @@ async def test_mutation_paraphrasing_a_quoted_span_is_caught(golden_message) -> 
     assert any("not verbatim" in v for v in violations)
 
 
-async def test_mutation_wrong_summary_counts_is_caught(golden_message) -> None:
+async def test_mutation_wrong_summary_counts_is_caught(
+    golden_message: GoldenMessageBuilder,
+) -> None:
     body, requirements, _comments = await golden_message()
     mutated = body.replace("8 spełnionych, 2 niespełnionych", "9 spełnionych, 1 niespełnionych")
     violations = _check_delivery_shape(

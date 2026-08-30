@@ -33,6 +33,7 @@ import asyncio
 import mimetypes
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
+from typing import TypeVar
 
 from mff_contracts import (
     BlobRef,
@@ -243,27 +244,61 @@ def _render_verdict_sections(
     return "\n\n".join(sections)
 
 
+_MODE_HEADING_PL = {
+    "derivative": "sprawdzone formularze (derivative)",
+    "net_new": "utworzone dokumenty (net-new)",
+    "dokument": "dokumenty",
+}
+
+
+_T = TypeVar("_T")
+
+
+def _group_by_mode(
+    items: Sequence[tuple[_LabeledDocument, _T]],
+) -> dict[str, list[tuple[_LabeledDocument, _T]]]:
+    """Group attached/linked documents by mode — the brief's "a request may mix
+    modes... group them so a reader can tell which is which", applied to the one place
+    delivery actually has a document to hand a reader (`jobs` is what makes the mode
+    label possible at all; see the module docstring for what's missing without it)."""
+    groups: dict[str, list[tuple[_LabeledDocument, _T]]] = {}
+    for labeled, payload in items:
+        groups.setdefault(labeled.mode_label, []).append((labeled, payload))
+    return groups
+
+
 def _render_attachments_section(
     attached: Sequence[tuple[_LabeledDocument, Attachment]],
     linked: Sequence[tuple[_LabeledDocument, str]],
 ) -> str | None:
     if not attached and not linked:
         return None
+    # Only worth a per-mode heading when more than one mode is actually present —
+    # a single-mode request (the common case, and the fixture's) stays flat.
+    modes_present = {labeled.mode_label for labeled, _ in (*attached, *linked)}
+    multi_mode = len(modes_present) > 1
+
     lines: list[str] = []
     if attached:
         lines.append("ZAŁĄCZONE DOKUMENTY")
         lines.append("")
-        for labeled, attachment in attached:
-            kb = labeled.ref.size_bytes / 1024
-            lines.append(f"  - {attachment.filename} ({kb:.0f} KB)")
+        for mode_label, group in _group_by_mode(attached).items():
+            if multi_mode:
+                lines.append(f"  {_MODE_HEADING_PL.get(mode_label, mode_label)}:")
+            for labeled, attachment in group:
+                kb = labeled.ref.size_bytes / 1024
+                lines.append(f"  - {attachment.filename} ({kb:.0f} KB)")
     if linked:
         if lines:
             lines.append("")
         lines.append("DOKUMENTY DOSTĘPNE POD LINKIEM (przekraczają limit załącznika)")
         lines.append("")
-        for labeled, url in linked:
-            name = labeled.form_id or "dokument"
-            lines.append(f"  - {name}: {url}")
+        for mode_label, link_group in _group_by_mode(linked).items():
+            if multi_mode:
+                lines.append(f"  {_MODE_HEADING_PL.get(mode_label, mode_label)}:")
+            for labeled, url in link_group:
+                name = labeled.form_id or "dokument"
+                lines.append(f"  - {name}: {url}")
     return "\n".join(lines)
 
 
