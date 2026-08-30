@@ -19,6 +19,7 @@ input/
 
 expected_output/
   report_reviewed.docx              the golden OUTPUT — 10 real Word comments
+  delivery.txt                      the results email — where provenance now lives
   review.yaml                       the review layer, as data
   structure.yaml                    THE EVAL TARGET — structural completeness spec
 
@@ -43,6 +44,19 @@ derivative must preserve their body verbatim while net-new authors ours. What is
 invariant across modes in every case is the **review layer**: the same ten
 requirements, the same two failures, the same justifications and suggestions.
 
+## Comments cite numbers; the delivery explains them
+
+Comments carry `[R-04]` and nothing more. An earlier version repeated verbatim manifest
+spans inside every comment, on the argument that a bare requirement id tells the client
+nothing — which holds only if the id is never explained.
+
+`delivery.txt` explains them. It carries every requirement's text alongside the manifest
+span and line it was read from, including R-04's constraint six lines from its subject and
+R-01's recorded ambiguity. Stated once, rather than repeated in ten comments.
+
+The evaluator asserts both halves, and **a comment containing a verbatim citation now
+fails** — otherwise the fixture would go on quietly asserting the superseded rule.
+
 ## The evaluator is structural, not a judge
 
 `expected_output/structure.yaml` is what the eval actually asserts — not similarity
@@ -51,10 +65,11 @@ justification while passing a document with the wrong verdicts.
 
 ```
 $ python check_output.py expected_output/report_reviewed.docx      # needs python-docx>=1.2
-PASS  88/88 checks passed
+PASS  156/156 checks passed
 ```
 
-88 assertions, no API key, no model. The pipeline that produces the document is
+156 assertions, no API key, no model. They cover the document, the review layer, inline
+anchoring, the computed slice ordinals, and the delivery email. The pipeline that produces the document is
 non-deterministic; whether the document is complete in every aspect is not.
 
 ### The checker is mutation-tested
@@ -64,17 +79,24 @@ Five deliberate regressions, all caught:
 
 | Mutation | Result |
 |---|---|
-| `R-04` flipped `fail` → `pass` | caught — 84/88 |
-| `R-01` fails with no suggestion | caught — 87/88 |
-| `R-06` justification cut to one character | caught — 87/88 |
-| `R-03` passes but carries a suggestion | caught — 87/88 |
-| `R-08` comment removed entirely | caught — 80/83 |
-| *golden output (control)* | **passes — 88/88** |
+| A comment carries a verbatim citation *(the old contract)* | caught |
+| `R-04` flipped `fail` → `pass` | caught |
+| A failing requirement loses its suggestion | caught |
+| `R-04`'s ordinal no longer matches its manifest offset | caught |
+| A delivery quote paraphrased instead of quoted | caught |
+| A requirement dropped from the delivery list | caught |
+| *golden output (control)* | **passes — 156/156** |
 
-The third one earned its keep: it originally **passed**. The field extractor split on
-`Uzasadnienie:` and took everything to the end of the comment, so a one-character
-justification still measured over ten characters. Fixed by bounding each field at the
-next field marker. Nothing but mutation testing would have found it.
+**Two of these originally passed**, and both were real holes in the checker.
+
+An earlier round: the field extractor split on `Uzasadnienie:` and took everything to the
+end of the comment, so a one-character justification still measured over ten. Fixed by
+bounding each field at the next marker.
+
+This round: the delivery check tested whether a requirement id appeared *anywhere* in the
+email — and every id also appears in the pass/fail summary, so dropping one from the
+requirement list still passed. Now scoped to the list section, and each entry must carry
+the manifest span it was read from.
 
 > **`python-docx` must be pinned `>=1.2`.** Verified here: 1.1.0 has no comment support
 > at all, and 1.2.0 provides `Document.add_comment(runs, text, author, initials)` and an
