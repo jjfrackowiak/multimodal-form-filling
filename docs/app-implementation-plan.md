@@ -375,6 +375,52 @@ Four rules, the first two enforced by import-linter rather than review:
    for HTTP concerns only.** Do not leak one into the other, or the frozen package stops
    being frozen in practice.
 
+## Image understanding is a third service
+
+Req 13's image tools are **owned separately** (`AGENTS.md`) and arrive as their own
+service, not a library. That is now wired end to end with a placeholder in its place:
+
+```
+POST /v1/describe        ImageRef               → ImageAnalysis
+POST /v1/describe:batch  list[ImageRef]         → list[ImageAnalysis]
+POST /v1/crop            ImageRef + BoundingBox → ImageRef
+```
+
+`packages/ffx-vision` holds the `VisionTool` Protocol, an `HttpVisionTool` client, and
+`InventoryVisionTool` — a stand-in answering from the fixture's labelled inventory.
+`services/vision-stub` serves the same routes so the wiring is real rather than
+imagined. The editor depends on the Protocol only, so the real service is a
+configuration change.
+
+**The stand-in is a lookup, not a constant.** Keyed by filename, so each image gets its
+own label — and the two headliner photographs return **different `shot_from` values**,
+which is precisely what lets a derivative run fail R-04 for the right reason rather than
+by luck. Collapse it to one answer and the fixture stops testing what it exists to test.
+
+It also cannot be wrong, which makes it useless for measuring vision quality and ideal
+for everything else: the editor, the applier and every eval become fully deterministic,
+so a red test means the editor is broken rather than that a model had an off day. When
+the real service lands, the same `inventory.yaml` becomes the answer key it is scored
+against.
+
+**Two distinctions the API insists on.** *Unidentifiable* is not *unavailable*: an image
+the service examined and could not place returns `depicts == "unknown"` with zero
+confidence — evidence the editor must reason about — while an unreachable service raises
+`VisionUnavailable`, which is infrastructure failure and must never be written into a
+comment about the client's photographs. And `depicts` and `shot_from` are separate
+fields, because "what is this a picture of" and "where was it taken from" are separate
+questions; merging them loses R-04 entirely.
+
+### Two things to settle with the owner
+
+The shapes in `ffx_vision.models` were written from what the *editor* needs, not from
+what a CV pipeline naturally emits. They are a proposal, not a decision:
+
+1. **The payload shapes**, before anything is built against them on the other side.
+2. **Whether `shot_from` is a closed vocabulary.** The fixture uses
+   `between_front_seats` and `beside_seat`. Left as free text, the editor has to
+   interpret strings it has never seen and R-04 stops being decidable.
+
 ## State & persistence
 
 Req 12 says the artifact lives "outside any single agent run". In-process that's a Python object — but across an HTTP boundary, a retry, a crash, or a second replica, an in-process object is gone. It needs a store, and that store is also what finally gives **D2** (job status after confirmation) something to report.
@@ -560,7 +606,7 @@ Directory ownership is **disjoint per branch** — that is what keeps 7 concurre
 |----|--------|------|-------------|
 | **B6** | `feat/flow-derivative` | `services/editor-service/src/**/flows/derivative.py`, `agents/derivative/**` | The `CLASSIFY_REGIONS` first run (locked vs editable + rationale, per the locked decision) and the per-slice validation agent: reads the artifact, emits **one comment per requirement per form** with pass/fail + justification + suggestion (req 10). Refuses edits into locked regions. |
 | **B7** | `feat/flow-netnew` | `services/editor-service/src/**/flows/netnew.py`, `agents/netnew/**` | **The scaffold generator** (`Requirement[]` + client inputs → a document skeleton, declaring its own locked/editable regions as it emits) plus the authoring runner. Comments show **how each requirement was realised**, with justification + source reference (req 10). |
-| **B11** | `feat/vision-stub` | `services/editor-service/src/**/tools/vision/**` | Req 13 placeholder only: `VisionTool` Protocol (`crop`, `describe`) + toolset registration behind a `FEATURE_VISION` flag defaulting off, raising `NotImplementedError`. Exists so the real image module lands later without touching B6/B7. |
+| **B11** | *(landed)* | `packages/ffx-vision/**`, `services/vision-stub/**` | **Done.** The `VisionTool` Protocol, an HTTP client, a deterministic stand-in answering from the fixture inventory, and a placeholder FastAPI service behind the same routes the real one will serve. 13 tests including a client↔service round trip. Editor branches can call image understanding today. |
 
 ### Layer 3 — after Layer 2
 
