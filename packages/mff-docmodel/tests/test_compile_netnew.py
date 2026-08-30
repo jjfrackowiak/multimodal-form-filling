@@ -28,7 +28,7 @@ def _artifact() -> NetNewArtifact:
             ),
         ]
     )
-    return NetNewArtifact(form_id="WN-7020U", draft=draft)
+    return NetNewArtifact(job_id="j-1", form_id="WN-7020U", draft=draft)
 
 
 def test_compile_netnew_opens_in_word() -> None:
@@ -80,7 +80,9 @@ def test_entry_images_are_noted_without_needing_bytes() -> None:
             )
         ]
     )
-    compiled_bytes, render_map = compile_netnew(NetNewArtifact(form_id="f", draft=draft))
+    compiled_bytes, render_map = compile_netnew(
+        NetNewArtifact(job_id="j-1", form_id="f", draft=draft)
+    )
     document = Document(io.BytesIO(compiled_bytes))
     span = render_map.anchor_to_span["e1"]
     paragraph = document.paragraphs[span.paragraph_index]
@@ -88,7 +90,9 @@ def test_entry_images_are_noted_without_needing_bytes() -> None:
 
 
 def test_empty_draft_still_produces_an_openable_document() -> None:
-    compiled_bytes, render_map = compile_netnew(NetNewArtifact(form_id="empty", draft=FormDraft()))
+    compiled_bytes, render_map = compile_netnew(
+        NetNewArtifact(job_id="j-1", form_id="empty", draft=FormDraft())
+    )
     document = Document(io.BytesIO(compiled_bytes))
     assert document.paragraphs
     assert render_map.anchor_to_span == {}

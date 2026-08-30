@@ -20,7 +20,7 @@ def _artifact(source: bytes) -> DerivativeArtifact:
         size_bytes=len(source),
         sha256="x",
     )
-    return DerivativeArtifact(form_id="form_supplied", source=blob, nodes=nodes)
+    return DerivativeArtifact(job_id="j-1", form_id="form_supplied", source=blob, nodes=nodes)
 
 
 def test_compile_returns_source_bytes_unchanged(derivative_docx_bytes: bytes) -> None:
