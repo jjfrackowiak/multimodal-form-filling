@@ -73,9 +73,7 @@ class InventoryVisionTool:
         for entry in data["images"]:
             twin = entry.get("exact_duplicate_of")
             if twin:
-                self._by_name[twin] = self._by_name[entry["file"]].model_copy(
-                    update={"file": twin}
-                )
+                self._by_name[twin] = self._by_name[entry["file"]].model_copy(update={"file": twin})
 
     async def build_inventory(
         self,

@@ -6,8 +6,9 @@ service must not define a second, drifting copy of them.
 
 from __future__ import annotations
 
-from mff_vision import ImageAnalysis, ImageRef, RequirementSpec
 from pydantic import BaseModel
+
+from mff_vision import ImageAnalysis, ImageRef, RequirementSpec
 
 __all__ = ["InventoryRequest", "InventoryResponse"]
 
@@ -18,4 +19,4 @@ class InventoryRequest(BaseModel):
 
 
 class InventoryResponse(BaseModel):
-    images: list[ImageAnalysis]     # index-aligned with the request
+    images: list[ImageAnalysis]  # index-aligned with the request

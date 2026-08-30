@@ -8,8 +8,8 @@ from __future__ import annotations
 
 import httpx
 import pytest
-from mff_vision import HttpVisionTool, ImageRef, RequirementSpec, VisionUnavailable
 
+from mff_vision import HttpVisionTool, ImageRef, RequirementSpec, VisionUnavailable
 from vision_stub.main import create_app
 
 REQS = [
@@ -39,7 +39,6 @@ async def test_inventory_over_http(vision: HttpVisionTool) -> None:
 
 async def test_whole_submission_in_one_call(vision: HttpVisionTool) -> None:
     """One round trip per job, not per image — 17 calls would blow the latency budget."""
-    import os
     from pathlib import Path
 
     images = sorted(Path("fixtures/fleet-vehicle-return/images").iterdir())
