@@ -478,9 +478,28 @@ flowchart TD
 so it cannot be sent before they exist. Parsing in both services would be a silent
 correctness bug: the parser has a model in it, so two parses can differ and the client
 would be shown one list while their document was graded against another.</p>
-<p><strong>Delivery is a barrier.</strong> One email goes out when every job in the request has settled.
-<code>status="partial"</code> is a real outcome — two of three forms reviewed is worth sending, with
-the third named as failed, rather than withholding everything because one job died.</p>
+<p><strong>Delivery is a barrier.</strong> One email goes out when every job in the request has settled.</p>
+<p><code>status="partial"</code> is <strong>job-level, never document-level</strong>: some forms were reviewed
+completely and others not at all. Two of three is worth sending, with the third named in
+<code>failed_forms</code>, rather than withholding everything because one job died.</p>
+<p><strong>A half-reviewed document never ships</strong>, and that is structural rather than a policy:
+compile runs only after the last slice, and the completeness check runs before compile. A
+job that dies mid-slice leaves comments in the store and nothing rendered.</p>
+<h3 id="two-kinds-of-incomplete-which-must-not-be-conflated">Two kinds of incomplete, which must not be conflated</h3>
+<pre><code>requirement tried 3x and unresolved  →  verdict &quot;unverified&quot;; the document SHIPS
+job never reached the end            →  no document; form listed in failed_forms
+</code></pre>
+<p>A <code>done</code> job may well contain <code>unverified</code> comments. That is not partial — it is a
+<em>complete</em> run that tried a requirement three times and said so (req 17), and its document
+is exactly what the client should receive.</p>
+<p>The temptation is to render a crashed job's work anyway and mark the remainder
+<code>unverified</code>. <strong>Do not.</strong> <code>unverified</code> means <em>"we looked and could not decide"</em>; a failed
+job means <em>"we never got there"</em>. Overloading the first with the second tells the client we
+assessed something we never reached, which is worse than telling them the form failed.</p>
+<p>This is also why <code>JobCursor</code> exists: <strong>a crashed job resumes from its cursor rather than
+failing.</strong> <code>failed</code> is for the unrecoverable, so <code>partial</code> should be rare rather than
+routine — and if it becomes routine, that is a signal about the runner, not about the
+clients.</p>
 <h3 id="inside-a-job">Inside a job</h3>
 <figure class="wide"><div class="plate"><pre class="mermaid">
 %%{init:{"theme":"base","themeVariables":{"fontFamily":"JetBrains Mono, ui-monospace, monospace","fontSize":"13px","primaryColor":"#ffffff","primaryTextColor":"#16191d","primaryBorderColor":"#155e63","lineColor":"#5f6b78","tertiaryColor":"#f6f7f8"}}}%%

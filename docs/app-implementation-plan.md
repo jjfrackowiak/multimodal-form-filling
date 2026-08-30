@@ -65,8 +65,36 @@ correctness bug: the parser has a model in it, so two parses can differ and the 
 would be shown one list while their document was graded against another.
 
 **Delivery is a barrier.** One email goes out when every job in the request has settled.
-`status="partial"` is a real outcome — two of three forms reviewed is worth sending, with
-the third named as failed, rather than withholding everything because one job died.
+
+`status="partial"` is **job-level, never document-level**: some forms were reviewed
+completely and others not at all. Two of three is worth sending, with the third named in
+`failed_forms`, rather than withholding everything because one job died.
+
+**A half-reviewed document never ships**, and that is structural rather than a policy:
+compile runs only after the last slice, and the completeness check runs before compile. A
+job that dies mid-slice leaves comments in the store and nothing rendered.
+
+### Two kinds of incomplete, which must not be conflated
+
+```
+requirement tried 3x and unresolved  →  verdict "unverified"; the document SHIPS
+job never reached the end            →  no document; form listed in failed_forms
+```
+
+A `done` job may well contain `unverified` comments. That is not partial — it is a
+*complete* run that tried a requirement three times and said so (req 17), and its document
+is exactly what the client should receive.
+
+The temptation is to render a crashed job's work anyway and mark the remainder
+`unverified`. **Do not.** `unverified` means *"we looked and could not decide"*; a failed
+job means *"we never got there"*. Overloading the first with the second tells the client we
+assessed something we never reached, which is worse than telling them the form failed.
+
+This is also why `JobCursor` exists: **a crashed job resumes from its cursor rather than
+failing.** `failed` is for the unrecoverable, so `partial` should be rare rather than
+routine — and if it becomes routine, that is a signal about the runner, not about the
+clients.
+
 
 ### Inside a job
 
