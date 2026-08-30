@@ -1,18 +1,9 @@
 name: deploy-email
 
 on:
+  # Mailbox vars live in gitignored terraform.tfvars (or GH secrets later).
+  # A push-triggered apply without IMAP would wipe the poller or destroy the service.
   workflow_dispatch:
-  push:
-    branches: [main, feat/gcp]
-    paths:
-      - services/email-service/**
-      - docker/email-service.Dockerfile
-      - docker/cloudbuild-email.yaml
-      - infra/**
-      - packages/**
-      - pyproject.toml
-      - uv.lock
-      - .github/workflows/deploy-email.yml
 
 permissions:
   contents: read

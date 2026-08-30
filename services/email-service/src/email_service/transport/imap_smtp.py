@@ -168,10 +168,16 @@ class ImapSmtpTransport:
     @contextlib.contextmanager
     def _smtp_connect(self) -> Iterator[smtplib.SMTP]:
         c = self._config
-        smtp = smtplib.SMTP(c.smtp_host, c.smtp_port, timeout=self._timeout)
-        try:
+        # 465 is implicit TLS (SMTPS). 587 is STARTTLS. Never 25 (GCP blocks it).
+        if c.smtp_port == 465:
+            smtp: smtplib.SMTP = smtplib.SMTP_SSL(
+                c.smtp_host, c.smtp_port, timeout=self._timeout, context=_tls_context()
+            )
+        else:
+            smtp = smtplib.SMTP(c.smtp_host, c.smtp_port, timeout=self._timeout)
             if c.smtp_use_tls:
                 smtp.starttls(context=_tls_context())
+        try:
             if c.smtp_user:
                 smtp.login(c.smtp_user, c.smtp_password)
             yield smtp
