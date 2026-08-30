@@ -1,0 +1,71 @@
+# Net-new mode: the same manifest, no document supplied.
+# The client sends structured inputs and the editor composes the report.
+#
+# Deliberately the SAME underlying submission as the derivative case, so the two
+# modes can be compared directly on identical material. The same two defects are
+# therefore present — R-01 short by one photo, R-04 shot from the wrong position.
+# Net-new does not get to hide them: it records how each requirement was realised,
+# and a requirement it cannot realise from the inputs comes back unverified.
+
+vehicle:
+  make_model: "Nissan Qashqai"
+  registration: "WN 7020U"
+  odometer_km: 59650
+  return_date: "2026-08-30"
+  handed_over_by: null          # left blank by the client on purpose
+
+notes: >
+  Pojazd zwrócony w stanie ogólnym dobrym. Na desce rozdzielczej widoczny
+  komunikat o awarii skrzyni biegów. Zdjęcia wykonane na stacji paliw.
+
+# Photos as the client labelled them — their words, not our taxonomy.
+# Mapping these loose labels onto R-01..R-10 is part of the net-new work.
+photos:
+  - file: "IMG_20260830_132754 (4).jpg"
+    label: "silnik"
+  - file: "IMG_20260830_132755.jpg"
+    label: "fotel kierowcy"
+  - file: "IMG_20260830_132755 (1).jpg"
+    label: "fotel pasazera"
+  - file: "IMG_20260830_132755 (2).jpg"
+    label: "tyl kanapa"
+  - file: "IMG_20260830_132755 (3).jpg"
+    label: "tyl kanapa 2"
+  - file: "IMG_20260830_132755 (10).jpg"
+    label: "przod skos"
+  - file: "IMG_20260830_132755 (9).jpg"
+    label: "tyl skos"
+  - file: "1000040420.jpg"
+    label: "podsufitka"
+  - file: "IMG_20260830_132755 (5).jpg"
+    label: "podsufitka 2"
+  - file: "IMG_20260830_132754.jpg"
+    label: "szyba w srodku"
+  - file: "IMG_20260830_132754 (1).jpg"
+    label: "szyba na zewnatrz"
+  - file: "IMG_20260830_132755 (4).jpg"
+    label: "opona"
+  - file: "1000040429.jpg"
+    label: "bagaznik"
+  - file: "IMG_20260830_132755 (8).jpg"
+    label: "bagaznik"
+  - file: "IMG_20260830_132603.jpg"
+    label: "pod podloga"
+  - file: "IMG_20260830_132755 (7).jpg"
+    label: "kolo zapasowe"
+  - file: "IMG_20260830_132754 (2).jpg"
+    label: "licznik"
+
+# What the composed document must contain, independent of wording. This is the
+# structural gate for net-new; the LLMJudge rubric handles quality on top of it.
+expected_output_structure:
+  must_contain_sections_for: [R-01, R-02, R-03, R-04, R-05, R-06, R-07, R-08, R-09, R-10]
+  must_embed_distinct_images: 15
+  must_carry_vehicle_identifiers: [make_model, registration, odometer_km, return_date]
+  every_section_carries_a_comment: true    # req 10: how the requirement was realised
+  expected_unverified: []                  # nothing should exhaust its retries here
+  expected_shortfalls:
+    - requirement_id: R-01
+      reason: "Only one engine-bay photograph available in the inputs; two required."
+    - requirement_id: R-04
+      reason: "Only one of the two headliner photographs is shot from between the front seats."
