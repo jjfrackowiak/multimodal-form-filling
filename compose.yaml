@@ -52,12 +52,15 @@ services:
     ports:
       - "8001:8000"
     environment:
-      # Read from the host/.env at `docker compose up` time — never baked into the image.
-      # Empty is fine locally: B8's /healthz must not construct a model client, so a
-      # missing key cannot fail the healthcheck.
-      GOOGLE_API_KEY: ${GOOGLE_API_KEY:-}
+      # Read from the host environment at `docker compose up` time — never baked into
+      # the image. The real model factory uses Vertex AI and ADC, not an API key.
+      GOOGLE_CLOUD_PROJECT: ${GOOGLE_CLOUD_PROJECT:-}
+      GOOGLE_CLOUD_LOCATION: ${GOOGLE_CLOUD_LOCATION:-global}
+      GOOGLE_GENAI_USE_ENTERPRISE: "true"
       EDITOR_MODEL_ID: ${EDITOR_MODEL_ID:-gemini-2.5-flash}
       VISION_SERVICE_URL: http://vision-stub:8000
+    volumes:
+      - ${HOME}/.config/gcloud:/home/app/.config/gcloud:ro
     depends_on:
       vision-stub:
         condition: service_healthy
