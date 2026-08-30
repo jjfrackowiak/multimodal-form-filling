@@ -17,8 +17,16 @@ multimodal-form-filling
 *.md
 !services/*/README.md
 
-# The fixture — 12 MB of photographs and golden .docx files
-fixtures
+# The fixture — 12 MB of photographs and golden .docx files. vision-stub.Dockerfile is
+# the sole exception, and even it does not get the whole tree back: these three lines
+# re-include just enough path to let it COPY one explicit file, inventory.yaml — the
+# stand-in's one real dependency on the fixture. Negating a file inside an excluded
+# directory requires re-including every ancestor first, which is why this is three
+# patterns rather than one `!inventory.yaml`.
+fixtures/*
+!fixtures/fleet-vehicle-return/
+fixtures/fleet-vehicle-return/*
+!fixtures/fleet-vehicle-return/inventory.yaml
 
 # Local infra config that has no business inside an image
 docker/compose.dev.yaml
