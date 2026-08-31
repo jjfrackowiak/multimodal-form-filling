@@ -1,5 +1,5 @@
 version = 1
-revision = 3
+revision = 2
 requires-python = ">=3.11"
 resolution-markers = [
     "python_full_version >= '3.15'",
@@ -814,6 +814,7 @@ dependencies = [
     { name = "mff-contracts" },
     { name = "mff-docmodel" },
     { name = "mff-store" },
+    { name = "python-docx" },
     { name = "uvicorn" },
 ]
 
@@ -825,6 +826,7 @@ requires-dist = [
     { name = "mff-contracts", editable = "packages/mff-contracts" },
     { name = "mff-docmodel", editable = "packages/mff-docmodel" },
     { name = "mff-store", editable = "packages/mff-store" },
+    { name = "python-docx", specifier = ">=1.2" },
     { name = "uvicorn", specifier = ">=0.30" },
 ]
 
