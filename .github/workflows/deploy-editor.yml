@@ -3,7 +3,7 @@ name: deploy-editor
 on:
   workflow_dispatch:
   push:
-    branches: [main, feat/gcp]
+    branches: [main]
     paths:
       - services/editor-service/**
       - docker/editor-service.Dockerfile
@@ -28,7 +28,7 @@ env:
 
 jobs:
   deploy:
-    if: github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/feat/gcp'
+    if: github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
