@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from unittest.mock import patch
 
 import httpx
@@ -74,3 +75,26 @@ async def test_retries_transient_gateway_failure() -> None:
 
     assert calls == 2
     assert out[0].file == "a.jpg"
+
+
+async def test_duplicate_uris_are_restored_to_index_aligned_results() -> None:
+    """CV de-duplicates URIs, but the editor needs one analysis per input image."""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert [image["uri"] for image in json.loads(request.content)["images"]] == [
+            "gs://b/a.jpg",
+            "gs://b/a.jpg",
+        ]
+        return httpx.Response(
+            200,
+            json={"images": [{"file": "a.jpg", "uri": "gs://b/a.jpg", "hits": []}]},
+        )
+
+    client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    tool = HttpVisionTool("http://cv:8080", client=client)
+    out = await tool.build_inventory(
+        [ImageRef(uri="gs://b/a.jpg"), ImageRef(uri="gs://b/a.jpg")],
+        [RequirementSpec(id="R-01", text="x")],
+    )
+
+    assert [result.uri for result in out] == ["gs://b/a.jpg", "gs://b/a.jpg"]

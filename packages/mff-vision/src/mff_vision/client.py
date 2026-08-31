@@ -93,6 +93,10 @@ class HttpVisionTool:
                 await client.aclose()
 
         results = [ImageAnalysis.model_validate(d) for d in data["images"]]
+        by_uri = {result.uri: result for result in results if result.uri}
+        aligned = [by_uri.get(image.uri) for image in images]
+        if all(result is not None for result in aligned):
+            return [result for result in aligned if result is not None]
         if len(results) != len(images):
             raise VisionUnavailable(
                 f"vision service returned {len(results)} analyses for {len(images)} "
