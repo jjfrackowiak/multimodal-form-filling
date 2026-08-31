@@ -56,6 +56,7 @@ class Poller:
                 await self._handle(inbound)
             except Exception:
                 log.exception("failed on message %s", inbound.message_id)
+                continue
             await self._deps.transport.mark_seen(inbound.message_id)
 
     async def run_forever(self) -> None:

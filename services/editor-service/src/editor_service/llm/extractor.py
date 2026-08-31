@@ -6,6 +6,7 @@ router only sees `parse_manifest` + this class.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import re
 from typing import Any
@@ -50,6 +51,9 @@ Rules:
 """
 
 _FENCE = re.compile(r"```(?:json)?\s*(\{.*\})\s*```", re.DOTALL)
+_TRANSIENT_STATUS_CODES = {429, 500, 502, 503, 504}
+_MAX_TRANSIENT_ATTEMPTS = 5
+_RETRY_DELAY_SECONDS = 5.0
 
 
 def _extract_json_object(text: str) -> dict[str, Any]:
@@ -71,10 +75,21 @@ class VertexJsonExtractor:
 
     async def extract(self, chunk: str, *, offset: int) -> list[Requirement]:
         del offset
-        response = await self._client.aio.models.generate_content(
-            model=self._model_id,
-            contents=f"{_INSTRUCTIONS}\nINPUT TEXT:\n{chunk}",
-        )
+        for attempt in range(_MAX_TRANSIENT_ATTEMPTS):
+            try:
+                response = await self._client.aio.models.generate_content(
+                    model=self._model_id,
+                    contents=f"{_INSTRUCTIONS}\nINPUT TEXT:\n{chunk}",
+                )
+                break
+            except genai.errors.ClientError as exc:
+                status_code = getattr(exc, "code", None)
+                if (
+                    status_code not in _TRANSIENT_STATUS_CODES
+                    or attempt == _MAX_TRANSIENT_ATTEMPTS - 1
+                ):
+                    raise
+                await asyncio.sleep(_RETRY_DELAY_SECONDS * (2**attempt))
         text = response.text
         if not text:
             raise ValueError(f"empty response from {self._model_id}")

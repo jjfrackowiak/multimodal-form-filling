@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from pathlib import Path
 from unittest.mock import patch
 
 import httpx
@@ -14,7 +15,7 @@ from email_service.intake import ParsedForm, ParsedJob, ParsedRequest, RateLimit
 from email_service.orchestrator import OrchestratorDeps, jobs_from_parsed
 from email_service.poller import Poller, PollerDeps, interval_from_env
 from email_service.runner import EditorClient, FakeSliceRunner, HttpSliceRunner
-from email_service.transport import InMemoryTransport
+from email_service.transport import Attachment, InMemoryTransport
 from email_service.transport.messages import InboundMessage
 from mff_contracts import Anchor, Mode, Requirement, ReviewComment
 from mff_store import InMemoryArtifactRepository, InMemoryBlobStore, InMemoryJobRepository
@@ -166,6 +167,60 @@ class _Editor:
     async def parse_manifest(self, raw: str) -> list[Requirement]:
         del raw
         return [_requirement()]
+
+
+class _UnavailableEditor:
+    async def parse_manifest(self, raw: str) -> list[Requirement]:
+        del raw
+        raise RuntimeError("temporary Gemini capacity failure")
+
+
+async def test_poller_leaves_message_unseen_when_manifest_parse_fails() -> None:
+    transport = InMemoryTransport()
+    inbound = InboundMessage(
+        message_id="<retry@x>",
+        sender="ok@x.test",
+        subject="hi",
+        body="Under the bonnet",
+        attachments=[
+            Attachment(
+                filename="form.docx",
+                content_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                data=(
+                    Path(__file__).resolve().parents[3]
+                    / "fixtures"
+                    / "fleet-vehicle-return"
+                    / "input"
+                    / "derivative"
+                    / "form_supplied.docx"
+                ).read_bytes(),
+            )
+        ],
+        received_at=datetime.now(UTC),
+    )
+    transport.deliver(inbound)
+    poller = Poller(
+        PollerDeps(
+            transport=transport,
+            editor=_UnavailableEditor(),
+            orchestrator=OrchestratorDeps(
+                artifact_repo=InMemoryArtifactRepository(),
+                job_repo=InMemoryJobRepository(),
+                blob_store=InMemoryBlobStore(),
+                runner=FakeSliceRunner(comments={}),
+            ),
+            dispatcher=DeliveryDispatcher(
+                requests=InMemoryRequestRepository(), transport=transport, blobs=InMemoryBlobStore()
+            ),
+            rate_limiter=RateLimiter(),
+            allowed_senders=frozenset({"ok@x.test"}),
+        )
+    )
+
+    await poller.process()
+
+    assert await transport.fetch_unseen() == [inbound]
+    assert transport.sent == []
 
 
 async def test_poller_rejects_unknown_sender() -> None:
