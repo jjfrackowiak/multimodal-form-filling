@@ -92,6 +92,7 @@ class _FakeImap4:
         return "OK", [b"1"]
 
     def fetch(self, num: str, parts: str) -> tuple[str, list[tuple[bytes, bytes] | None]]:
+        assert parts == "(BODY.PEEK[])"
         return "OK", [(b"1 (RFC822 {...})", self._raw_message)]
 
     def store(self, num: str, command: str, flags: str) -> tuple[str, list[bytes]]:
