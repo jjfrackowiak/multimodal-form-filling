@@ -52,6 +52,19 @@ jobs:
         env:
           TF_IN_AUTOMATION: "true"
           TF_INPUT: "false"
+          TF_VAR_imap_host: ${{ secrets.IMAP_HOST }}
+          TF_VAR_imap_port: ${{ secrets.IMAP_PORT }}
+          TF_VAR_imap_folder: ${{ secrets.IMAP_FOLDER }}
+          TF_VAR_imap_user: ${{ secrets.IMAP_USER }}
+          TF_VAR_imap_password: ${{ secrets.IMAP_PASSWORD }}
+          TF_VAR_imap_use_tls: ${{ secrets.IMAP_USE_TLS }}
+          TF_VAR_smtp_host: ${{ secrets.SMTP_HOST }}
+          TF_VAR_smtp_port: ${{ secrets.SMTP_PORT }}
+          TF_VAR_smtp_user: ${{ secrets.SMTP_USER }}
+          TF_VAR_smtp_password: ${{ secrets.SMTP_PASSWORD }}
+          TF_VAR_smtp_use_tls: ${{ secrets.SMTP_USE_TLS }}
+          TF_VAR_mail_from: ${{ secrets.MAIL_FROM }}
+          TF_VAR_allowed_senders: ${{ secrets.ALLOWED_SENDERS }}
         run: |
           terraform init
           CV_IMG=$(terraform output -raw cv_image)
