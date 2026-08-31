@@ -62,6 +62,7 @@ class RequestRecord(BaseModel):
     reply_to: str
     original_message_id: str  # delivery threads on the ORIGINAL message
     status: Literal["running", "delivered", "failed"]
+    original_subject: str = ""
 
 
 class ClientInputs(BaseModel):
