@@ -20,6 +20,10 @@ permissions:
   contents: read
   id-token: write
 
+concurrency:
+  group: production-terraform
+  cancel-in-progress: false
+
 env:
   PROJECT_ID: linen-badge-507111-r6
   REGION: europe-central2
