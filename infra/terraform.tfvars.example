@@ -2,3 +2,8 @@
 # project_id = "linen-badge-507111-r6"
 # region     = "europe-central2"
 cv_image = "europe-central2-docker.pkg.dev/linen-badge-507111-r6/app/cv:v1"
+
+# Comma-separated, case-insensitive. Empty/unset means CLOSED, not open — see
+# email_service.intake.allowed_senders_from_env. An apply that omits this reverts the
+# live allowlist to empty and locks out every sender.
+# allowed_senders = "someone@example.com,another@example.com"
