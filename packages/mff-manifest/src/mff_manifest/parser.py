@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import re
 
-from mff_contracts import Manifest, Requirement
+from mff_contracts import Constraint, Manifest, Requirement
 
 from .errors import ManifestParseError, NonVerbatimSpanError
 from .presplit import TextChunk, presplit
@@ -84,6 +84,16 @@ _TOTAL_COUNT_ONLY = re.compile(
     re.IGNORECASE,
 )
 
+_BETWEEN_SEATS_CAMERA_POSITION = re.compile(
+    r"\bbetween\s+(?:the\s+)?(?:front\s+)?seats\b", re.IGNORECASE
+)
+_STANDALONE_CAMERA_POSITION = re.compile(
+    r"^(?:the\s+)?(?P<subject>[a-z][a-z\s-]*?)\s+"
+    r"(?:must|should|needs?\s+to|has\s+to)\s+be\s+"
+    r"(?:taken|photographed|captured|shot)\b",
+    re.IGNORECASE,
+)
+
 
 def _occurrences(span: str, raw: str) -> int:
     if not span:
@@ -100,6 +110,47 @@ def _occurrences(span: str, raw: str) -> int:
 
 def _drop_total_count_only(items: list[Requirement]) -> list[Requirement]:
     return [req for req in items if not _TOTAL_COUNT_ONLY.match(req.source_span.strip())]
+
+
+def _fold_stranded_camera_position(items: list[Requirement]) -> list[Requirement]:
+    """Attach a model-emitted camera-position row to its already-named subject.
+
+    An extractor sometimes turns a later sentence such as "Headliner must be taken
+    from between the seats" into a second requirement. It is a qualifier, not another
+    photographic item. The narrow shape below retains unrelated standalone rules.
+    """
+    remaining = list(items)
+    for candidate in items:
+        match = _STANDALONE_CAMERA_POSITION.match(candidate.text.strip())
+        if candidate.constraint is not None or match is None:
+            continue
+        if not _BETWEEN_SEATS_CAMERA_POSITION.search(candidate.text):
+            continue
+
+        subject_tokens = set(re.findall(r"[a-z]{3,}", match.group("subject").lower()))
+        matches = [
+            requirement
+            for requirement in remaining
+            if requirement is not candidate
+            and requirement.constraint is None
+            and subject_tokens
+            and subject_tokens.issubset(set(re.findall(r"[a-z]{3,}", requirement.text.lower())))
+        ]
+        if len(matches) != 1:
+            continue
+
+        target = matches[0]
+        constraint = Constraint(
+            kind="camera_position",
+            value="between_front_seats",
+            source_span=candidate.source_span,
+            source_line=candidate.source_line,
+            note="The constraint arrives on a later line than the item it qualifies.",
+        )
+        target_index = remaining.index(target)
+        remaining[target_index] = target.model_copy(update={"constraint": constraint})
+        remaining.remove(candidate)
+    return remaining
 
 
 def _fold_repeated_mentions(items: list[Requirement], raw: str) -> list[Requirement]:
@@ -164,7 +215,8 @@ def _canonicalise(items: list[Requirement], raw: str) -> list[Requirement]:
             )
         resolved.append(req.model_copy(update=updates))
 
-    resolved = _fold_repeated_mentions(_drop_total_count_only(resolved), raw)
+    resolved = _fold_stranded_camera_position(_drop_total_count_only(resolved))
+    resolved = _fold_repeated_mentions(resolved, raw)
     resolved.sort(key=lambda r: (r.ordinal, r.text))
     return [
         r.model_copy(update={"id": f"R-{index:02d}"}) for index, r in enumerate(resolved, start=1)

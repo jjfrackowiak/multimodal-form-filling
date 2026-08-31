@@ -6,7 +6,6 @@ import json
 from unittest.mock import patch
 
 import httpx
-
 import pytest
 
 from mff_contracts import RequirementSpec
@@ -66,9 +65,7 @@ async def test_retries_transient_gateway_failure() -> None:
         return httpx.Response(200, json={"images": [{"file": "a.jpg", "hits": []}]})
 
     client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
-    tool = HttpVisionTool(
-        "http://cv:8080", client=client, max_retries=1, retry_delay_seconds=0
-    )
+    tool = HttpVisionTool("http://cv:8080", client=client, max_retries=1, retry_delay_seconds=0)
     out = await tool.build_inventory(
         [ImageRef(uri="gs://b/a.jpg")], [RequirementSpec(id="R-01", text="x")]
     )

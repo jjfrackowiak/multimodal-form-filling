@@ -56,10 +56,10 @@ async def jobs_from_parsed(
         if parsed_job.mode is Mode.DERIVATIVE:
             assert parsed_job.form is not None
             form = await blobs.put(parsed_job.form.data, content_type=_DOCX_TYPE, kind="source")
-            images: list[JobImage] = []
+            embedded_images: list[JobImage] = []
             for filename, data, content_type in _embedded_rasters(parsed_job.form.data):
                 blob = await blobs.put(data, content_type=content_type, kind="image")
-                images.append(
+                embedded_images.append(
                     JobImage(
                         blob=blob,
                         original_filename=filename,
@@ -74,19 +74,19 @@ async def jobs_from_parsed(
                     form_id=parsed_job.form_id,
                     form=form,
                     requirements=requirements,
-                    images=images,
+                    images=embedded_images,
                 )
             )
             continue
         assert parsed_job.inputs is not None
-        images: list[JobImage] = []
+        attachment_images: list[JobImage] = []
         for attachment in parsed_job.inputs.images:
             blob = await blobs.put(
                 attachment.data,
                 content_type=attachment.content_type or "application/octet-stream",
                 kind="image",
             )
-            images.append(
+            attachment_images.append(
                 JobImage(
                     blob=blob,
                     original_filename=attachment.filename,
@@ -101,7 +101,7 @@ async def jobs_from_parsed(
                 form_id=parsed_job.form_id,
                 inputs=parsed_job.inputs.inputs,
                 requirements=requirements,
-                images=images,
+                images=attachment_images,
             )
         )
     return jobs
