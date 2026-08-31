@@ -43,6 +43,18 @@ def test_valid_request_has_no_problems() -> None:
     assert verdict.problems == []
 
 
+def test_display_name_sender_is_normalized_for_allowlist() -> None:
+    parsed = _parsed(
+        sender="Jan Frackowiak <client@example.test>",
+        body=MANIFEST_TEXT,
+        attachments=[docx_attachment("form.docx")],
+    )
+    verdict = validate_intake(parsed, allowed_senders=ALLOWED)
+
+    assert parsed.sender == "client@example.test"
+    assert verdict.valid is True
+
+
 def test_missing_manifest_when_body_is_empty() -> None:
     parsed = _parsed(body="", attachments=[docx_attachment("form.docx")])
     verdict = validate_intake(parsed, allowed_senders=ALLOWED)

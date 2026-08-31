@@ -45,6 +45,7 @@ import tempfile
 import zipfile
 from datetime import UTC, datetime, timedelta
 from email.header import decode_header, make_header
+from email.utils import parseaddr
 from pathlib import Path, PurePosixPath
 from typing import Literal
 
@@ -142,6 +143,12 @@ def _is_zip_bytes(data: bytes) -> bool:
         return zipfile.is_zipfile(io.BytesIO(data))
     except OSError:
         return False
+
+
+def _sender_address(value: str) -> str:
+    """Extract the mailbox address after RFC 2047 decoding a From header."""
+    _display_name, address = parseaddr(value)
+    return address or value
 
 
 def _looks_like_docx(data: bytes) -> bool:
@@ -492,7 +499,7 @@ def parse_inbound(
 
     return ParsedRequest(
         message_id=msg.message_id,
-        sender=_decode_rfc2047(msg.sender),
+        sender=_sender_address(_decode_rfc2047(msg.sender)),
         subject=_decode_rfc2047(msg.subject),
         manifest_raw=msg.body,
         attachment_count=len(msg.attachments),
