@@ -268,3 +268,57 @@ async def test_poller_rejects_unknown_sender() -> None:
     assert transport.sent
     assert "sender_not_allowed" in transport.sent[0].body
     assert "ALLOWED_SENDERS" in transport.sent[0].body
+
+
+def test_loopback_hosts() -> None:
+    from starlette.requests import Request
+
+    from email_service.main import _loopback
+
+    def make(host: str) -> Request:
+        return Request(
+            {
+                "type": "http",
+                "asgi": {"spec_version": "2.3", "version": "3.0"},
+                "http_version": "1.1",
+                "method": "POST",
+                "scheme": "http",
+                "path": "/internal/poll",
+                "raw_path": b"/internal/poll",
+                "query_string": b"",
+                "headers": [],
+                "client": (host, 1),
+                "server": ("127.0.0.1", 80),
+            }
+        )
+
+    assert _loopback(make("127.0.0.1"))
+    assert _loopback(make("::1"))
+    assert _loopback(make("testclient"))
+    assert not _loopback(make("8.8.8.8"))
+
+
+def test_internal_poll_runs_process(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("MFF_DISABLE_POLLER", "1")
+    from email_service.main import create_app
+
+    calls: list[int] = []
+
+    class _FakePoller:
+        async def process(self) -> None:
+            calls.append(1)
+
+    with TestClient(create_app()) as client:
+        client.app.state.poller = _FakePoller()
+        response = client.post("/internal/poll")
+    assert response.status_code == 200
+    assert calls == [1]
+
+
+def test_internal_poll_without_poller_is_503(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("MFF_DISABLE_POLLER", "1")
+    from email_service.main import create_app
+
+    with TestClient(create_app()) as client:
+        response = client.post("/internal/poll")
+    assert response.status_code == 503

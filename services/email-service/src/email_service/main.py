@@ -11,7 +11,8 @@ import os
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager, suppress
 
-from fastapi import FastAPI
+import httpx
+from fastapi import FastAPI, HTTPException, Request
 
 from email_service.delivery import DeliveryDispatcher
 from email_service.intake import RateLimiter
@@ -101,8 +102,34 @@ def _poller() -> Poller:
     )
 
 
+def _loopback(request: Request) -> bool:
+    host = request.client.host if request.client else ""
+    # Starlette TestClient uses the peer name "testclient", not 127.0.0.1.
+    return host in {"127.0.0.1", "::1", "testclient"}
+
+
+async def _poll_via_http(port: str, interval: float) -> None:
+    """Drive process() as an HTTP request so Cloud Run drains it on deploy.
+
+    A background asyncio task is not an in-flight request; SIGTERM kills it and
+    SEARCH UNSEEN will not retry a message already past 202. localhost POST keeps
+    the work on the request path (service timeout 900s).
+    """
+    url = f"http://127.0.0.1:{port}/internal/poll"
+    timeout = httpx.Timeout(900.0, connect=5.0)
+    while True:
+        try:
+            async with httpx.AsyncClient(timeout=timeout) as client:
+                response = await client.post(url)
+                if response.status_code >= 400:
+                    log.warning("internal poll HTTP %s", response.status_code)
+        except Exception:
+            log.exception("internal poll failed")
+        await asyncio.sleep(interval)
+
+
 @asynccontextmanager
-async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
+async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     if os.environ.get("MFF_DISABLE_POLLER", "").lower() in {"1", "true", "yes"}:
         yield
         return
@@ -110,8 +137,9 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
         log.warning("EDITOR_SERVICE_URL unset; poller not started")
         yield
         return
-    poller = _poller()
-    task = asyncio.create_task(poller.run_forever(), name="imap-poller")
+    app.state.poller = _poller()
+    port = os.environ.get("PORT", "8080")
+    task = asyncio.create_task(_poll_via_http(port, interval_from_env()), name="imap-poller")
     log.info("poller started")
     try:
         yield
@@ -132,6 +160,16 @@ def create_app() -> FastAPI:
     @app.get("/health")
     @app.get("/healthz")
     def healthz() -> dict[str, str]:
+        return {"status": "ok"}
+
+    @app.post("/internal/poll")
+    async def internal_poll(request: Request) -> dict[str, str]:
+        if not _loopback(request):
+            raise HTTPException(status_code=403, detail="localhost only")
+        poller = getattr(request.app.state, "poller", None)
+        if poller is None:
+            raise HTTPException(status_code=503, detail="poller not started")
+        await poller.process()
         return {"status": "ok"}
 
     return app

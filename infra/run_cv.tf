@@ -43,6 +43,10 @@ resource "google_cloud_run_v2_service" "cv" {
         value = "1"
       }
       env {
+        name  = "CV_VERTEX_MIN_INTERVAL_SECONDS"
+        value = "8"
+      }
+      env {
         name  = "CV_MAX_IMAGES"
         value = "64"
       }

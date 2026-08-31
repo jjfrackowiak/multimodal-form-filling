@@ -71,13 +71,18 @@ jobs:
           TF_VAR_allowed_senders: ${{ secrets.ALLOWED_SENDERS }}
         run: |
           terraform init
-          CV_IMG=$(terraform output -raw cv_image)
-          EDITOR_IMG=$(terraform output -raw editor_image)
+          # Use the live Cloud Run images, not terraform output of var.cv_image /
+          # var.editor_image. Those outputs stay at the last full apply (65c4d2a)
+          # after a -target cv/editor deploy, and a full email apply then rolled
+          # cv+editor back. Also -target email so this job cannot mutate them.
+          CV_IMG=$(gcloud run services describe cv --project="$PROJECT_ID" --region="$REGION" --format='value(spec.template.spec.containers[0].image)')
+          EDITOR_IMG=$(gcloud run services describe editor --project="$PROJECT_ID" --region="$REGION" --format='value(spec.template.spec.containers[0].image)')
           if [ -z "$CV_IMG" ] || [ -z "$EDITOR_IMG" ]; then
-            echo "refusing apply: cv_image/editor_image missing from state" >&2
+            echo "refusing apply: live cv/editor image missing" >&2
             exit 1
           fi
           terraform apply -auto-approve \
+            -target=google_cloud_run_v2_service.email[0] \
             -var="cv_image=${CV_IMG}" \
             -var="editor_image=${EDITOR_IMG}" \
             -var="email_image=${{ steps.image.outputs.img }}"

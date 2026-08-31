@@ -67,7 +67,13 @@ jobs:
           TF_INPUT: "false"
         run: |
           terraform init
-          CV_IMG=$(terraform output -raw cv_image)
+          # Live CV image, not terraform output of var.cv_image. -target editor
+          # still walks the cv service as a dependency; a stale var rolls CV back.
+          CV_IMG=$(gcloud run services describe cv --project="$PROJECT_ID" --region="$REGION" --format='value(spec.template.spec.containers[0].image)')
+          if [ -z "$CV_IMG" ]; then
+            echo "refusing apply: live cv image missing" >&2
+            exit 1
+          fi
           terraform apply -auto-approve \
             -target=google_cloud_run_v2_service.editor[0] \
             -var="cv_image=${CV_IMG}" \
