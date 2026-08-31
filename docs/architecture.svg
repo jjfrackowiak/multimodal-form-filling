@@ -1,0 +1,200 @@
+<svg viewBox="0 0 1300 800" xmlns="http://www.w3.org/2000/svg" font-family="Helvetica, Arial, sans-serif" role="img" aria-label="Amendo architecture. Runtime: a Gmail inbox connects over IMAP and SMTP to the email-service Cloud Run instance, which calls editor-service over authenticated HTTPS. editor-service calls Vertex AI using Gemini 3.5 Flash via Google ADK for review and composition and Gemma via Model as a Service for manifest parsing, and would call the cv Cloud Run service, which itself calls its own Vertex AI model, for photo-to-requirement matching, but that call is bypassed in this deployment because MFF_VISION_INVENTORY is set, so editor-service reads a bundled fixture inventory instead. email-service reads and writes Firestore and Cloud Storage. Deploy: GitHub triggers GitHub Actions, which authenticates to GCP via Workload Identity Federation with no stored key, runs Cloud Build to push images for all three services to Artifact Registry, then runs terraform apply against the infra directory to update email-service, editor-service, and the cv service.">
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#16241f" />
+    </marker>
+    <marker id="arrow-muted" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#55625a" />
+    </marker>
+    <marker id="arrow-ci" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#1f5c8a" />
+    </marker>
+  </defs>
+
+  <rect x="0" y="0" width="1300" height="800" fill="#ffffff" />
+
+  <!-- GCP project boundary -->
+  <rect x="270" y="60" width="700" height="580" rx="10" fill="none" stroke="#c7c9bd" stroke-width="1.5" stroke-dasharray="5 4" />
+  <text x="620" y="46" text-anchor="middle" font-family="Menlo, Consolas, monospace" font-size="12" fill="#55625a" letter-spacing="0.04em">GCP PROJECT &#183; linen-badge-507111-r6 &#183; europe-central2</text>
+  <text x="290" y="80" font-family="Menlo, Consolas, monospace" font-size="9" fill="#55625a">IAM: per-service runtime SA (ADC) &#183; github-deploy SA via WIF, no stored key</text>
+
+  <!-- Client: Gmail -->
+  <g>
+    <rect x="30" y="110" width="170" height="100" rx="8" fill="#eceae2" stroke="#55625a" stroke-width="1.5" />
+    <path d="M55,140 h120 v50 h-120 z M55,140 l60,38 l60,-38" fill="none" stroke="#55625a" stroke-width="1.6" stroke-linejoin="round" />
+    <text x="115" y="205" text-anchor="middle" font-size="12.5" font-weight="600" fill="#16241f">Gmail inbox</text>
+  </g>
+
+  <!-- email-service -->
+  <g>
+    <rect x="310" y="110" width="220" height="100" rx="8" fill="#e4edf0" stroke="#2f5d6e" stroke-width="1.6" />
+    <polygon points="335,145 355,133 375,145 375,169 355,181 335,169" fill="none" stroke="#2f5d6e" stroke-width="1.6" stroke-linejoin="round" />
+    <text x="395" y="153" font-size="13" font-weight="600" fill="#16241f">email-service</text>
+    <text x="395" y="170" font-family="Menlo, Consolas, monospace" font-size="10.5" fill="#55625a">Cloud Run</text>
+    <text x="395" y="185" font-size="10.5" fill="#55625a">poll &#183; intake &#183; orchestrate &#183; deliver</text>
+  </g>
+
+  <!-- editor-service -->
+  <g>
+    <rect x="650" y="110" width="220" height="100" rx="8" fill="#e4edf0" stroke="#2f5d6e" stroke-width="1.6" />
+    <polygon points="675,145 695,133 715,145 715,169 695,181 675,169" fill="none" stroke="#2f5d6e" stroke-width="1.6" stroke-linejoin="round" />
+    <text x="735" y="153" font-size="13" font-weight="600" fill="#16241f">editor-service</text>
+    <text x="735" y="170" font-family="Menlo, Consolas, monospace" font-size="10.5" fill="#55625a">Cloud Run</text>
+    <text x="735" y="185" font-size="10.5" fill="#55625a">the only orchestration-side model caller</text>
+  </g>
+
+  <!-- cv service -->
+  <g>
+    <rect x="650" y="260" width="220" height="90" rx="8" fill="#e4edf0" stroke="#2f5d6e" stroke-width="1.6" />
+    <polygon points="675,290 695,278 715,290 715,314 695,326 675,314" fill="none" stroke="#2f5d6e" stroke-width="1.6" stroke-linejoin="round" />
+    <text x="735" y="298" font-size="13" font-weight="600" fill="#16241f">cv</text>
+    <text x="735" y="315" font-family="Menlo, Consolas, monospace" font-size="10.5" fill="#55625a">Cloud Run</text>
+    <text x="735" y="330" font-size="10.5" fill="#55625a">POST /v1/inventory</text>
+  </g>
+
+  <!-- Firestore -->
+  <g>
+    <rect x="310" y="260" width="100" height="90" rx="8" fill="#e8efe2" stroke="#4a6b3f" stroke-width="1.5" />
+    <ellipse cx="360" cy="283" rx="18" ry="7" fill="none" stroke="#4a6b3f" stroke-width="1.4" />
+    <path d="M342,283 v18 a18,7 0 0 0 36,0 v-18" fill="none" stroke="#4a6b3f" stroke-width="1.4" />
+    <text x="360" y="325" text-anchor="middle" font-size="11" font-weight="600" fill="#16241f">Firestore</text>
+    <text x="360" y="338" text-anchor="middle" font-size="9" fill="#55625a">requests &#183; jobs</text>
+  </g>
+
+  <!-- Cloud Storage -->
+  <g>
+    <rect x="430" y="260" width="100" height="90" rx="8" fill="#e8efe2" stroke="#4a6b3f" stroke-width="1.5" />
+    <path d="M465,278 h30 l6,12 v18 h-42 v-18 z" fill="none" stroke="#4a6b3f" stroke-width="1.4" stroke-linejoin="round" />
+    <text x="480" y="325" text-anchor="middle" font-size="11" font-weight="600" fill="#16241f">Cloud Storage</text>
+    <text x="480" y="338" text-anchor="middle" font-size="9" fill="#55625a">docs &#183; photos</text>
+  </g>
+
+  <!-- Vertex AI (outside project boundary, Google-managed) -->
+  <g>
+    <rect x="1010" y="90" width="230" height="280" rx="10" fill="none" stroke="#6a4a8a" stroke-width="1.5" stroke-dasharray="3 3" />
+    <text x="1125" y="80" text-anchor="middle" font-family="Menlo, Consolas, monospace" font-size="10.5" fill="#55625a">VERTEX AI</text>
+
+    <rect x="1030" y="105" width="190" height="75" rx="8" fill="#ece5f3" stroke="#6a4a8a" stroke-width="1.4" />
+    <path d="M1055,119 l6,15 15,6 -15,6 -6,15 -6,-15 -15,-6 15,-6 z" fill="none" stroke="#6a4a8a" stroke-width="1.3" stroke-linejoin="round" />
+    <text x="1125" y="142" text-anchor="middle" font-size="11.5" font-weight="600" fill="#16241f">Gemini 3.5 Flash</text>
+    <text x="1125" y="157" text-anchor="middle" font-size="9.5" fill="#55625a">ADK &#183; review + compose</text>
+    <text x="1125" y="170" text-anchor="middle" font-size="9.5" fill="#55625a">called by editor-service</text>
+
+    <rect x="1030" y="192" width="190" height="75" rx="8" fill="#ece5f3" stroke="#6a4a8a" stroke-width="1.4" />
+    <circle cx="1055" cy="222" r="9" fill="none" stroke="#6a4a8a" stroke-width="1.3" />
+    <text x="1125" y="222" text-anchor="middle" font-size="11.5" font-weight="600" fill="#16241f">Gemma</text>
+    <text x="1125" y="237" text-anchor="middle" font-size="9.5" fill="#55625a">Model-as-a-Service</text>
+    <text x="1125" y="250" text-anchor="middle" font-size="9.5" fill="#55625a">manifest parsing</text>
+
+    <rect x="1030" y="279" width="190" height="75" rx="8" fill="#ece5f3" stroke="#6a4a8a" stroke-width="1.4" />
+    <path d="M1046,301 h10 v-10 M1046,301 l14,14 M1064,297 v-8 h-8" fill="none" stroke="#6a4a8a" stroke-width="1.3" stroke-linejoin="round" />
+    <text x="1125" y="309" text-anchor="middle" font-size="11.5" font-weight="600" fill="#16241f">Vertex AI model</text>
+    <text x="1125" y="324" text-anchor="middle" font-size="9.5" fill="#55625a">image inventory</text>
+    <text x="1125" y="337" text-anchor="middle" font-size="9.5" fill="#55625a">called by cv (own SA)</text>
+  </g>
+
+  <!-- Cloud Build -->
+  <g>
+    <rect x="310" y="410" width="170" height="60" rx="8" fill="#f3e9dc" stroke="#8a5a2a" stroke-width="1.5" />
+    <text x="395" y="437" text-anchor="middle" font-size="11.5" font-weight="600" fill="#16241f">Cloud Build</text>
+    <text x="395" y="452" text-anchor="middle" font-family="Menlo, Consolas, monospace" font-size="9.5" fill="#55625a">docker build</text>
+  </g>
+
+  <!-- Artifact Registry -->
+  <g>
+    <rect x="530" y="410" width="210" height="60" rx="8" fill="#f3e9dc" stroke="#8a5a2a" stroke-width="1.5" />
+    <text x="635" y="437" text-anchor="middle" font-size="11.5" font-weight="600" fill="#16241f">Artifact Registry</text>
+    <text x="635" y="452" text-anchor="middle" font-family="Menlo, Consolas, monospace" font-size="9.5" fill="#55625a">app/email &#183; editor &#183; cv</text>
+  </g>
+
+  <!-- Terraform apply -->
+  <g>
+    <rect x="310" y="500" width="460" height="60" rx="8" fill="#f3e9dc" stroke="#8a5a2a" stroke-width="1.6" />
+    <path d="M330,522 v-6 h10 v6 M330,522 v14 h10 v-14 M345,516 v20 M360,516 v12 h10 v-12" fill="none" stroke="#8a5a2a" stroke-width="1.3" />
+    <text x="540" y="530" text-anchor="middle" font-size="12.5" font-weight="600" fill="#16241f">terraform apply</text>
+    <text x="540" y="546" text-anchor="middle" font-family="Menlo, Consolas, monospace" font-size="9.5" fill="#55625a">infra/ &#8212; 3&#215; Cloud Run &#183; Firestore &#183; GCS &#183; IAM &#183; WIF</text>
+  </g>
+
+  <!-- GitHub (external) -->
+  <g>
+    <rect x="30" y="470" width="170" height="70" rx="8" fill="#e2eef6" stroke="#1f5c8a" stroke-width="1.5" />
+    <circle cx="60" cy="500" r="11" fill="none" stroke="#1f5c8a" stroke-width="1.4" />
+    <path d="M60,500 v11 M52,507 q8,6 16,0" fill="none" stroke="#1f5c8a" stroke-width="1.4" />
+    <text x="125" y="505" text-anchor="middle" font-size="12" font-weight="600" fill="#16241f">GitHub</text>
+    <text x="125" y="520" text-anchor="middle" font-size="9.5" fill="#55625a">push &#183; PR</text>
+  </g>
+
+  <!-- GitHub Actions (external) -->
+  <g>
+    <rect x="30" y="570" width="170" height="80" rx="8" fill="#e2eef6" stroke="#1f5c8a" stroke-width="1.5" />
+    <polygon points="55,600 75,590 75,610" fill="none" stroke="#1f5c8a" stroke-width="1.4" stroke-linejoin="round" />
+    <text x="125" y="605" text-anchor="middle" font-size="12" font-weight="600" fill="#16241f">GitHub Actions</text>
+    <text x="125" y="620" text-anchor="middle" font-size="9" fill="#55625a">ci.yml &#8212; every push/PR</text>
+    <text x="125" y="633" text-anchor="middle" font-size="9" fill="#55625a">deploy-*.yml &#8212; dispatch</text>
+  </g>
+
+  <!-- Arrows: client <-> email-service -->
+  <line x1="200" y1="150" x2="306" y2="150" stroke="#16241f" stroke-width="1.5" marker-end="url(#arrow)" />
+  <text x="253" y="140" text-anchor="middle" font-size="10" fill="#55625a">IMAP &#8212; polls every 5s</text>
+  <line x1="306" y1="185" x2="200" y2="185" stroke="#16241f" stroke-width="1.5" marker-end="url(#arrow)" />
+  <text x="253" y="200" text-anchor="middle" font-size="10" fill="#55625a">SMTP &#8212; confirmation, then result</text>
+
+  <!-- Arrows: email-service <-> editor-service -->
+  <line x1="530" y1="150" x2="646" y2="150" stroke="#16241f" stroke-width="1.5" marker-end="url(#arrow)" />
+  <text x="588" y="130" text-anchor="middle" font-size="9.5" fill="#55625a">HTTPS, ID-token auth</text>
+  <text x="588" y="142" text-anchor="middle" font-size="9.5" fill="#55625a">/manifest:parse &#183; /slices:run</text>
+  <line x1="646" y1="185" x2="530" y2="185" stroke="#16241f" stroke-width="1.5" marker-end="url(#arrow)" />
+  <text x="588" y="200" text-anchor="middle" font-size="10" fill="#55625a">Requirement[] / SliceReport</text>
+
+  <!-- Arrows: editor-service -> Gemini / Gemma -->
+  <line x1="870" y1="140" x2="1026" y2="140" stroke="#16241f" stroke-width="1.5" marker-end="url(#arrow)" />
+  <text x="948" y="130" text-anchor="middle" font-size="9.5" fill="#55625a">generateContent</text>
+  <line x1="870" y1="228" x2="1026" y2="228" stroke="#16241f" stroke-width="1.5" marker-end="url(#arrow)" />
+  <text x="948" y="218" text-anchor="middle" font-size="9.5" fill="#55625a">generateContent</text>
+
+  <!-- Arrow: editor-service -> cv (bypassed in this demo) -->
+  <line x1="760" y1="210" x2="760" y2="256" stroke="#55625a" stroke-width="1.5" stroke-dasharray="4 3" marker-end="url(#arrow-muted)" />
+  <text x="885" y="228" text-anchor="middle" font-size="9" fill="#55625a">POST /v1/inventory</text>
+  <text x="885" y="240" text-anchor="middle" font-size="9" fill="#55625a">bypassed here &#8212;</text>
+  <text x="885" y="252" text-anchor="middle" font-size="9" fill="#55625a">MFF_VISION_INVENTORY set</text>
+
+  <!-- Arrow: cv -> its own Vertex AI model -->
+  <line x1="870" y1="305" x2="1026" y2="308" stroke="#16241f" stroke-width="1.5" marker-end="url(#arrow)" />
+
+  <!-- Arrows: email-service -> Firestore / Cloud Storage -->
+  <line x1="380" y1="210" x2="365" y2="256" stroke="#16241f" stroke-width="1.4" marker-end="url(#arrow)" />
+  <line x1="450" y1="210" x2="470" y2="256" stroke="#16241f" stroke-width="1.4" marker-end="url(#arrow)" />
+  <text x="470" y="240" text-anchor="middle" font-size="9.5" fill="#55625a">read / write</text>
+
+  <!-- Deploy chain: Cloud Build -> Artifact Registry -> terraform apply -->
+  <line x1="480" y1="440" x2="526" y2="440" stroke="#55625a" stroke-width="1.4" marker-end="url(#arrow-muted)" />
+  <text x="503" y="430" text-anchor="middle" font-size="9" fill="#55625a">push images</text>
+  <line x1="650" y1="470" x2="580" y2="496" stroke="#55625a" stroke-width="1.4" marker-end="url(#arrow-muted)" />
+
+  <!-- terraform apply -> cv (direct, short hop) -->
+  <line x1="760" y1="500" x2="760" y2="354" stroke="#55625a" stroke-width="1.3" stroke-dasharray="4 3" marker-end="url(#arrow-muted)" />
+
+  <!-- terraform apply -> email-service (left margin) -->
+  <polyline points="330,500 290,500 290,160 306,160" fill="none" stroke="#55625a" stroke-width="1.3" stroke-dasharray="4 3" marker-end="url(#arrow-muted)" />
+
+  <!-- terraform apply -> editor-service (right margin) -->
+  <polyline points="700,500 955,500 955,160 874,160" fill="none" stroke="#55625a" stroke-width="1.3" stroke-dasharray="4 3" marker-end="url(#arrow-muted)" />
+  <text x="912" y="480" text-anchor="middle" font-size="9" fill="#55625a">terraform apply</text>
+
+  <!-- GitHub -> GitHub Actions -->
+  <line x1="115" y1="540" x2="115" y2="566" stroke="#1f5c8a" stroke-width="1.4" marker-end="url(#arrow-ci)" />
+
+  <!-- GitHub Actions -> Cloud Build (WIF) -->
+  <polyline points="200,610 260,610 260,440 306,440" fill="none" stroke="#1f5c8a" stroke-width="1.5" marker-end="url(#arrow-ci)" />
+  <text x="264" y="580" font-size="9.5" fill="#1f5c8a">WIF &#8212; keyless OIDC,</text>
+  <text x="264" y="593" font-size="9.5" fill="#1f5c8a">impersonates github-deploy</text>
+
+  <!-- Legend -->
+  <g font-size="10.5" fill="#55625a">
+    <rect x="270" y="770" width="10" height="10" fill="#e4edf0" stroke="#2f5d6e" /><text x="286" y="779">Cloud Run (runtime)</text>
+    <rect x="430" y="770" width="10" height="10" fill="#e8efe2" stroke="#4a6b3f" /><text x="446" y="779">state (Firestore / GCS)</text>
+    <rect x="610" y="770" width="10" height="10" fill="#ece5f3" stroke="#6a4a8a" /><text x="626" y="779">Vertex AI (external)</text>
+    <rect x="770" y="770" width="10" height="10" fill="#f3e9dc" stroke="#8a5a2a" /><text x="786" y="779">build &amp; deploy</text>
+    <rect x="900" y="770" width="10" height="10" fill="#e2eef6" stroke="#1f5c8a" /><text x="916" y="779">GitHub / Actions</text>
+  </g>
+</svg>
