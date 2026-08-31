@@ -404,7 +404,10 @@ def _render_body(
     return "\n".join(sections)
 
 
-def _render_subject(result: RequestResult) -> str:
+def _render_subject(result: RequestResult, original_subject: str) -> str:
+    subject = " ".join(original_subject.split())
+    if subject:
+        return subject if subject.lower().startswith("re:") else f"Re: {subject}"
     labels = {"done": "complete", "partial": "partial", "failed": "failed"}
     status_label = labels.get(result.status, result.status)
     return f"Verification results — request {result.request_id} ({status_label})"
@@ -480,7 +483,7 @@ async def deliver(
     ]
     return OutboundMessage(
         to=request.reply_to,
-        subject=_render_subject(result),
+        subject=_render_subject(result, request.original_subject),
         body=body,
         html_body=render_delivery_html(
             result=result,

@@ -67,6 +67,18 @@ async def test_threading_targets_the_original_message_not_a_confirmation() -> No
     # asserting the concrete original id (not merely "is not None") is what would catch
     # a regression that threaded against the confirmation instead.
     assert message.in_reply_to == record.original_message_id
+    assert message.subject == "Verification results — request req-1 (complete)"
+
+
+async def test_final_delivery_reuses_the_original_subject() -> None:
+    dispatcher, requests, _transport, _jobs = _dispatcher()
+    record = _record().model_copy(update={"original_subject": "Vehicle return WN-7020U"})
+    await requests.put(record)
+
+    message = await dispatcher.on_jobs_settled(_result(), record)
+
+    assert message is not None
+    assert message.subject == "Re: Vehicle return WN-7020U"
 
 
 async def test_auto_submitted_is_set_so_other_robots_do_not_reply() -> None:

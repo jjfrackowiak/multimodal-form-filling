@@ -100,6 +100,7 @@ class Poller:
             reply_to=parsed.sender,
             original_message_id=parsed.message_id,
             status="running",
+            original_subject=parsed.subject,
         )
         await self._deps.dispatcher.requests.put(record)
         result = await run_request(record, jobs, self._deps.orchestrator)
