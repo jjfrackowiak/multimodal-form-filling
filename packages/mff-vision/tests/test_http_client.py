@@ -6,8 +6,10 @@ from unittest.mock import patch
 
 import httpx
 
+import pytest
+
 from mff_contracts import RequirementSpec
-from mff_vision import HttpVisionTool, ImageRef
+from mff_vision import HttpVisionTool, ImageRef, VisionUnavailable
 
 
 async def test_localhost_is_unauthenticated() -> None:
@@ -37,3 +39,16 @@ async def test_run_app_sends_bearer() -> None:
         await tool.build_inventory(
             [ImageRef(uri="gs://b/a.jpg")], [RequirementSpec(id="R-01", text="x")]
         )
+
+
+async def test_http_error_includes_status_and_body() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(502, text="upstream vertex")
+
+    client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    tool = HttpVisionTool("http://cv:8080", client=client)
+    with pytest.raises(VisionUnavailable, match="502") as ei:
+        await tool.build_inventory(
+            [ImageRef(uri="gs://b/a.jpg")], [RequirementSpec(id="R-01", text="x")]
+        )
+    assert "upstream vertex" in str(ei.value)

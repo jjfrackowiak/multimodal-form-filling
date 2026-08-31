@@ -15,7 +15,11 @@ from cv.vertex import client as vertex_client
 from cv.vertex import generate_structured
 
 log = logging.getLogger("cv")
-MAX_WORKERS = int(os.environ.get("CV_MAX_WORKERS", "3"))
+
+
+def _worker_limit() -> int:
+    # 3 parallel generateContent calls still 429 on this project's Vertex quota.
+    return max(1, int(os.environ.get("CV_MAX_WORKERS", "1")))
 
 
 def _label_one(
@@ -58,9 +62,10 @@ def build_inventory(
         raise FileNotFoundError("no images")
 
     unique, pairs = collapse_duplicates(image_paths)
-    cap = MAX_WORKERS if workers is None else max(1, workers)
-    n = max(1, min(len(unique), cap, MAX_WORKERS))
-    log.info("labeling %d images with %d workers (cap %s)", len(unique), n, MAX_WORKERS)
+    limit = _worker_limit()
+    cap = limit if workers is None else max(1, min(workers, limit))
+    n = max(1, min(len(unique), cap))
+    log.info("labeling %d images with %d workers (cap %s)", len(unique), n, limit)
 
     uris = source_uris or {}
     c = vertex_client()

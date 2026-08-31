@@ -66,7 +66,12 @@ class HttpVisionTool:
         except httpx.HTTPError as exc:
             # Unreachable is not the same as unidentifiable: the caller must be able to
             # retry this, and must not record it as a finding about the photographs.
-            raise VisionUnavailable(f"vision service {self._base}: {exc}") from exc
+            detail = str(exc)
+            if isinstance(exc, httpx.HTTPStatusError):
+                body = (exc.response.text or "")[:500]
+                if body:
+                    detail = f"{exc} body={body!r}"
+            raise VisionUnavailable(f"vision service {self._base}: {detail}") from exc
         finally:
             if self._client is None:
                 await client.aclose()

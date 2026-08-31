@@ -40,7 +40,7 @@ resource "google_cloud_run_v2_service" "cv" {
       }
       env {
         name  = "CV_MAX_WORKERS"
-        value = "3"
+        value = "1"
       }
       env {
         name  = "CV_MAX_IMAGES"

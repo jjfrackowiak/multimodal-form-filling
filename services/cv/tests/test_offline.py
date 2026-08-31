@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 from unittest.mock import patch
 
+import pytest
 from fastapi import HTTPException
 
 from cv.checklist import load_checklist, spans_complete
@@ -47,6 +48,15 @@ def test_fleet_dupes() -> None:
     assert len(files) == 17
     assert len(unique) == 15
     assert len(pairs) == 2
+
+
+def test_worker_limit_defaults_to_one(monkeypatch: pytest.MonkeyPatch) -> None:
+    from cv.pipeline import _worker_limit
+
+    monkeypatch.delenv("CV_MAX_WORKERS", raising=False)
+    assert _worker_limit() == 1
+    monkeypatch.setenv("CV_MAX_WORKERS", "3")
+    assert _worker_limit() == 3
 
 
 def test_rejects_heic() -> None:
