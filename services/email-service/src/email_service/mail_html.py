@@ -264,6 +264,7 @@ def _failed_forms_block(result: RequestResult) -> str:
 def _docs_block(
     attached: Sequence[tuple[str, str, int]],
     linked: Sequence[tuple[str, str, str]],
+    requirements_filename: str | None,
 ) -> str:
     """attached: (filename, mode, size_bytes). linked: (name, mode, url)."""
     if not attached and not linked:
@@ -312,6 +313,9 @@ def _docs_block(
                     f"'Segoe UI',Roboto,sans-serif;font-size:15px;word-break:break-all;\">"
                     f'<a href="{_esc(url)}" style="color:{_FAIL};">{_esc(name)}</a></p>'
                 )
+    if requirements_filename is not None:
+        parts.append(_h2("Parsed requirements"))
+        parts.append(_p(f"Attached: <strong>{_esc(requirements_filename)}</strong>", muted=True))
     return "".join(parts)
 
 
@@ -357,6 +361,7 @@ def render_delivery_html(
     comments: Sequence[ReviewComment],
     attached: Sequence[tuple[str, str, int]],
     linked: Sequence[tuple[str, str, str]],
+    requirements_filename: str | None = None,
 ) -> str:
     requirements_by_id = {r.id: r for r in result.requirements}
     attention = [c for c in comments if c.verdict in _ATTENTION_VERDICTS]
@@ -382,17 +387,7 @@ def render_delivery_html(
         body_bits.append(_pass_chips(ok))
     body_bits.append(_unverified_block(result, requirements_by_id))
     body_bits.append(_failed_forms_block(result))
-    body_bits.append(_docs_block(attached, linked))
-    body_bits.append(_h2("Parsed requirements"))
-    body_bits.append(
-        _p(
-            "Comments in the attached document refer to these numbers. "
-            "Each includes the fragment of your manifest it was read from.",
-            muted=True,
-        )
-    )
-    for requirement in sorted(result.requirements, key=lambda r: (r.ordinal, r.text)):
-        body_bits.append(_requirement_card(requirement))
+    body_bits.append(_docs_block(attached, linked, requirements_filename))
     body_bits.append(
         _p(
             "Full justifications are in the reviewer comments in the attached "
@@ -427,23 +422,6 @@ def render_confirmation_html(
     n_jobs: int,
     requirements: Sequence[Requirement],
 ) -> str:
-    cards = []
-    for requirement in requirements:
-        extra = ""
-        if requirement.constraint is not None:
-            extra += (
-                f'<p style="margin:6px 0 0;font-size:13px;color:{_MUTED};">'
-                f"constraint: {_esc(requirement.constraint.kind)} = "
-                f"{_esc(str(requirement.constraint.value))}</p>"
-            )
-        cards.append(
-            f'<p style="margin:0 0 10px;font-family:-apple-system,BlinkMacSystemFont,'
-            f"'Segoe UI',Roboto,sans-serif;font-size:15px;line-height:1.45;color:{_INK};"
-            f'word-break:break-word;"><strong>[{_esc(requirement.id)}]</strong> '
-            f"{_esc(requirement.text)}<br>"
-            f'<span style="color:{_MUTED};font-size:13px;">manifest line '
-            f"{requirement.source_line}: „{_esc(requirement.source_span)}”</span>{extra}</p>"
-        )
     inner = (
         _header(
             kicker="Form Validation",
@@ -457,9 +435,7 @@ def render_confirmation_html(
     {_p("Your request has been received and accepted.")}
     {_p(f"Request ID: <strong>{_esc(request_id)}</strong>")}
     {_p(f"{n_derivative} form(s) to validate, {n_net_new} form(s) to compose from supplied inputs ({n_jobs} job(s) total).", muted=True)}
-    {_h2(f"{len(requirements)} requirement(s) from your manifest")}
-    {"".join(cards)}
-    {_p("The reviewed documents will follow in a separate email once every job has finished running.", muted=True)}
+    {_p(f"{len(requirements)} requirement(s) were read from your manifest. The parsed requirements document and reviewed output will follow once every job has finished running.", muted=True)}
   </td>
 </tr>
 """

@@ -18,7 +18,7 @@ def test_mixed_mode_demo_exercises_complete_offline_pipeline(repo_root: Path) ->
     assert completed.returncode == 0, completed.stdout + completed.stderr
     assert "B9 e2e demo: PASS" in completed.stdout
     assert "RequestResult status: done" in completed.stdout
-    assert "jobs done: 2; attachments: 2" in completed.stdout
+    assert "jobs done: 2; attachments: 3" in completed.stdout
     assert "PASS  156/156 checks passed" in completed.stdout
     for requirement_id in (f"R-{index:02d}" for index in range(1, 11)):
         assert requirement_id in completed.stdout

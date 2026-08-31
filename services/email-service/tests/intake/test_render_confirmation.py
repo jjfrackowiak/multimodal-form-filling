@@ -18,8 +18,7 @@ from email_service.replies import render_confirmation
 from mff_contracts import RequestAccepted
 
 
-def test_every_requirement_id_and_text_round_trips() -> None:
-    """DoD #4: the fixture's ten requirements round-trip through the confirmation."""
+def test_confirmation_is_concise_and_defers_requirement_details() -> None:
     requirements = golden_requirements()
     assert len(requirements) == 10
 
@@ -33,40 +32,15 @@ def test_every_requirement_id_and_text_round_trips() -> None:
 
     out = render_confirmation(accepted, parsed)
 
-    for requirement in requirements:
-        assert requirement.id in out.body
-        assert requirement.text in out.body
-        assert out.html_body is not None
-        assert requirement.id in out.html_body
-        assert requirement.text in out.html_body
     assert out.html_body is not None
     assert "width=device-width" in out.html_body
-
-
-def test_source_span_and_line_are_quoted() -> None:
-    requirements = golden_requirements()
-    accepted = RequestAccepted(request_id="req-123", requirements=requirements)
-    parsed = parse_inbound(make_inbound(body=MANIFEST_TEXT))
-
-    out = render_confirmation(accepted, parsed)
-
-    r04 = next(r for r in requirements if r.id == "R-04")
-    assert r04.source_span in out.body
-    assert str(r04.source_line) in out.body
-    assert r04.constraint is not None
-    assert r04.constraint.value in out.body
-
-
-def test_ambiguity_note_is_surfaced() -> None:
-    requirements = golden_requirements()
-    accepted = RequestAccepted(request_id="req-123", requirements=requirements)
-    parsed = parse_inbound(make_inbound(body=MANIFEST_TEXT))
-
-    out = render_confirmation(accepted, parsed)
-
-    r01 = next(r for r in requirements if r.id == "R-01")
-    assert r01.ambiguity is not None
-    assert r01.ambiguity in out.body
+    assert "10 requirement(s)" in out.body
+    for requirement in requirements:
+        assert requirement.id not in out.body
+        assert requirement.text not in out.body
+        assert requirement.source_span not in out.body
+        assert requirement.id not in out.html_body
+        assert requirement.text not in out.html_body
 
 
 def test_job_counts_reflect_both_modes() -> None:

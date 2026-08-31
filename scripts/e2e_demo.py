@@ -403,8 +403,12 @@ async def run_demo(*, live_model: bool = False) -> DemoRun:
         jobs=records,
     )
     assert outbound is not None
-    assert len(outbound.attachments) == 2
-    assert all(requirement.id in outbound.body for requirement in manifest.requirements)
+    assert {attachment.filename for attachment in outbound.attachments} == {
+        "form_supplied.docx",
+        "WN-7020U.docx",
+        "parsed-requirements.docx",
+    }
+    assert all(requirement.text not in outbound.body for requirement in manifest.requirements)
     assert len(transport.sent) == 1
 
     derivative = next(record for record in records if record.form_id.endswith(".docx"))

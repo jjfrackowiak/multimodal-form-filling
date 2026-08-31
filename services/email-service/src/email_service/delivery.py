@@ -33,7 +33,10 @@ import asyncio
 import mimetypes
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
+from io import BytesIO
 from typing import TypeVar
+
+from docx import Document
 
 from mff_contracts import (
     BlobRef,
@@ -84,6 +87,8 @@ _VERDICT_LABELS = {
 }
 
 _SEPARATOR = "─" * 68
+_DOCX_CONTENT_TYPE = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+_REQUIREMENTS_FILENAME = "parsed-requirements.docx"
 
 
 # ---------------------------------------------------------------------------
@@ -187,6 +192,41 @@ def _render_requirement_list(requirements: Sequence[Requirement]) -> str:
     )
 
 
+def _requirements_attachment(requirements: Sequence[Requirement]) -> Attachment | None:
+    if not requirements:
+        return None
+    document = Document()
+    document.add_heading("Parsed requirements", level=0)
+    document.add_paragraph(
+        "Requirements extracted from the submitted manifest. The reviewed documents use these IDs."
+    )
+    table = document.add_table(rows=1, cols=4)
+    table.style = "Table Grid"
+    for cell, text in zip(table.rows[0].cells, ("ID", "Requirement", "Source", "Constraint")):
+        cell.text = text
+    for requirement in sorted(requirements, key=lambda r: (r.ordinal, r.text)):
+        constraint = requirement.constraint
+        cells = table.add_row().cells
+        cells[0].text = requirement.id
+        cells[1].text = requirement.text
+        cells[2].text = f'Line {requirement.source_line}: "{requirement.source_span}"'
+        cells[3].text = (
+            f"{constraint.kind} = {constraint.value}\n"
+            f'Line {constraint.source_line}: "{constraint.source_span}"'
+            if constraint is not None
+            else ""
+        )
+        if requirement.ambiguity:
+            document.add_paragraph(f"{requirement.id} note: {requirement.ambiguity}")
+    output = BytesIO()
+    document.save(output)
+    return Attachment(
+        filename=_REQUIREMENTS_FILENAME,
+        content_type=_DOCX_CONTENT_TYPE,
+        data=output.getvalue(),
+    )
+
+
 def _render_unverified_section(
     result: RequestResult, requirements_by_id: Mapping[str, Requirement]
 ) -> str | None:
@@ -270,8 +310,9 @@ def _group_by_mode(
 def _render_attachments_section(
     attached: Sequence[tuple[_LabeledDocument, Attachment]],
     linked: Sequence[tuple[_LabeledDocument, str]],
+    requirements_attachment: Attachment | None,
 ) -> str | None:
-    if not attached and not linked:
+    if not attached and not linked and requirements_attachment is None:
         return None
     # Only worth a per-mode heading when more than one mode is actually present —
     # a single-mode request (the common case, and the fixture's) stays flat.
@@ -299,6 +340,16 @@ def _render_attachments_section(
             for labeled, url in link_group:
                 name = labeled.form_id or "document"
                 lines.append(f"  - {name}: {url}")
+    if requirements_attachment is not None:
+        if lines:
+            lines.append("")
+        lines.extend(
+            [
+                "PARSED REQUIREMENTS",
+                "",
+                f"  - {requirements_attachment.filename}",
+            ]
+        )
     return "\n".join(lines)
 
 
@@ -308,6 +359,7 @@ def _render_body(
     comments: Sequence[ReviewComment],
     attached: Sequence[tuple[_LabeledDocument, Attachment]],
     linked: Sequence[tuple[_LabeledDocument, str]],
+    requirements_attachment: Attachment | None,
 ) -> str:
     requirements_by_id = {r.id: r for r in result.requirements}
     sections: list[str] = [
@@ -331,11 +383,9 @@ def _render_body(
     if failed_forms_section:
         sections += ["", failed_forms_section]
 
-    attachments_section = _render_attachments_section(attached, linked)
+    attachments_section = _render_attachments_section(attached, linked, requirements_attachment)
     if attachments_section:
         sections += ["", attachments_section]
-
-    sections += ["", _SEPARATOR, "", _render_requirement_list(result.requirements)]
 
     sections += [
         "",
@@ -409,7 +459,14 @@ async def deliver(
     attached, linked = await _resolve_documents(
         labeled, blobs=blobs, threshold_bytes=attach_threshold_bytes
     )
-    body = _render_body(result=result, comments=comments, attached=attached, linked=linked)
+    requirements_attachment = _requirements_attachment(result.requirements)
+    body = _render_body(
+        result=result,
+        comments=comments,
+        attached=attached,
+        linked=linked,
+        requirements_attachment=requirements_attachment,
+    )
     html_attached = [
         (attachment.filename, labeled.mode_label, labeled.ref.size_bytes)
         for labeled, attachment in attached
@@ -426,8 +483,12 @@ async def deliver(
             comments=comments,
             attached=html_attached,
             linked=html_linked,
+            requirements_filename=(
+                requirements_attachment.filename if requirements_attachment is not None else None
+            ),
         ),
-        attachments=[attachment for _, attachment in attached],
+        attachments=[attachment for _, attachment in attached]
+        + ([requirements_attachment] if requirements_attachment is not None else []),
         in_reply_to=request.original_message_id,
         references=[request.original_message_id],
         auto_submitted=True,

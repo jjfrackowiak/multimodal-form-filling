@@ -17,11 +17,14 @@ from __future__ import annotations
 
 import re
 from collections.abc import Awaitable, Callable, Sequence
+from io import BytesIO
 from pathlib import Path
 
 import pytest
+from docx import Document
 
 from email_service.delivery import deliver
+from email_service.transport import OutboundMessage
 from mff_contracts import (
     JobCursor,
     JobRecord,
@@ -43,18 +46,12 @@ def _find_fixture_root() -> Path:
 
 FIXTURE = _find_fixture_root()
 MANIFEST = (FIXTURE / "manifest.txt").read_text(encoding="utf-8")
-MANIFEST_LINES = MANIFEST.split("\n")
-
-# Same regexes as fixtures/fleet-vehicle-return/check_output.py's check_delivery().
-_CITE_RE = re.compile(r'line\s+(\d+):\s*"([^"]+)"')
-_REQ_LINE_RE = re.compile(r"^\s*(R-\d{2})\s{2,}(.+)$", re.M)
 _MARKER = "PARSED REQUIREMENTS"
 
 
 def _check_delivery_shape(
     body: str,
     *,
-    requirements: Sequence[Requirement],
     n_pass: int,
     n_fail: int,
     n_unverified: int,
@@ -63,34 +60,6 @@ def _check_delivery_shape(
     """Structural checks mirroring `check_delivery()`. Returns violation labels;
     empty means the body has the golden shape."""
     violations: list[str] = []
-
-    if _MARKER not in body:
-        violations.append("delivery has no requirement-list section")
-        section = ""
-    else:
-        section = body.split(_MARKER, 1)[-1]
-
-    listed = {m.group(1) for m in _REQ_LINE_RE.finditer(section)}
-    for requirement in requirements:
-        if requirement.id not in listed:
-            violations.append(f"delivery requirement list is missing {requirement.id}")
-            continue
-        entry_match = re.search(
-            rf"{requirement.id}\s{{2,}}.+?\n(.*?)(?=\n\s*R-\d{{2}}\s{{2,}}|\Z)", section, re.S
-        )
-        if not (entry_match and _CITE_RE.search(entry_match.group(1))):
-            violations.append(f"delivery lists {requirement.id} without its manifest span")
-
-    cited = _CITE_RE.findall(body)
-    if not cited:
-        violations.append("delivery quotes no manifest spans")
-    for line_no, quote in cited:
-        if quote not in MANIFEST:
-            violations.append(f"delivery quote is not verbatim: {quote[:40]!r}")
-        idx = int(line_no) - 1
-        ok = 0 <= idx < len(MANIFEST_LINES) and quote in MANIFEST_LINES[idx]
-        if not ok:
-            violations.append(f"delivery cites line {line_no} but {quote[:30]!r} is not there")
 
     # A naive `str(n) in body` substring check (what check_delivery() in
     # check_output.py does) is fooled by a mutated count that still happens to appear
@@ -117,14 +86,16 @@ def _check_delivery_shape(
 # Building the scenario from fixture data
 # ---------------------------------------------------------------------------
 
-GoldenMessageBuilder = Callable[[], Awaitable[tuple[str, list[Requirement], list[ReviewComment]]]]
+GoldenMessageBuilder = Callable[
+    [], Awaitable[tuple[OutboundMessage, list[Requirement], list[ReviewComment]]]
+]
 
 
 @pytest.fixture
 def golden_message(
     fixture_requirements: list[Requirement], fixture_comments: list[ReviewComment]
 ) -> GoldenMessageBuilder:
-    async def _build() -> tuple[str, list[Requirement], list[ReviewComment]]:
+    async def _build() -> tuple[OutboundMessage, list[Requirement], list[ReviewComment]]:
         blobs = InMemoryBlobStore()
         blob_ref = await blobs.put(
             b"pretend .docx bytes",
@@ -162,16 +133,15 @@ def golden_message(
             failed_forms=[],
         )
         message = await deliver(result, request, blobs=blobs, comments=fixture_comments, jobs=[job])
-        return message.body, fixture_requirements, fixture_comments
+        return message, fixture_requirements, fixture_comments
 
     return _build
 
 
 async def test_delivery_matches_the_golden_shape(golden_message: GoldenMessageBuilder) -> None:
-    body, requirements, _comments = await golden_message()
+    message, _requirements, _comments = await golden_message()
     violations = _check_delivery_shape(
-        body,
-        requirements=requirements,
+        message.body,
         n_pass=8,
         n_fail=2,
         n_unverified=0,
@@ -183,7 +153,8 @@ async def test_delivery_matches_the_golden_shape(golden_message: GoldenMessageBu
 async def test_delivery_names_both_failing_requirements_with_justification(
     golden_message: GoldenMessageBuilder,
 ) -> None:
-    body, _requirements, _comments = await golden_message()
+    message, _requirements, _comments = await golden_message()
+    body = message.body
     assert "[R-01]" in body
     assert "[R-04]" in body
     assert "Two engine-bay photographs were required" in body
@@ -195,8 +166,20 @@ async def test_delivery_names_both_failing_requirements_with_justification(
 async def test_delivery_attaches_the_single_reviewed_document(
     golden_message: GoldenMessageBuilder,
 ) -> None:
-    body, _requirements, _comments = await golden_message()
-    assert "form_supplied.docx" in body
+    message, requirements, _comments = await golden_message()
+    attachments = {attachment.filename: attachment for attachment in message.attachments}
+    assert "form_supplied.docx" in attachments
+    requirement_document = Document(BytesIO(attachments["parsed-requirements.docx"].data))
+    text = "\n".join(
+        [paragraph.text for paragraph in requirement_document.paragraphs]
+        + [cell.text for row in requirement_document.tables[0].rows for cell in row.cells]
+    )
+    for requirement in requirements:
+        assert requirement.id in text
+        assert requirement.text in text
+        assert requirement.source_span in text
+    assert _MARKER in message.body
+    assert requirements[0].text not in message.body
 
 
 # ---------------------------------------------------------------------------
@@ -204,52 +187,14 @@ async def test_delivery_attaches_the_single_reviewed_document(
 # ---------------------------------------------------------------------------
 
 
-async def test_mutation_dropping_a_requirement_from_the_list_is_caught(
-    golden_message: GoldenMessageBuilder,
-) -> None:
-    body, requirements, _comments = await golden_message()
-    marker = _MARKER
-    head, section = body.split(marker, 1)
-    # Remove R-07's entire entry from the requirement-list section.
-    mutated_section = re.sub(
-        r"\n\n  R-07  .+?(?=\n\n  R-\d{2}  |\Z)", "", "\n" + section, flags=re.S
-    )
-    mutated = head + marker + mutated_section
-    violations = _check_delivery_shape(
-        mutated,
-        requirements=requirements,
-        n_pass=8,
-        n_fail=2,
-        n_unverified=0,
-        failing_ids=["R-01", "R-04"],
-    )
-    assert any("missing R-07" in v for v in violations)
-
-
-async def test_mutation_paraphrasing_a_quoted_span_is_caught(
-    golden_message: GoldenMessageBuilder,
-) -> None:
-    body, requirements, _comments = await golden_message()
-    mutated = body.replace('"4x seats"', '"four seats please"')
-    violations = _check_delivery_shape(
-        mutated,
-        requirements=requirements,
-        n_pass=8,
-        n_fail=2,
-        n_unverified=0,
-        failing_ids=["R-01", "R-04"],
-    )
-    assert any("not verbatim" in v for v in violations)
-
-
 async def test_mutation_wrong_summary_counts_is_caught(
     golden_message: GoldenMessageBuilder,
 ) -> None:
-    body, requirements, _comments = await golden_message()
+    message, _requirements, _comments = await golden_message()
+    body = message.body
     mutated = body.replace("8 passed, 2 failed", "9 passed, 1 failed")
     violations = _check_delivery_shape(
         mutated,
-        requirements=requirements,
         n_pass=8,
         n_fail=2,
         n_unverified=0,
