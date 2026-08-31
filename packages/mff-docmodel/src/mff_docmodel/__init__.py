@@ -11,10 +11,13 @@ from __future__ import annotations
 from .comments import attach_comments
 from .compile import compile_derivative, compile_netnew
 from .parse import parse_docx
+from .scaffold import SCAFFOLD_SECTIONS, netnew_scaffold
 
 __all__ = [
+    "SCAFFOLD_SECTIONS",
     "attach_comments",
     "compile_derivative",
     "compile_netnew",
+    "netnew_scaffold",
     "parse_docx",
 ]

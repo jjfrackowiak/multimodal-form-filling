@@ -89,6 +89,43 @@ def test_entry_images_are_noted_without_needing_bytes() -> None:
     assert "abc123def456"[:12] in paragraph.text
 
 
+def test_compile_uses_display_title_and_embeds_image_bytes() -> None:
+    from PIL import Image
+
+    buf = io.BytesIO()
+    Image.new("RGB", (8, 8), (10, 20, 30)).save(buf, format="JPEG")
+    jpeg = buf.getvalue()
+    image = BlobRef(
+        uri="gs://bucket/image/abc",
+        content_type="image/jpeg",
+        size_bytes=len(jpeg),
+        sha256="abc123def456",
+    )
+    draft = FormDraft(
+        sections=[
+            Section(
+                id="s1",
+                title="1. Under the bonnet",
+                entries=[
+                    Entry(id="e1", order="a0", value="Engine bay", images=[image], set_by="R-01")
+                ],
+            )
+        ]
+    )
+    compiled, _map = compile_netnew(
+        NetNewArtifact(job_id="job-9", form_id="job-9", draft=draft),
+        title="Vehicle return report",
+        image_bytes={"abc123def456": jpeg},
+        extra_images=[("spare.jpg", jpeg)],
+    )
+    document = Document(io.BytesIO(compiled))
+    texts = [p.text for p in document.paragraphs]
+    assert "Vehicle return report" in texts
+    assert "1. Under the bonnet" in texts
+    assert "Photographs" in texts
+    assert document.inline_shapes
+
+
 def test_empty_draft_still_produces_an_openable_document() -> None:
     compiled_bytes, render_map = compile_netnew(
         NetNewArtifact(job_id="j-1", form_id="empty", draft=FormDraft())

@@ -9,20 +9,19 @@ from editor_service.llm.deps import EditorDeps
 from editor_service.llm.output import SliceTurnOutput
 from editor_service.llm.run import run_slice
 from mff_contracts import (
-    Entry,
     FormDraft,
     ImageAnalysis,
     Mode,
     NetNewArtifact,
     Requirement,
-    Section,
     SliceReport,
     SliceRequest,
 )
+from mff_docmodel import SCAFFOLD_SECTIONS, netnew_scaffold
 
 from .tools import make_tools
 
-__all__ = ["NET_NEW_INSTRUCTION", "compose_netnew"]
+__all__ = ["NET_NEW_INSTRUCTION", "SCAFFOLD_SECTIONS", "compose_netnew"]
 
 
 NET_NEW_INSTRUCTION = """
@@ -46,31 +45,6 @@ constraints are satisfied; it is a shortfall only when the count is too low or a
 constraint fails. Do not mark a requirement short merely because its content slot starts
 empty: populate that slot from the client evidence with `set_field` before commenting.
 """.strip()
-
-SCAFFOLD_SECTIONS: tuple[tuple[str, str], ...] = (
-    ("section-01", "1. Under the bonnet"),
-    ("section-02", "2. Seats"),
-    ("section-03", "3. Vehicle diagonals"),
-    ("section-04", "4. Headliner"),
-    ("section-05", "5. Windscreen"),
-    ("section-06", "6. Tyre tread"),
-    ("section-07", "7. Boot and equipment"),
-    ("section-08", "8. Gauges"),
-    ("section-09", "9. Notes"),
-)
-
-_REQUIREMENT_SECTIONS = (
-    "section-01",
-    "section-02",
-    "section-03",
-    "section-04",
-    "section-05",
-    "section-05",
-    "section-06",
-    "section-07",
-    "section-07",
-    "section-08",
-)
 
 
 async def compose_netnew(
@@ -102,29 +76,23 @@ async def compose_netnew(
 def _ensure_scaffold(
     artifact: NetNewArtifact, requirements: list[Requirement] | None = None
 ) -> None:
-    existing = {section.id: section for section in artifact.draft.sections}
+    seeded = netnew_scaffold(requirements)
+    existing_by_section = {section.id: section for section in artifact.draft.sections}
+    existing_entries = {
+        entry.id: entry for section in artifact.draft.sections for entry in section.entries
+    }
+    for section in seeded.sections:
+        known = {entry.id for entry in section.entries}
+        merged = [existing_entries.get(entry.id, entry) for entry in section.entries]
+        extras = [
+            entry
+            for entry in existing_by_section.get(section.id, section).entries
+            if entry.id not in known
+        ]
+        section.entries = merged + extras
     artifact.draft = FormDraft(
-        schema_version=artifact.draft.schema_version,
-        sections=[
-            _scaffold_section(existing.get(section_id), section_id, title)
-            for section_id, title in SCAFFOLD_SECTIONS
-        ],
+        schema_version=artifact.draft.schema_version, sections=seeded.sections
     )
-    sections = {section.id: section for section in artifact.draft.sections}
-    for index, requirement in enumerate(requirements or []):
-        entry_id = f"entry-{requirement.id}"
-        if any(entry.id == entry_id for section in sections.values() for entry in section.entries):
-            continue
-        section_id = _REQUIREMENT_SECTIONS[min(index, len(_REQUIREMENT_SECTIONS) - 1)]
-        sections[section_id].entries.append(
-            Entry(id=entry_id, order=f"slot-{index + 1:02d}", set_by=requirement.id)
-        )
-
-
-def _scaffold_section(section: Section | None, section_id: str, title: str) -> Section:
-    if section is None:
-        return Section(id=section_id, title=title)
-    return section.model_copy(update={"title": title})
 
 
 def _contextual_instruction(

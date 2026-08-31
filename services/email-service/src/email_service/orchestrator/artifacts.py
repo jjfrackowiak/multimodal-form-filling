@@ -5,28 +5,15 @@ Derivative: a read-only parse of the client's document (`mff_docmodel.parse_docx
 Nothing here mutates the source bytes — `source` travels into the artifact unchanged,
 exactly as req 14 (the client's document is never modified) requires.
 
-Net-new: `DraftOp(kind="append")` targets an existing `Section.id` (`mff_applier`
-rejects an append whose section is not already in the draft), and nothing downstream
-of this module mints one — no `DraftOp` kind creates a section. So a fresh net-new
-artifact is seeded with exactly one section up front, scoped to every slice, which is
-what makes the first slice's first append representable at all. This is a genuine
-ambiguity in the brief (see the PR description): section *structure* for a composed
-document is not modelled anywhere in `mff-contracts`, so "one section per job" is this
-branch's own, deliberately minimal, choice rather than something the contract dictates.
+Net-new: `DraftOp(kind="append"/"set")` targets an existing `Section.id` (`mff_applier`
+rejects an op whose section is not already in the draft). The editor's composer scaffolds
+one section per report heading plus one entry slot per requirement. This module must seed
+the *same* draft, or the orchestrator compiles the empty one-section stub and Word gets a
+job-id title with no body.
 
-`Artifact.form_id` is set to `job.job_id` here, not `job.form_id` — see the PR
-description ("mff-store keys `ArtifactRepository` by `form_id`, not `job_id`"). The
-`JobCursor`/`ArtifactRepository` protocol this branch is handed (`load(job_id)`) is
-only correct, per `InMemoryArtifactRepository`'s own docstring, when the artifact's
-`form_id` and the caller's `job_id` are the same string. Two different client forms
-can legitimately share a filename or folder name across two jobs in the same request
-(three derivative jobs literally do, in the mixed-request test), so `job.form_id`
-cannot safely be the storage key; `job.job_id` is the one field this system already
-guarantees is unique per job. The human-readable label (`job.form_id`) still reaches
-`JobRecord.form_id` and `CompiledForm.form_id` untouched — the one place this leaks is
-`compile_netnew`'s document heading, which will show a job id instead of the client's
-own form label. That is a real, minor regression, and it belongs to the store's gap,
-not to something fixable from this branch's owned directories.
+`Artifact.form_id` is set to `job.job_id` here, not `job.form_id` — mff-store keys
+`ArtifactRepository` by `form_id`. The human-readable label still lives on `JobRecord`
+and is passed to `compile_netnew` as the document title.
 """
 
 from __future__ import annotations
@@ -35,17 +22,15 @@ from mff_contracts import (
     Artifact,
     BlobStore,
     DerivativeArtifact,
-    FormDraft,
     JobRequest,
     Mode,
     NetNewArtifact,
-    Section,
 )
-from mff_docmodel import parse_docx
+from mff_docmodel import SCAFFOLD_SECTIONS, netnew_scaffold, parse_docx
 
 __all__ = ["NET_NEW_ROOT_SECTION_ID", "build_initial_artifact", "scope_ids_for"]
 
-NET_NEW_ROOT_SECTION_ID = "draft"
+NET_NEW_ROOT_SECTION_ID = SCAFFOLD_SECTIONS[0][0]
 
 
 async def build_initial_artifact(job: JobRequest, blob_store: BlobStore) -> Artifact:
@@ -58,9 +43,11 @@ async def build_initial_artifact(job: JobRequest, blob_store: BlobStore) -> Arti
         )
 
     assert job.inputs is not None  # JobRequest's own validator guarantees this
-    root = Section(id=NET_NEW_ROOT_SECTION_ID, title=job.form_id, entries=[])
     return NetNewArtifact(
-        job_id=job.job_id, form_id=job.job_id, draft=FormDraft(sections=[root]), comments=[]
+        job_id=job.job_id,
+        form_id=job.job_id,
+        draft=netnew_scaffold(job.requirements),
+        comments=[],
     )
 
 

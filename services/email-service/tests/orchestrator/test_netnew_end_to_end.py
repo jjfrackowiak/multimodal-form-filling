@@ -7,7 +7,6 @@ from __future__ import annotations
 
 from factories import load_requirements, make_deps, make_netnew_job
 
-from email_service.orchestrator.artifacts import NET_NEW_ROOT_SECTION_ID
 from email_service.orchestrator.job import run_job
 from email_service.runner.fake import FakeSliceRunner
 from mff_contracts import Anchor, DraftOp, NetNewArtifact, ReviewComment, SliceReport, SliceRequest
@@ -28,9 +27,9 @@ async def test_net_new_job_composes_entries_and_completes() -> None:
         ]
         ops = [
             DraftOp(
-                kind="append",
+                kind="set",
                 requirement_id=r.id,
-                section_id=NET_NEW_ROOT_SECTION_ID,
+                entry_id=f"entry-{r.id}",
                 value=f"value for {r.id}",
             )
             for r in request.requirements
@@ -53,6 +52,6 @@ async def test_net_new_job_composes_entries_and_completes() -> None:
     assert isinstance(artifact, NetNewArtifact)
     assert cursor.slice_index == 1
     assert version == 2
-    entries = artifact.draft.sections[0].entries
-    assert len(entries) == 10
-    assert {e.set_by for e in entries} == {r.id for r in requirements}
+    entries = [e for s in artifact.draft.sections for e in s.entries]
+    assert {e.set_by for e in entries if e.value} == {r.id for r in requirements}
+    assert {e.value for e in entries if e.value} == {f"value for {r.id}" for r in requirements}
