@@ -52,3 +52,25 @@ async def test_http_error_includes_status_and_body() -> None:
             [ImageRef(uri="gs://b/a.jpg")], [RequirementSpec(id="R-01", text="x")]
         )
     assert "upstream vertex" in str(ei.value)
+
+
+async def test_retries_transient_gateway_failure() -> None:
+    calls = 0
+
+    def handler(_request: httpx.Request) -> httpx.Response:
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            return httpx.Response(502, text="temporary upstream failure")
+        return httpx.Response(200, json={"images": [{"file": "a.jpg", "hits": []}]})
+
+    client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    tool = HttpVisionTool(
+        "http://cv:8080", client=client, max_retries=1, retry_delay_seconds=0
+    )
+    out = await tool.build_inventory(
+        [ImageRef(uri="gs://b/a.jpg")], [RequirementSpec(id="R-01", text="x")]
+    )
+
+    assert calls == 2
+    assert out[0].file == "a.jpg"
