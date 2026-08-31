@@ -33,8 +33,8 @@ class HttpVisionTool:
         client: httpx.AsyncClient | None = None,
         timeout: float = 300.0,
         authenticated: bool | None = None,
-        max_retries: int = 2,
-        retry_delay_seconds: float = 1.0,
+        max_retries: int = 4,
+        retry_delay_seconds: float = 5.0,
     ) -> None:
         # A whole job's images in one call, so the timeout is generous by design.
         self._base = base_url.rstrip("/")
