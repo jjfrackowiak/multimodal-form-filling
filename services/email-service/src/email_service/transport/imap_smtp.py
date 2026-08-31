@@ -141,7 +141,9 @@ class ImapSmtpTransport:
 
             found: dict[str, InboundMessage] = {}
             for num in _sequence_numbers(data):
-                typ, raw = imap.fetch(num, "(RFC822)")
+                # RFC822 marks a Gmail message seen as a side effect. A restart during
+                # orchestration must leave it eligible for a fresh poll and recovery.
+                typ, raw = imap.fetch(num, "(BODY.PEEK[])")
                 if typ != "OK" or not raw:
                     continue
                 first = raw[0]
