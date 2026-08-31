@@ -48,15 +48,17 @@ class PollerDeps:
 class Poller:
     def __init__(self, deps: PollerDeps) -> None:
         self._deps = deps
+        self._busy = asyncio.Lock()
 
     async def process(self) -> None:
-        unseen = await self._deps.transport.fetch_unseen()
-        for inbound in unseen:
-            try:
-                await self._handle(inbound)
-            except Exception:
-                log.exception("failed on message %s", inbound.message_id)
-            await self._deps.transport.mark_seen(inbound.message_id)
+        async with self._busy:
+            unseen = await self._deps.transport.fetch_unseen()
+            for inbound in unseen:
+                try:
+                    await self._handle(inbound)
+                except Exception:
+                    log.exception("failed on message %s", inbound.message_id)
+                await self._deps.transport.mark_seen(inbound.message_id)
 
     async def run_forever(self) -> None:
         while True:
