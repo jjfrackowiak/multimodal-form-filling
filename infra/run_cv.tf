@@ -12,7 +12,7 @@ resource "google_cloud_run_v2_service" "cv" {
 
   template {
     service_account                  = google_service_account.cv.email
-    timeout                          = "300s"
+    timeout                          = "900s"
     max_instance_request_concurrency = 4
 
     scaling {
@@ -40,7 +40,7 @@ resource "google_cloud_run_v2_service" "cv" {
       }
       env {
         name  = "CV_MAX_WORKERS"
-        value = "12"
+        value = "3"
       }
       env {
         name  = "CV_MAX_IMAGES"

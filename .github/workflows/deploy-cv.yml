@@ -65,12 +65,9 @@ jobs:
           TF_INPUT: "false"
         run: |
           terraform init
-          EDITOR_IMG=$(terraform output -raw editor_image 2>/dev/null || true)
-          EMAIL_IMG=$(terraform output -raw email_image 2>/dev/null || true)
           terraform apply -auto-approve \
-            -var="cv_image=${{ steps.image.outputs.img }}" \
-            -var="editor_image=${EDITOR_IMG}" \
-            -var="email_image=${EMAIL_IMG}"
+            -target=google_cloud_run_v2_service.cv \
+            -var="cv_image=${{ steps.image.outputs.img }}"
           echo "url=$(terraform output -raw cv_url)" >> "$GITHUB_OUTPUT"
 
       - name: GET /health

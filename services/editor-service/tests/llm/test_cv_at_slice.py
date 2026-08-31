@@ -67,6 +67,30 @@ async def test_inventory_for_calls_vision_once_per_job() -> None:
     assert first[0].file == "a.jpg"
 
 
+async def test_inventory_for_uses_original_filename_not_blob_basename() -> None:
+    vision = _FakeVision()
+    digest = "a" * 64
+    req = golden_slice_request().model_copy(
+        update={
+            "images": [
+                JobImage(
+                    blob=BlobRef(
+                        uri=f"gs://b/image/{digest}",
+                        content_type="image/jpeg",
+                        size_bytes=1,
+                        sha256=digest,
+                    ),
+                    original_filename="IMG_seat.jpg",
+                    source="attachment",
+                )
+            ]
+        }
+    )
+    out = await inventory_for(req, vision=vision)
+    assert out[0].file == "IMG_seat.jpg"
+    assert out[0].uri == f"gs://b/image/{digest}"
+
+
 def test_wired_runner_is_the_default() -> None:
     assert get_slice_runner().__name__ == "run_wired_slice"
 

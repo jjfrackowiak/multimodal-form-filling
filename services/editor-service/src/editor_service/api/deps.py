@@ -60,6 +60,11 @@ async def inventory_for(req: SliceRequest, vision: VisionTool | None = None) -> 
         raise VisionUnavailable("CV_URL is not set")
     checklist = req.checklist or req.requirements
     inventory = await tool.build_inventory(refs, _specs(checklist))
+    by_uri = {image.blob.uri: image.original_filename for image in req.images if image.blob.uri}
+    inventory = [
+        row.model_copy(update={"file": by_uri[row.uri]}) if row.uri in by_uri else row
+        for row in inventory
+    ]
     _inventory_by_job[req.job_id] = inventory
     return inventory
 

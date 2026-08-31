@@ -56,6 +56,10 @@ jobs:
           terraform init
           CV_IMG=$(terraform output -raw cv_image)
           EDITOR_IMG=$(terraform output -raw editor_image)
+          if [ -z "$CV_IMG" ] || [ -z "$EDITOR_IMG" ]; then
+            echo "refusing apply: cv_image/editor_image missing from state" >&2
+            exit 1
+          fi
           terraform apply -auto-approve \
             -var="cv_image=${CV_IMG}" \
             -var="editor_image=${EDITOR_IMG}" \

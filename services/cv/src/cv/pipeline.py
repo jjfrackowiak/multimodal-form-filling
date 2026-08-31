@@ -15,7 +15,7 @@ from cv.vertex import client as vertex_client
 from cv.vertex import generate_structured
 
 log = logging.getLogger("cv")
-MAX_WORKERS = int(os.environ.get("CV_MAX_WORKERS", "12"))
+MAX_WORKERS = int(os.environ.get("CV_MAX_WORKERS", "3"))
 
 
 def _label_one(

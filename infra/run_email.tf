@@ -4,7 +4,7 @@ resource "google_cloud_run_v2_service" "email" {
   location = var.region
   ingress  = "INGRESS_TRAFFIC_ALL"
 
-  deletion_protection = false
+  deletion_protection = true
 
   lifecycle {
     ignore_changes = [scaling]
@@ -97,6 +97,10 @@ resource "google_cloud_run_v2_service" "email" {
       env {
         name  = "ALLOWED_SENDERS"
         value = var.allowed_senders
+      }
+      env {
+        name  = "MAX_CONCURRENT_JOBS"
+        value = "1"
       }
 
       ports {

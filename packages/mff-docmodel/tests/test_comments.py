@@ -172,3 +172,18 @@ def test_fail_verdict_carries_its_suggestion(derivative_docx_bytes: bytes) -> No
     assert "FAIL" in text
     assert "Suggestion:" in text
     assert "Supply a second engine-bay photograph." in text
+
+    from lxml import etree
+    from docx.oxml.ns import qn
+    import zipfile
+
+    root = etree.fromstring(zipfile.ZipFile(io.BytesIO(out_bytes)).read("word/comments.xml"))
+    comment_el = root.find(qn("w:comment"))
+    assert comment_el is not None
+    paras = [
+        "".join(t.text or "" for t in p.findall(".//" + qn("w:t")))
+        for p in comment_el.findall(qn("w:p"))
+    ]
+    assert paras[0] == "[R-01] FAIL"
+    assert paras[2].startswith("Justification:")
+    assert any(p.startswith("Suggestion:") for p in paras)

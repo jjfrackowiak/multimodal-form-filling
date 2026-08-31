@@ -17,6 +17,9 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from docx.oxml.ns import qn
+from lxml import etree
+
 from mff_contracts import RenderMap, ReviewComment
 
 from ._io import dump_document, load_document
@@ -83,6 +86,9 @@ def attach_comments(
             author=author,
             initials=_initials(author),
         )
+        # python-docx writes one <w:p>; newlines in `text` never become Word breaks.
+        last_comment = list(document.comments)[-1]
+        _write_comment_paragraphs(last_comment._element, _render_lines(comment))
         attached += 1
         if used_fallback:
             unanchored.append(comment.requirement_id)
@@ -123,12 +129,35 @@ def _fallback_run_pair(document: DocxDocument) -> _RunPair | None:
     return None
 
 
-def _render_text(comment: ReviewComment) -> str:
+_XML_SPACE = "{http://www.w3.org/XML/1998/namespace}space"
+
+
+def _render_lines(comment: ReviewComment) -> list[str]:
     label = _VERDICT_LABELS.get(comment.verdict, comment.verdict.upper())
     lines = [f"[{comment.requirement_id}] {label}", "", f"Justification: {comment.justification}"]
     if comment.suggestion:
         lines += ["", f"Suggestion: {comment.suggestion}"]
-    return "\n".join(lines)
+    return lines
+
+
+def _render_text(comment: ReviewComment) -> str:
+    return "\n".join(_render_lines(comment))
+
+
+def _write_comment_paragraphs(comment_elm: etree._Element, lines: list[str]) -> None:
+    """One <w:p> per line so Word (and our w:t dump) does not glue FAIL to Justification."""
+    for child in list(comment_elm):
+        if child.tag == qn("w:p"):
+            comment_elm.remove(child)
+    for line in lines:
+        paragraph = etree.SubElement(comment_elm, qn("w:p"))
+        if not line:
+            continue
+        run = etree.SubElement(paragraph, qn("w:r"))
+        text_el = etree.SubElement(run, qn("w:t"))
+        if line[:1].isspace() or line[-1:].isspace():
+            text_el.set(_XML_SPACE, "preserve")
+        text_el.text = line
 
 
 def _initials(author: str) -> str:

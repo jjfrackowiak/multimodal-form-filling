@@ -64,11 +64,10 @@ jobs:
         run: |
           terraform init
           CV_IMG=$(terraform output -raw cv_image)
-          EMAIL_IMG=$(terraform output -raw email_image 2>/dev/null || true)
           terraform apply -auto-approve \
+            -target=google_cloud_run_v2_service.editor[0] \
             -var="cv_image=${CV_IMG}" \
-            -var="editor_image=${{ steps.image.outputs.img }}" \
-            -var="email_image=${EMAIL_IMG}"
+            -var="editor_image=${{ steps.image.outputs.img }}"
           echo "url=$(terraform output -raw editor_url)" >> "$GITHUB_OUTPUT"
 
       - name: GET /healthz

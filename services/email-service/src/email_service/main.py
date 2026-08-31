@@ -45,6 +45,10 @@ def _build_runtime() -> tuple[OrchestratorDeps, RequestRepository]:
     if not editor_url:
         raise RuntimeError("EDITOR_SERVICE_URL is not set")
     runner = HttpSliceRunner(editor_url)
+    try:
+        max_jobs = max(1, int(os.environ.get("MAX_CONCURRENT_JOBS", "1")))
+    except ValueError:
+        max_jobs = 1
 
     if os.environ.get("MFF_IN_MEMORY", "").lower() in {"1", "true", "yes"}:
         return (
@@ -53,6 +57,7 @@ def _build_runtime() -> tuple[OrchestratorDeps, RequestRepository]:
                 job_repo=InMemoryJobRepository(),
                 blob_store=InMemoryBlobStore(),
                 runner=runner,
+                max_concurrent_jobs=max_jobs,
             ),
             InMemoryRequestRepository(),
         )
@@ -69,6 +74,7 @@ def _build_runtime() -> tuple[OrchestratorDeps, RequestRepository]:
             job_repo=FirestoreJobRepository(fs),
             blob_store=GcsBlobStore(gcs, bucket=bucket),
             runner=runner,
+            max_concurrent_jobs=max_jobs,
         ),
         FirestoreRequestRepository(fs),
     )
