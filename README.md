@@ -94,3 +94,15 @@ Live-model evals (the same pipeline against real Gemini, or a real Gmail inbox
 end to end) are intentionally separate and manual — see
 [`docs/briefs/CONTEXT.md`](docs/briefs/CONTEXT.md) — so nothing above needs a
 credential to reproduce.
+
+### Test the live deployed service by email
+
+The `testing@devpost.com` and `cloudhackathons@google.com` addresses are on the
+live service's sender allowlist, so a judge can exercise the real, deployed
+pipeline — real Gmail, real Cloud Run, real Firestore — with nothing to
+install:
+
+1. Send an email to **`demojulai@gmail.com`**.
+2. Paste [`demo-examples/manifest-email-body.txt`](demo-examples/manifest-email-body.txt) as the message body (never as an attachment).
+3. Attach one or both of [`demo-examples/derivative.zip`](demo-examples/derivative.zip) and [`demo-examples/net-new.zip`](demo-examples/net-new.zip) — see [`demo-examples/README.md`](demo-examples/README.md) for what each contains.
+4. A confirmation reply lands within seconds; the reviewed/composed documents follow in the same thread, typically within a couple of minutes.
