@@ -60,13 +60,10 @@ COPY --from=builder /app/.venv /app/.venv
 
 USER app
 
-EXPOSE 8000
+ENV PORT=8080
+EXPOSE 8080
 
-HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-  CMD python -c "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8000/healthz').status==200 else 1)"
+HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \
+  CMD python -c "import os,urllib.request,sys; p=os.environ.get('PORT','8080'); sys.exit(0 if urllib.request.urlopen(f'http://127.0.0.1:{p}/healthz').status==200 else 1)"
 
-# editor_service.main:app + POST /slices:run + GET /healthz land with B8, which is also
-# where fastapi/uvicorn become this service's dependencies. Until then the image builds
-# (the venv today has only mff-contracts in it) but this CMD has nothing to exec — see
-# docker/README.md.
-CMD ["uvicorn", "editor_service.main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["sh", "-c", "exec uvicorn editor_service.main:app --host 0.0.0.0 --port ${PORT}"]

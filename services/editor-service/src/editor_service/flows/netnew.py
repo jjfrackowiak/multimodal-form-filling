@@ -48,15 +48,15 @@ empty: populate that slot from the client evidence with `set_field` before comme
 """.strip()
 
 SCAFFOLD_SECTIONS: tuple[tuple[str, str], ...] = (
-    ("section-01", "1. Pod maską"),
-    ("section-02", "2. Fotele"),
-    ("section-03", "3. Przekątne pojazdu"),
-    ("section-04", "4. Podsufitka"),
-    ("section-05", "5. Przednia szyba"),
-    ("section-06", "6. Bieżnik opony"),
-    ("section-07", "7. Bagażnik i wyposażenie"),
-    ("section-08", "8. Zegary"),
-    ("section-09", "9. Uwagi"),
+    ("section-01", "1. Under the bonnet"),
+    ("section-02", "2. Seats"),
+    ("section-03", "3. Vehicle diagonals"),
+    ("section-04", "4. Headliner"),
+    ("section-05", "5. Windscreen"),
+    ("section-06", "6. Tyre tread"),
+    ("section-07", "7. Boot and equipment"),
+    ("section-08", "8. Gauges"),
+    ("section-09", "9. Notes"),
 )
 
 _REQUIREMENT_SECTIONS = (

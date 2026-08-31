@@ -10,6 +10,7 @@ from __future__ import annotations
 from pydantic import BaseModel, Field
 
 from .artifacts import Artifact
+from .blobs import JobImage
 from .docmodel import DraftOp
 from .jobs import Mode
 from .requirements import Requirement
@@ -25,6 +26,12 @@ class SliceRequest(BaseModel):
     requirements: list[Requirement]
     artifact: Artifact  # CURRENT: includes prior slices' committed work
     scope_ids: list[str] = Field(default_factory=list)  # node ids or section ids
+    # Full job checklist + photos. The editor calls CV at slice time against these,
+    # not against the slice's `requirements` subset (a seat photo in slice 2 must
+    # still be labelled R-02).
+    checklist: list[Requirement] = Field(default_factory=list)
+    images: list[JobImage] = Field(default_factory=list)
+    client_texts: dict[str, str] = Field(default_factory=dict)  # net-new evidence
 
 
 class SliceReport(BaseModel):

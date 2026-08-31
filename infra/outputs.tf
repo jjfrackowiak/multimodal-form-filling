@@ -30,6 +30,26 @@ output "editor_runtime_sa" {
   value = google_service_account.editor.email
 }
 
+output "email_runtime_sa" {
+  value = google_service_account.email.email
+}
+
+output "editor_url" {
+  value = length(google_cloud_run_v2_service.editor) > 0 ? google_cloud_run_v2_service.editor[0].uri : ""
+}
+
+output "email_url" {
+  value = length(google_cloud_run_v2_service.email) > 0 ? google_cloud_run_v2_service.email[0].uri : ""
+}
+
+output "editor_image" {
+  value = var.editor_image
+}
+
+output "email_image" {
+  value = var.email_image
+}
+
 output "cv_url" {
   value = google_cloud_run_v2_service.cv.uri
 }

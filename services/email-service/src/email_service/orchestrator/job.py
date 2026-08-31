@@ -72,6 +72,9 @@ async def run_job(job: JobRequest, deps: OrchestratorDeps) -> JobRecord:
                 requirements=requirements,
                 artifact=artifact,
                 scope_ids=scope_ids,
+                checklist=job.requirements,
+                images=job.images,
+                client_texts=job.inputs.texts if job.inputs is not None else {},
             )
         )
         # Accepted as-is — no retry loop. See the module docstring.

@@ -92,8 +92,8 @@ def build_outbound_email(message: OutboundMessage, *, mail_from: str) -> EmailMe
     """
     email_msg = EmailMessage()
     email_msg["From"] = mail_from
-    email_msg["To"] = message.to
-    email_msg["Subject"] = message.subject
+    email_msg["To"] = " ".join(message.to.split())
+    email_msg["Subject"] = " ".join(message.subject.split())
     email_msg["Message-ID"] = email_utils.make_msgid()
     if message.in_reply_to:
         email_msg["In-Reply-To"] = message.in_reply_to

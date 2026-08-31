@@ -19,14 +19,38 @@ def suffix(name: str) -> str:
     return Path(name).suffix.lower()
 
 
+_HEIC_BRANDS = {b"heic", b"heif", b"mif1", b"msf1", b"heix", b"hevc"}
+
+
+def sniff_image_kind(data: bytes) -> str | None:
+    """JPEG/PNG/WebP from magic. HEIC is detected so we can reject it. None = unknown."""
+    if data.startswith(b"\xff\xd8\xff"):
+        return "jpeg"
+    if data.startswith(b"\x89PNG\r\n\x1a\n"):
+        return "png"
+    if data.startswith(b"RIFF") and data[8:12] == b"WEBP":
+        return "webp"
+    if len(data) >= 12 and data[4:8] == b"ftyp" and data[8:12] in _HEIC_BRANDS:
+        return "heic"
+    return None
+
+
 def is_supported_image(name: str) -> bool:
-    return suffix(name) in IMAGE_EXT
+    """Name gate only. Empty suffix is allowed — blob store is content-addressed."""
+    ext = suffix(name)
+    if ext in UNSUPPORTED_EXT:
+        return False
+    if not ext:
+        return True
+    return ext in IMAGE_EXT
 
 
 def check_image_name(name: str) -> None:
     ext = suffix(name)
     if ext in UNSUPPORTED_EXT:
         raise ValueError(f"unsupported image type {ext} (jpeg/png/webp only; not heic)")
+    if not ext:
+        return
     if ext not in IMAGE_EXT:
         raise ValueError(f"not an image: {name}")
 

@@ -3,8 +3,8 @@
 Project `linen-badge-507111-r6`. Region `europe-central2`. Vertex for CV is `global`.
 
 Source of truth for APIs, the files bucket, Firestore, Artifact Registry, runtime
-service accounts, WIF for GitHub Actions, and Cloud Run **cv**. Email and editor
-images wait until those services have a `/healthz`; their SAs exist so IAM is ready.
+service accounts, WIF for GitHub Actions, and Cloud Run **cv**. Editor and email
+Cloud Run are created when `editor_image` / `email_image` are set.
 
 No API keys. Cloud Run uses the runtime service account (ADC). GitHub Actions
 impersonates `github-deploy` via Workload Identity Federation (no SA keys).
@@ -61,8 +61,13 @@ If Firestore `(default)` already exists:
 terraform import google_firestore_database.default "projects/linen-badge-507111-r6/databases/(default)"
 ```
 
-## Not in this stack yet
+## Editor and email
 
-- email-service / editor-service Cloud Run (empty skeletons)
-- Cloud Tasks between steps
-- pointing `compose.yaml` `VISION_SERVICE_URL` at this service (local editor still uses vision-stub)
+`editor_image` / `email_image` default empty so an apply that only sets `cv_image`
+does not create those services. `deploy-cv.yml` / `deploy-editor.yml` use
+`-target` so they cannot destroy email. `count = 0` still destroys email on a
+full apply with empty `email_image` or `imap_host` — laptop apply must pass
+mailbox vars + `email_image` from gitignored `terraform.tfvars`. Email has
+`deletion_protection = true`; turn it off before an intentional destroy.
+
+Local compose runs CV in place of vision-stub. The editor calls `CV_URL` at slice time.

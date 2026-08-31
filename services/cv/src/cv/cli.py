@@ -9,7 +9,7 @@ from pathlib import Path
 from cv.checklist import load_checklist, spans_complete
 from cv.dump import inventory_to_yaml
 from cv.images import list_images
-from cv.pipeline import MAX_WORKERS, build_inventory
+from cv.pipeline import _worker_limit, build_inventory
 from cv.vertex import LOCATION, MODEL, PROJECT
 
 
@@ -23,7 +23,7 @@ def main(argv: list[str] | None = None) -> int:
         "--workers",
         type=int,
         default=None,
-        help=f"parallel Vertex calls; default min(n_images, {MAX_WORKERS})",
+        help=f"parallel Vertex calls; default min(n_images, {_worker_limit()})",
     )
     args = p.parse_args(argv)
 

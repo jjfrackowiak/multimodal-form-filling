@@ -56,6 +56,11 @@ Rules:
   ONE requirement, fold the repetition into expected_count, and set "ambiguity" to a short
   tag explaining the situation. Never invent a requirement that is not named anywhere in
   the text — recall may fall short, but precision must stay 1.0.
+- A line that only states a total number of photos ("16 photos", "16 zdjęć") is NOT a
+  requirement. It is a checksum for the items below. Do not emit it.
+- If the same verbatim phrase appears more than once (for example "Under the bonnet" on
+  two lines), that is ONE requirement. Set expected_count to the number of mentions and
+  set ambiguity to "repeated_verbatim_in_manifest". Do not emit two requirements.
 """
 
 _FENCE = re.compile(r"```(?:json)?\s*(\{.*\})\s*```", re.DOTALL)

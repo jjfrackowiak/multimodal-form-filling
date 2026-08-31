@@ -66,6 +66,12 @@ resource "google_service_account_iam_member" "github_deploy_uses_editor" {
   member             = "serviceAccount:${google_service_account.github_deploy.email}"
 }
 
+resource "google_service_account_iam_member" "github_deploy_uses_email" {
+  service_account_id = google_service_account.email.name
+  role               = "roles/iam.serviceAccountUser"
+  member             = "serviceAccount:${google_service_account.github_deploy.email}"
+}
+
 resource "google_service_account_iam_member" "github_deploy_uses_compute" {
   service_account_id = "projects/${var.project_id}/serviceAccounts/${local.compute_sa}"
   role               = "roles/iam.serviceAccountUser"

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import random
 import time
 from typing import TypeVar
 
@@ -51,7 +52,7 @@ def generate_structured(
         except Exception as e:
             last = e
             if "429" in str(e) or "RESOURCE_EXHAUSTED" in str(e):
-                time.sleep(min(8 * (attempt + 1), 40))
+                time.sleep(min(2**attempt, 32) + random.uniform(0, 1))
                 continue
             raise
     raise last or RuntimeError("vertex failed")

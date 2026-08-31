@@ -100,3 +100,49 @@ async def test_every_job_failed_settles_failed_not_partial() -> None:
     assert result.status == "failed"
     assert sorted(result.failed_forms) == ["form-a.docx", "form-b.docx"]
     assert result.documents == []
+
+
+class _ExplodingRunner:
+    async def run(self, request):  # noqa: ANN001
+        del request
+        raise RuntimeError("Server error '502 Bad Gateway' for url 'https://editor/slices:run'")
+
+
+async def test_runner_exception_on_one_job_still_delivers_the_other() -> None:
+    requirements = load_requirements()
+    full_comments = load_review_comments()
+
+    router = RoutingSliceRunner()
+    deps = make_deps(runner=router)
+
+    job_ok = await make_derivative_job(
+        deps.blob_store, job_id="job-ok", form_id="form_supplied.docx", requirements=requirements
+    )
+    job_boom = await make_derivative_job(
+        deps.blob_store, job_id="job-boom", form_id="WN-7020U", requirements=requirements
+    )
+    router.by_job_id = {
+        job_ok.job_id: FakeSliceRunner(comments=full_comments),
+        job_boom.job_id: _ExplodingRunner(),
+    }
+
+    record = RequestRecord(
+        request_id="req-explode",
+        manifest_raw="irrelevant",
+        requirements=requirements,
+        job_ids=[job_ok.job_id, job_boom.job_id],
+        reply_to="client@example.test",
+        original_message_id="<abc@example.test>",
+        status="running",
+    )
+
+    result = await run_request(record, [job_ok, job_boom], deps)
+
+    assert result.status == "partial"
+    assert result.failed_forms == ["WN-7020U"]
+    assert len(result.documents) == 1
+    boom = await deps.job_repo.get(job_boom.job_id)
+    assert boom is not None
+    assert boom.status == "failed"
+    assert boom.failure_detail is not None
+    assert "502" in boom.failure_detail

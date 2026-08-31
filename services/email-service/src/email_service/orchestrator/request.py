@@ -18,7 +18,7 @@ from __future__ import annotations
 import asyncio
 from typing import Literal
 
-from mff_contracts import JobRecord, JobRequest, RequestRecord, RequestResult
+from mff_contracts import JobCursor, JobRecord, JobRequest, RequestRecord, RequestResult
 
 from .deps import OrchestratorDeps
 from .job import run_job
@@ -35,7 +35,28 @@ async def run_request(
         async with semaphore:
             return await run_job(job, deps)
 
-    results = await asyncio.gather(*(_bounded(job) for job in jobs))
+    raw = await asyncio.gather(*(_bounded(job) for job in jobs), return_exceptions=True)
+    results: list[JobRecord] = []
+    for job, item in zip(jobs, raw, strict=True):
+        if isinstance(item, asyncio.CancelledError):
+            raise item
+        if isinstance(item, BaseException):
+            existing = await deps.job_repo.get(job.job_id)
+            failed = JobRecord(
+                job_id=job.job_id,
+                request_id=job.request_id,
+                form_id=job.form_id,
+                status="failed",
+                cursor=existing.cursor if existing is not None else JobCursor(slice_index=-1),
+                document=None,
+                summary=existing.summary if existing is not None else {},
+                unverified=existing.unverified if existing is not None else [],
+                failure_detail=f"{type(item).__name__}: {item}",
+            )
+            await deps.job_repo.put(failed)
+            results.append(failed)
+        else:
+            results.append(item)
     return _settle(record, results)
 
 

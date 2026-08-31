@@ -24,7 +24,7 @@ __all__ = ["render_confirmation", "render_rejection"]
 
 
 def _reply_subject(original: str) -> str:
-    stripped = original.strip()
+    stripped = " ".join(original.split())
     if not stripped:
         return "Re:"
     if stripped.lower().startswith("re:"):

@@ -33,6 +33,85 @@ variable "cv_image" {
   description = "Full CV image URL (Artifact Registry). Required — omitting it errors instead of deleting Cloud Run."
 }
 
+variable "editor_image" {
+  type        = string
+  description = "Editor Cloud Run image. Empty = do not create/update the editor service."
+  default     = ""
+}
+
+variable "email_image" {
+  type        = string
+  description = "Email Cloud Run image. Empty = do not create/update the email service."
+  default     = ""
+}
+
+variable "imap_host" {
+  type    = string
+  default = ""
+}
+
+variable "imap_port" {
+  type    = number
+  default = 993
+}
+
+variable "imap_folder" {
+  type    = string
+  default = "INBOX"
+}
+
+variable "imap_user" {
+  type    = string
+  default = ""
+}
+
+variable "imap_password" {
+  type      = string
+  default   = ""
+  sensitive = true
+}
+
+variable "imap_use_tls" {
+  type    = bool
+  default = true
+}
+
+variable "smtp_host" {
+  type    = string
+  default = ""
+}
+
+variable "smtp_port" {
+  type    = number
+  default = 587
+}
+
+variable "smtp_user" {
+  type    = string
+  default = ""
+}
+
+variable "smtp_password" {
+  type      = string
+  default   = ""
+  sensitive = true
+}
+
+variable "smtp_use_tls" {
+  type    = bool
+  default = true
+}
+
+variable "mail_from" {
+  type    = string
+  default = ""
+}
+
+variable "allowed_senders" {
+  type    = string
+  default = ""
+}
+
 variable "github_repository" {
   type        = string
   description = "GitHub repo allowed to impersonate github-deploy via WIF (owner/name)."

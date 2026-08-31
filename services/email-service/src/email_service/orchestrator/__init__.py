@@ -17,6 +17,7 @@ from .artifacts import NET_NEW_ROOT_SECTION_ID, build_initial_artifact, scope_id
 from .compile import compile_job
 from .completeness import missing_requirement_ids
 from .deps import OrchestratorDeps
+from .ingest import jobs_from_parsed
 from .job import run_job
 from .request import run_request
 
@@ -25,6 +26,7 @@ __all__ = [
     "OrchestratorDeps",
     "build_initial_artifact",
     "compile_job",
+    "jobs_from_parsed",
     "missing_requirement_ids",
     "run_job",
     "run_request",

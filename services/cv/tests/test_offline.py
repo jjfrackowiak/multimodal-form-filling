@@ -5,10 +5,11 @@ from __future__ import annotations
 from pathlib import Path
 from unittest.mock import patch
 
+import pytest
 from fastapi import HTTPException
 
 from cv.checklist import load_checklist, spans_complete
-from cv.images import check_image_name, collapse_duplicates, list_images
+from cv.images import check_image_name, collapse_duplicates, list_images, sniff_image_kind
 from cv.schema import (
     ImageRef,
     Inventory,
@@ -49,6 +50,15 @@ def test_fleet_dupes() -> None:
     assert len(pairs) == 2
 
 
+def test_worker_limit_defaults_to_one(monkeypatch: pytest.MonkeyPatch) -> None:
+    from cv.pipeline import _worker_limit
+
+    monkeypatch.delenv("CV_MAX_WORKERS", raising=False)
+    assert _worker_limit() == 1
+    monkeypatch.setenv("CV_MAX_WORKERS", "3")
+    assert _worker_limit() == 3
+
+
 def test_rejects_heic() -> None:
     try:
         check_image_name("photo.HEIC")
@@ -65,6 +75,24 @@ def test_rejects_heic() -> None:
     check_image_name("front.jpg")
     check_image_name("side.PNG")
     check_image_name("dash.webp")
+    # Blob store writes gs://…/image/<sha256> with no suffix.
+    check_image_name("09006a569f3f6c489fcbbbd35db7bcb995a9de5068e858a5d4d08eaca16dee26")
+
+
+def test_sniff_image_kind() -> None:
+    assert sniff_image_kind(b"\xff\xd8\xff\xe0" + b"\x00" * 12) == "jpeg"
+    assert sniff_image_kind(b"\x89PNG\r\n\x1a\n" + b"\x00" * 8) == "png"
+    assert sniff_image_kind(b"RIFF....WEBP....") == "webp"
+    assert sniff_image_kind(b"\x00\x00\x00\x18ftypheic....") == "heic"
+    assert sniff_image_kind(b"not an image at all") is None
+
+
+def test_collect_uris_accepts_content_addressed_blob() -> None:
+    uri = (
+        "gs://linen-badge-507111-r6-files/image/"
+        "09006a569f3f6c489fcbbbd35db7bcb995a9de5068e858a5d4d08eaca16dee26"
+    )
+    assert _collect_uris(_req(images=[uri])) == [uri]
 
 
 def test_health() -> None:

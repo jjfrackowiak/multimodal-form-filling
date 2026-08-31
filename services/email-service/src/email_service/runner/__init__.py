@@ -5,7 +5,9 @@ this branch — and B9's end-to-end test — run the orchestrator against instea
 
 from __future__ import annotations
 
+from .editor import EditorClient
 from .fake import FakeSliceRunner
+from .http import HttpSliceRunner
 from .protocol import SliceRunner
 
-__all__ = ["FakeSliceRunner", "SliceRunner"]
+__all__ = ["EditorClient", "FakeSliceRunner", "HttpSliceRunner", "SliceRunner"]

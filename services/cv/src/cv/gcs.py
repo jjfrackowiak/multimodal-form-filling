@@ -8,7 +8,7 @@ from pathlib import Path
 
 from google.cloud import storage
 
-from cv.images import IMAGE_EXT, is_supported_image
+from cv.images import is_supported_image, sniff_image_kind
 
 _DOWNLOAD_WORKERS = 8
 
@@ -55,10 +55,14 @@ def download_uris(uris: list[str], dest: Path) -> list[tuple[str, Path]]:
     if not jobs:
         return []
 
-    def _one(uri: str, name: str) -> tuple[str, Path]:
+    def _one(uri: str, name: str) -> tuple[str, Path] | None:
         bucket, path = parse_gs(uri)
         local = dest / name
         gcs.bucket(bucket).blob(path).download_to_filename(str(local))
+        kind = sniff_image_kind(local.read_bytes()[:16])
+        if kind in (None, "heic"):
+            local.unlink(missing_ok=True)
+            return None
         return uri, local
 
     out: list[tuple[str, Path]] = []
@@ -66,7 +70,9 @@ def download_uris(uris: list[str], dest: Path) -> list[tuple[str, Path]]:
     with ThreadPoolExecutor(max_workers=n) as pool:
         futs = [pool.submit(_one, uri, name) for uri, name in jobs]
         for fut in as_completed(futs):
-            out.append(fut.result())
+            got = fut.result()
+            if got is not None:
+                out.append(got)
     out.sort(key=lambda item: item[1].name)
     return out
 
@@ -79,7 +85,7 @@ def list_prefix(gs_prefix: str) -> list[str]:
     for b in blobs:
         if b.name.endswith("/"):
             continue
-        if Path(b.name).suffix.lower() not in IMAGE_EXT:
+        if not is_supported_image(b.name):
             continue
         uris.append(f"gs://{bucket}/{b.name}")
     return uris

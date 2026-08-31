@@ -14,7 +14,9 @@ resetting a socket) — that gets one fresh reconnect, not a silent empty result
 **Idempotency** is a local ledger of `Message-ID`s passed to `mark_seen`, never the
 server's `\\Seen` flag — Gmail's IMAP folders are labels and its read-state semantics
 do not match a conventional server's, so a design that trusted the flag would be wrong
-on the one provider this has to work against for real.
+on the one provider this has to work against for real. `SEARCH UNSEEN` is only a
+candidate filter so a Cloud Run restart does not re-download and re-process the
+whole mailbox; the ledger still decides "already handled" within one process.
 """
 
 from __future__ import annotations
@@ -133,7 +135,7 @@ class ImapSmtpTransport:
             if typ != "OK":
                 raise MailTransportError(f"cannot select folder {self._config.folder!r}")
 
-            typ, data = imap.search(None, "ALL")
+            typ, data = imap.search(None, "UNSEEN")
             if typ != "OK":
                 raise MailTransportError("IMAP SEARCH failed")
 
@@ -168,10 +170,16 @@ class ImapSmtpTransport:
     @contextlib.contextmanager
     def _smtp_connect(self) -> Iterator[smtplib.SMTP]:
         c = self._config
-        smtp = smtplib.SMTP(c.smtp_host, c.smtp_port, timeout=self._timeout)
-        try:
+        # 465 is implicit TLS (SMTPS). 587 is STARTTLS. Never 25 (GCP blocks it).
+        if c.smtp_port == 465:
+            smtp: smtplib.SMTP = smtplib.SMTP_SSL(
+                c.smtp_host, c.smtp_port, timeout=self._timeout, context=_tls_context()
+            )
+        else:
+            smtp = smtplib.SMTP(c.smtp_host, c.smtp_port, timeout=self._timeout)
             if c.smtp_use_tls:
                 smtp.starttls(context=_tls_context())
+        try:
             if c.smtp_user:
                 smtp.login(c.smtp_user, c.smtp_password)
             yield smtp
