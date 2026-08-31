@@ -14,7 +14,7 @@ see `transport/messages.py`.
 
 from __future__ import annotations
 
-from mff_contracts import IntakeVerdict, Mode, RequestAccepted, Requirement
+from mff_contracts import IntakeVerdict, Mode, RequestAccepted
 
 from .intake import ParsedRequest
 from .mail_html import render_confirmation_html, render_rejection_html

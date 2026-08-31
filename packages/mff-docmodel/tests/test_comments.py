@@ -173,9 +173,10 @@ def test_fail_verdict_carries_its_suggestion(derivative_docx_bytes: bytes) -> No
     assert "Suggestion:" in text
     assert "Supply a second engine-bay photograph." in text
 
-    from lxml import etree
-    from docx.oxml.ns import qn
     import zipfile
+
+    from docx.oxml.ns import qn
+    from lxml import etree
 
     root = etree.fromstring(zipfile.ZipFile(io.BytesIO(out_bytes)).read("word/comments.xml"))
     comment_el = root.find(qn("w:comment"))

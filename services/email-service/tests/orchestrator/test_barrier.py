@@ -9,6 +9,8 @@ becomes part of `documents`.
 
 from __future__ import annotations
 
+from typing import Never
+
 from factories import (
     RoutingSliceRunner,
     load_requirements,
@@ -19,7 +21,7 @@ from factories import (
 
 from email_service.orchestrator.request import run_request
 from email_service.runner.fake import FakeSliceRunner
-from mff_contracts import RequestRecord
+from mff_contracts import RequestRecord, SliceRequest
 
 
 async def test_two_done_one_failed_settles_partial() -> None:
@@ -103,7 +105,7 @@ async def test_every_job_failed_settles_failed_not_partial() -> None:
 
 
 class _ExplodingRunner:
-    async def run(self, request):  # noqa: ANN001
+    async def run(self, request: SliceRequest) -> Never:
         del request
         raise RuntimeError("Server error '502 Bad Gateway' for url 'https://editor/slices:run'")
 

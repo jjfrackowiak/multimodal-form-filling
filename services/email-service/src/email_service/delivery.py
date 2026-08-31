@@ -202,7 +202,11 @@ def _requirements_attachment(requirements: Sequence[Requirement]) -> Attachment 
     )
     table = document.add_table(rows=1, cols=4)
     table.style = "Table Grid"
-    for cell, text in zip(table.rows[0].cells, ("ID", "Requirement", "Source", "Constraint")):
+    for cell, text in zip(
+        table.rows[0].cells,
+        ("ID", "Requirement", "Source", "Constraint"),
+        strict=True,
+    ):
         cell.text = text
     for requirement in sorted(requirements, key=lambda r: (r.ordinal, r.text)):
         constraint = requirement.constraint
