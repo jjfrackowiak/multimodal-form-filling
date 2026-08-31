@@ -46,7 +46,7 @@ async def test_http_error_includes_status_and_body() -> None:
         return httpx.Response(502, text="upstream vertex")
 
     client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
-    tool = HttpVisionTool("http://cv:8080", client=client)
+    tool = HttpVisionTool("http://cv:8080", client=client, max_retries=0)
     with pytest.raises(VisionUnavailable, match="502") as ei:
         await tool.build_inventory(
             [ImageRef(uri="gs://b/a.jpg")], [RequirementSpec(id="R-01", text="x")]
@@ -71,6 +71,26 @@ async def test_retries_transient_gateway_failure() -> None:
     )
 
     assert calls == 2
+    assert out[0].file == "a.jpg"
+
+
+async def test_default_retry_budget_survives_three_transient_failures() -> None:
+    calls = 0
+
+    def handler(_request: httpx.Request) -> httpx.Response:
+        nonlocal calls
+        calls += 1
+        if calls <= 3:
+            return httpx.Response(502, text="temporary upstream failure")
+        return httpx.Response(200, json={"images": [{"file": "a.jpg", "hits": []}]})
+
+    client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    tool = HttpVisionTool("http://cv:8080", client=client, retry_delay_seconds=0)
+    out = await tool.build_inventory(
+        [ImageRef(uri="gs://b/a.jpg")], [RequirementSpec(id="R-01", text="x")]
+    )
+
+    assert calls == 4
     assert out[0].file == "a.jpg"
 
 
