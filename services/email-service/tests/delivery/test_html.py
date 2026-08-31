@@ -86,7 +86,7 @@ async def test_html_carries_the_same_facts(
     assert "text/html" in types
 
 
-async def test_html_escapes_manifest_markup() -> None:
+async def test_html_omits_manifest_details_from_the_delivery_body() -> None:
     req = Requirement(
         id="R-01",
         ordinal=1,
@@ -105,8 +105,8 @@ async def test_html_escapes_manifest_markup() -> None:
     )
     html = render_delivery_html(result=result, comments=[], attached=[], linked=[])
     assert "<script>alert(1)</script>" not in html
-    assert "&lt;script&gt;" in html
-    assert "&lt;b&gt;raw&lt;/b&gt;" in html
+    assert "Check " not in html
+    assert "Parsed requirements" not in html
 
 
 def test_html_groups_mixed_modes() -> None:

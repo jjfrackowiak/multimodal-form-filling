@@ -32,25 +32,8 @@ def _reply_subject(original: str) -> str:
     return f"Re: {stripped}"
 
 
-def _requirement_lines(requirement: Requirement) -> list[str]:
-    lines = [
-        f"  [{requirement.id}] {requirement.text}",
-        f'      manifest line {requirement.source_line}: "{requirement.source_span}"',
-    ]
-    if requirement.constraint is not None:
-        constraint = requirement.constraint
-        lines.append(f"      constraint: {constraint.kind} = {constraint.value}")
-        if constraint.note:
-            lines.append(f"      note: {constraint.note}")
-    if requirement.ambiguity:
-        lines.append(f"      ambiguity: {requirement.ambiguity}")
-    return lines
-
-
 def render_confirmation(accepted: RequestAccepted, req: ParsedRequest) -> OutboundMessage:
-    """The 202 reply. Every id and text in `accepted.requirements` appears here,
-    verbatim — that round trip is req 7's entire point.
-    """
+    """The 202 reply confirms receipt before the final delivery email."""
     derivative_jobs = [job for job in req.jobs if job.mode == Mode.DERIVATIVE]
     net_new_jobs = [job for job in req.jobs if job.mode == Mode.NET_NEW]
 
@@ -63,16 +46,10 @@ def render_confirmation(accepted: RequestAccepted, req: ParsedRequest) -> Outbou
             f"to compose from supplied inputs ({len(req.jobs)} job(s) total)."
         ),
         "",
-        f"{len(accepted.requirements)} requirement(s) were read from your manifest:",
-        "",
+        f"{len(accepted.requirements)} requirement(s) were read from your manifest.",
+        "The parsed requirements document and reviewed output will follow in a separate "
+        "email once every job has finished running.",
     ]
-    for requirement in accepted.requirements:
-        lines.extend(_requirement_lines(requirement))
-        lines.append("")
-    lines.append(
-        "The reviewed documents will follow in a separate email once every job has "
-        "finished running."
-    )
 
     return OutboundMessage(
         to=req.sender,
