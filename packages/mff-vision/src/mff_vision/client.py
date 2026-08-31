@@ -6,6 +6,8 @@ The editor depends on `VisionTool`, never on this class directly. Cloud Run URLs
 
 from __future__ import annotations
 
+import asyncio
+
 import httpx
 
 from .models import ImageAnalysis, ImageRef, RequirementSpec, VisionUnavailable
@@ -31,11 +33,15 @@ class HttpVisionTool:
         client: httpx.AsyncClient | None = None,
         timeout: float = 300.0,
         authenticated: bool | None = None,
+        max_retries: int = 2,
+        retry_delay_seconds: float = 1.0,
     ) -> None:
         # A whole job's images in one call, so the timeout is generous by design.
         self._base = base_url.rstrip("/")
         self._client = client
         self._timeout = timeout
+        self._max_retries = max(0, max_retries)
+        self._retry_delay_seconds = max(0.0, retry_delay_seconds)
         if authenticated is None:
             authenticated = self._base.startswith("https://") and "run.app" in self._base
         self._authenticated = authenticated
@@ -56,13 +62,23 @@ class HttpVisionTool:
         }
         client = self._client or httpx.AsyncClient(timeout=self._timeout)
         try:
-            r = await client.post(
-                f"{self._base}/v1/inventory",
-                json=payload,
-                headers=self._headers(),
-            )
-            r.raise_for_status()
-            data = r.json()
+            for attempt in range(self._max_retries + 1):
+                try:
+                    r = await client.post(
+                        f"{self._base}/v1/inventory",
+                        json=payload,
+                        headers=self._headers(),
+                    )
+                    r.raise_for_status()
+                    data = r.json()
+                    break
+                except httpx.HTTPStatusError as exc:
+                    if (
+                        exc.response.status_code not in {429, 500, 502, 503, 504}
+                        or attempt == self._max_retries
+                    ):
+                        raise
+                    await asyncio.sleep(self._retry_delay_seconds * (2**attempt))
         except httpx.HTTPError as exc:
             # Unreachable is not the same as unidentifiable: the caller must be able to
             # retry this, and must not record it as a finding about the photographs.
